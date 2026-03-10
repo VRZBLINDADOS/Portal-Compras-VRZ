@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portal de Compras VRZ</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
+        
+        body { 
+            font-family: 'Inter', sans-serif; 
+            margin: 0; 
+            background: #f1f5f9; 
+            overflow: hidden; 
+        }
+
+        .fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .text-wrap-anywhere { overflow-wrap: anywhere; word-break: break-word; }
+        
+        /* Estilo para inputs e containers compactos */
+        .card-compact { padding: 1rem; border-radius: 1rem; }
+        .input-compact { padding: 0.5rem 0.75rem; border-radius: 0.5rem; font-size: 0.75rem; }
+    </style>
+
+    <!-- Scripts de Terceiros -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
+    <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Firebase Compat -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        // --- CONFIGURAÇÃO DO FIREBASE ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyBT1N43mp6hoxXOj6bmTlqouQWSmfn32-E",
+            authDomain: "portal-compras-vrz.firebaseapp.com",
+            projectId: "portal-compras-vrz",
+            storageBucket: "portal-compras-vrz.firebasestorage.app",
+            messagingSenderId: "713014398002",
+            appId: "1:713014398002:web:d89f485af020178b00002b"
+        };
+
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+        const appId = 'portal-compras-vrz';
+
+        const { useState, useEffect, useMemo, useRef } = React;
+
+        // --- COMPONENTE DE ÍCONE ---
+        function Icon({ name, className = "", size = 18 }) {
+            const iconRef = useRef(null);
+            useEffect(() => {
+                if (iconRef.current && window.lucide) {
+                    const iconData = window.lucide.icons[name];
+                    if (iconData) {
+                        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+                        const [tag, attrs, children] = iconData;
+                        Object.entries({...attrs, width: size, height: size, class: `lucide lucide-${name} ${className}`, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round"}).forEach(([k, v]) => svg.setAttribute(k, v));
+                        children.forEach(([ct, ca]) => {
+                            const c = document.createElementNS("http://www.w3.org/2000/svg", ct);
+                            Object.entries(ca).forEach(([k, v]) => c.setAttribute(k, v));
+                            svg.appendChild(c);
+                        });
+                        iconRef.current.innerHTML = '';
+                        iconRef.current.appendChild(svg);
+                    }
+                }
+            }, [name, className, size]);
+            return <span ref={iconRef} className="inline-flex shrink-0"></span>;
+        }
+
+        // --- COMPONENTES DE UI ---
+        function NavItem({ iconName, label, active, onClick }) {
+            return (
+                <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-300 group ${active ? 'bg-red-600 text-white shadow-md' : 'hover:bg-white/5 text-neutral-400 hover:text-white'}`}>
+                    <Icon name={iconName} className={active ? 'text-white' : 'text-red-500'} size={16} />
+                    <span className="text-[10px] font-black uppercase tracking-wider">{label}</span>
+                </button>
+            );
+        }
+
+        function StatusBadge({ status }) {
+            const isPendente = status === 'Pendente';
+            return <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-tighter border ${isPendente ? 'bg-red-600 text-white border-red-600' : 'bg-black text-white border-neutral-800'}`}>{status}</span>;
+        }
+
+        // --- ABA: FORMULÁRIO ---
+        function RequestForm({ user, vehiclesDB }) {
+            const [os, setOs] = useState('');
+            const [responsavel, setResponsavel] = useState('');
+            const [localizacao, setLocalizacao] = useState('');
+            const [vehicle, setVehicle] = useState(null);
+            const [items, setItems] = useState([{ id: Date.now(), description: '', quantity: 1, photo: null }]);
+            const [isSubmitting, setIsSubmitting] = useState(false);
+            const [submitted, setSubmitted] = useState(false);
+
+            const handleOSBlur = () => {
+                const found = vehiclesDB.find(v => String(v.os).trim() === String(os).trim());
+                if (found) setVehicle(found);
+                else { setVehicle(null); if(os.length > 0) alert('OS não cadastrada.'); }
+            };
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                if (!vehicle || !responsavel) return alert('Informe OS e Responsável.');
+                if (items.some(i => !i.photo)) return alert('Anexe a foto de cada item.');
+                setIsSubmitting(true);
+                try {
+                    await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('requests').add({
+                        os, responsavel, localizacaoSolicitacao: localizacao, vehicleData: vehicle, items,
+                        timestamp: Date.now(), status: 'Pendente', response: null, userId: user.uid
+                    });
+                    setSubmitted(true);
+                } catch (err) { alert('Erro no Firebase.'); } finally { setIsSubmitting(false); }
+            };
+
+            if (submitted) return (
+                <div className="flex flex-col items-center justify-center py-12 fade-in bg-white rounded-3xl border border-neutral-200 p-8 shadow-sm max-w-md mx-auto text-center">
+                    <Icon name="check-circle" size={40} className="text-emerald-500 mb-4" />
+                    <h2 className="text-xl font-black uppercase tracking-tight">Solicitação Protocolada!</h2>
+                    <button onClick={() => setSubmitted(false)} className="mt-6 w-full py-3 bg-red-600 text-white rounded-xl font-black uppercase text-xs hover:bg-red-700">Nova Solicitação</button>
+                </div>
+            );
+
+            return (
+                <div className="space-y-4 fade-in">
+                    <div>
+                        <h2 className="text-2xl font-black text-black tracking-tighter uppercase leading-none">Nova Requisição</h2>
+                        <p className="text-[9px] font-bold text-neutral-400 uppercase mt-1 tracking-widest italic">Sistema de Peças VRZ</p>
+                    </div>
+
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        <div className="bg-white p-4 rounded-2xl border border-neutral-200 shadow-sm grid grid-cols-1 md:grid-cols-5 gap-4">
+                            <div className="md:col-span-2 space-y-3">
+                                <div>
+                                    <label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1">Ordem de Serviço (OS)</label>
+                                    <input type="text" value={os} onChange={(e) => setOs(e.target.value)} onBlur={handleOSBlur} placeholder="Nº OS" className="w-full px-3 py-2 bg-neutral-50 border-2 rounded-xl focus:border-red-600 outline-none font-black text-base" required />
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div className="space-y-1">
+                                        <label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block ml-1">Responsável</label>
+                                        <input type="text" value={responsavel} onChange={(e) => setResponsavel(e.target.value)} placeholder="NOME..." className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-lg font-black uppercase text-[9px] focus:border-red-600 outline-none" required />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block ml-1">Setor</label>
+                                        <input type="text" value={localizacao} onChange={(e) => setLocalizacao(e.target.value)} placeholder="SETOR..." className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-lg font-black uppercase text-[9px] focus:border-red-600 outline-none" required />
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="md:col-span-3 bg-neutral-900 rounded-xl p-4 text-white border-l-4 border-red-600 flex items-center min-h-[100px]">
+                                {vehicle ? (
+                                    <div className="grid grid-cols-2 gap-x-6 gap-y-2 w-full text-[9px] uppercase font-black">
+                                        <div className="text-wrap-anywhere leading-tight"><span className="text-neutral-500 text-[7px] block opacity-70">Modelo</span>{vehicle.modelo}</div>
+                                        <div className="text-wrap-anywhere leading-tight"><span className="text-neutral-500 text-[7px] block opacity-70">Etapa</span><span className="text-red-500">{vehicle.etapa}</span></div>
+                                        <div className="text-wrap-anywhere leading-tight"><span className="text-neutral-500 text-[7px] block opacity-70">Cor</span>{vehicle.cor}</div>
+                                        <div className="text-wrap-anywhere leading-tight"><span className="text-neutral-500 text-[7px] block opacity-70">Pátio</span>{vehicle.localizacao}</div>
+                                        <div className="col-span-2 pt-1 border-t border-white/5 text-[7px] font-mono text-neutral-500 tracking-wider text-wrap-anywhere">{vehicle.chassi}</div>
+                                    </div>
+                                ) : <div className="w-full text-center text-neutral-600 text-[8px] font-black uppercase tracking-widest">Aguardando Validação de OS...</div>}
+                            </div>
+                        </div>
+
+                        <div className="space-y-3">
+                            <div className="flex justify-between items-center px-1">
+                                <h3 className="font-black text-black uppercase text-[10px] flex items-center gap-2"><Icon name="package" size={14} /> Itens Pedidos</h3>
+                                <button type="button" onClick={() => setItems([...items, {id: Date.now(), description: '', quantity: 1, photo: null}])} className="bg-red-600 text-white px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm">+ ITEM</button>
+                            </div>
+                            <div className="grid grid-cols-1 gap-3">
+                                {items.map((it, idx) => (
+                                    <div key={it.id} className="bg-white p-3 rounded-xl border border-neutral-200 shadow-sm relative grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                                        <div className="md:col-span-2">
+                                            <label className="text-[8px] font-black text-neutral-400 uppercase block mb-1">Qtd</label>
+                                            <input type="number" min="1" value={it.quantity} onChange={(e) => setItems(items.map(i => i.id === it.id ? {...i, quantity: e.target.value} : i))} className="w-full p-2 bg-neutral-50 border rounded-lg font-black text-center text-sm" />
+                                        </div>
+                                        <div className="md:col-span-7">
+                                            <label className="text-[8px] font-black text-neutral-400 uppercase block mb-1">Descrição da Peça</label>
+                                            <input type="text" value={it.description} onChange={(e) => setItems(items.map(i => i.id === it.id ? {...i, description: e.target.value} : i))} placeholder="O QUE PRECISA?" className="w-full p-2 bg-neutral-50 border rounded-lg font-black text-[10px] uppercase" required />
+                                        </div>
+                                        <div className="md:col-span-3">
+                                            <label className="text-[8px] font-black text-neutral-400 uppercase block mb-1 text-red-600">Foto</label>
+                                            {it.photo ? (
+                                                <div className="relative h-10 rounded-lg overflow-hidden border group">
+                                                    <img src={it.photo} className="h-full w-full object-cover" />
+                                                    <button type="button" onClick={() => setItems(items.map(i => i.id === it.id ? {...i, photo: null} : i))} className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100"><Icon name="x" className="text-white" size={14} /></button>
+                                                </div>
+                                            ) : (
+                                                <label className="h-10 flex flex-col items-center justify-center border-2 border-dashed border-neutral-200 rounded-lg cursor-pointer hover:bg-red-50 transition-all bg-neutral-50">
+                                                    <Icon name="camera" className="text-neutral-400" size={20} />
+                                                    <input type="file" accept="image/*" onChange={(e) => {
+                                                        const r = new FileReader(); r.onload = () => setItems(items.map(i => i.id === it.id ? {...i, photo: r.result} : i));
+                                                        if(e.target.files[0]) r.readAsDataURL(e.target.files[0]);
+                                                    }} className="hidden" required />
+                                                </label>
+                                            )}
+                                        </div>
+                                        {items.length > 1 && <button type="button" onClick={() => setItems(items.filter(i => i.id !== it.id))} className="absolute top-1 right-1 text-neutral-300 hover:text-red-600"><Icon name="trash-2" size={14} /></button>}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        
+                        <button disabled={isSubmitting || !vehicle} className={`w-full py-4 rounded-xl font-black text-base uppercase flex items-center justify-center gap-3 shadow-lg ${isSubmitting || !vehicle ? 'bg-neutral-200 text-neutral-400' : 'bg-red-600 text-white border-b-4 border-red-800 hover:bg-red-700 active:translate-y-1 active:border-b-0'}`}>
+                            {isSubmitting ? <Icon name="refresh-cw" className="animate-spin" size={18} /> : 'Finalizar Pedido'}
+                        </button>
+                    </form>
+                </div>
+            );
+        }
+
+        // --- ABA: CONSULTAR ---
+        function StatusView({ requests }) {
+            const [search, setSearch] = useState('');
+            const filtered = requests.filter(r => {
+                const t = search.toLowerCase();
+                return (r.os && String(r.os).toLowerCase().includes(t)) || 
+                       (r.responsavel && r.responsavel.toLowerCase().includes(t)) ||
+                       (r.vehicleData?.modelo && r.vehicleData.modelo.toLowerCase().includes(t));
+            });
+
+            return (
+                <div className="space-y-4 fade-in">
+                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-3">
+                        <div>
+                            <h2 className="text-2xl font-black uppercase text-black leading-none tracking-tighter">Histórico de OS</h2>
+                            <p className="text-[9px] font-bold text-neutral-400 uppercase tracking-widest mt-1">Consulta Global em Tempo Real</p>
+                        </div>
+                        <div className="relative">
+                            <input type="text" placeholder="BUSCAR OS / NOME..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full md:w-56 pl-9 pr-4 py-2 bg-white border border-neutral-200 rounded-xl text-[9px] font-black uppercase outline-none focus:border-red-600 shadow-sm" />
+                            <div className="absolute left-3 top-2.5 text-neutral-300"><Icon name="search" size={12} /></div>
+                        </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 gap-3 max-h-[75vh] overflow-y-auto pr-2 scrollbar-hide">
+                        {filtered.length === 0 ? (
+                            <div className="py-20 text-center bg-white rounded-2xl border border-neutral-100 border-dashed">
+                                <Icon name="inbox" size={32} className="text-neutral-200 mx-auto mb-2" />
+                                <p className="text-[9px] font-black uppercase text-neutral-300 tracking-widest">Nenhum registro encontrado</p>
+                            </div>
+                        ) : filtered.map(r => (
+                            <div key={r.id} className="bg-white rounded-2xl border border-neutral-200 p-4 shadow-sm flex flex-col lg:flex-row gap-4 hover:border-red-200 transition-all border-l-4 border-l-red-600">
+                                <div className="flex-1 space-y-3 min-w-0">
+                                    <div className="flex items-center gap-3"><span className="text-sm font-black uppercase">OS #{r.os}</span><StatusBadge status={r.status} /></div>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-[8px] font-black uppercase tracking-wider text-neutral-400">
+                                        <div className="min-w-0"><span className="text-red-600 block mb-0.5">Solicitante</span><span className="text-black text-wrap-anywhere">{r.responsavel}</span></div>
+                                        <div className="min-w-0"><span>Veículo</span><span className="text-black text-wrap-anywhere">{r.vehicleData?.modelo}</span></div>
+                                        <div className="min-w-0"><span>Setor</span><span className="text-black text-wrap-anywhere">{r.localizacaoSolicitacao}</span></div>
+                                        <div className="min-w-0"><span>Data</span><span className="text-black">{new Date(r.timestamp).toLocaleDateString()}</span></div>
+                                    </div>
+                                    <div className="flex gap-2 overflow-x-auto scrollbar-hide py-1">
+                                        {r.items.map((it, idx) => (
+                                            <div key={idx} className="flex-shrink-0 flex items-center gap-2 bg-neutral-50 p-1.5 rounded-lg border border-neutral-100 min-w-[140px]">
+                                                <img src={it.photo} className="w-8 h-8 rounded-md object-cover border" />
+                                                <div className="min-w-0"><p className="text-[8px] font-black uppercase leading-tight truncate text-neutral-800">{it.description}</p><p className="text-[7px] text-red-600 font-bold">QTD: {it.quantity}</p></div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className={`lg:w-44 p-4 rounded-xl flex flex-col justify-center shrink-0 ${r.response ? 'bg-black text-white' : 'bg-neutral-50 border-l border-neutral-100'}`}>
+                                    {r.response ? (
+                                        <div className="space-y-1">
+                                            <span className="text-[7px] font-black text-neutral-500 uppercase block">Total Compra</span>
+                                            <span className="text-lg font-black text-red-600 leading-none">R$ {parseFloat(r.response.valor).toLocaleString('pt-BR')}</span>
+                                            <div className="pt-2 text-[7px] font-bold uppercase tracking-widest border-t border-white/5 mt-1">
+                                                <div className="flex justify-between"><span>Loja:</span><span className="text-white truncate max-w-[60px]">{r.response.fornecedor}</span></div>
+                                                <div className="flex justify-between text-red-500"><span>Entr:</span><span>{new Date(r.response.dataEntrega).toLocaleDateString()}</span></div>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center opacity-30"><Icon name="clock" className="mx-auto mb-1" size={14} /><p className="text-[7px] font-black uppercase">Em Cotação</p></div>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        }
+
+        // --- COMPONENTE PRINCIPAL ---
+        function App() {
+            const [user, setUser] = useState(null);
+            const [view, setView] = useState('request');
+            const [requests, setRequests] = useState([]);
+            const [vehiclesDB, setVehiclesDB] = useState([]);
+            const [adminAuth, setAdminAuth] = useState(false);
+            const [editingRequest, setEditingRequest] = useState(null);
+            const [isSidebarOpen, setSidebarOpen] = useState(false);
+
+            useEffect(() => {
+                const unsubAuth = auth.onAuthStateChanged((u) => { 
+                    if (u) setUser(u); 
+                    else auth.signInAnonymously(); 
+                });
+                return () => unsubAuth();
+            }, []);
+
+            useEffect(() => {
+                if (!user) return;
+                const unsubReq = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('requests').onSnapshot((s) => {
+                    setRequests(s.docs.map(d => ({id: d.id, ...d.data()})).sort((a,b) => b.timestamp - a.timestamp));
+                });
+                const unsubVeh = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('vehicles').onSnapshot((s) => {
+                    setVehiclesDB(s.docs.map(d => d.data()));
+                });
+                return () => { unsubReq(); unsubVeh(); };
+            }, [user]);
+
+            return (
+                <div className="h-screen flex flex-col md:flex-row bg-slate-100 overflow-hidden">
+                    {/* Topbar Mobile */}
+                    <div className="md:hidden bg-black text-white p-3 flex justify-between items-center z-[100] border-b-2 border-red-600">
+                        <div className="flex items-center gap-2"><div className="p-1 bg-red-600 rounded-lg"><Icon name="shopping-cart" size={16} /></div><span className="font-black text-sm uppercase tracking-tighter">VRZ PORTAL</span></div>
+                        <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="p-2 bg-neutral-900 rounded-xl"><Icon name={isSidebarOpen ? "x" : "menu"} size={20} /></button>
+                    </div>
+
+                    {/* Sidebar */}
+                    <nav className={`fixed md:relative inset-y-0 left-0 w-52 bg-black text-white p-6 flex flex-col gap-6 z-[90] sidebar-transition transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} shadow-2xl shrink-0`}>
+                        <div className="hidden md:flex items-center gap-3 mb-4"><div className="p-2 bg-red-600 rounded-xl"><Icon name="shopping-cart" size={20} /></div><h1 className="text-sm font-black uppercase tracking-widest leading-none">VRZ COMPRAS</h1></div>
+                        <div className="flex-1 space-y-1">
+                            <NavItem active={view === 'request'} onClick={() => { setView('request'); setSidebarOpen(false); }} iconName="plus" label="Nova Peça" />
+                            <NavItem active={view === 'status'} onClick={() => { setView('status'); setSidebarOpen(false); }} iconName="search" label="Consultar OS" />
+                            <div className="pt-6 border-t border-white/5"><NavItem active={view === 'admin'} onClick={() => { setView('admin'); setSidebarOpen(false); }} iconName="shield" label="Painel Admin" /></div>
+                        </div>
+                        <div className="bg-neutral-900/60 p-3 rounded-xl border border-white/5 text-center"><div className={`text-[8px] font-black tracking-widest ${user ? 'text-red-600' : 'text-neutral-500'}`}>● {user ? 'SISTEMA ONLINE' : 'RECONECTANDO...'}</div></div>
+                    </nav>
+
+                    <main className="flex-1 p-4 md:p-6 overflow-y-auto scrollbar-hide h-full">
+                        {!user ? (
+                            <div className="h-full flex flex-col items-center justify-center"><Icon name="loader" size={32} className="animate-spin text-red-600" /></div>
+                        ) : (
+                            <div className="max-w-5xl mx-auto">
+                                {view === 'request' && <RequestForm user={user} vehiclesDB={vehiclesDB} />}
+                                {view === 'status' && <StatusView requests={requests} />}
+                                
+                                {view === 'admin' && (
+                                    !adminAuth ? (
+                                        <div className="max-w-xs mx-auto py-12 slide-up"><div className="bg-black p-8 rounded-3xl text-center text-white border-2 border-red-600 shadow-2xl">
+                                            <Icon name="lock" size={32} className="text-red-600 mx-auto mb-6" />
+                                            <h2 className="text-sm font-black uppercase mb-8 tracking-[0.2em]">Acesso Administrativo</h2>
+                                            <input type="password" autoFocus onKeyDown={(e) => { if(e.key === 'Enter' && e.target.value === 'VRZ2024') setAdminAuth(true); }} className="w-full p-4 bg-neutral-900 border border-white/10 rounded-xl outline-none text-center tracking-[1em] font-black focus:border-red-600" placeholder="••••" />
+                                            <p className="text-[7px] text-neutral-500 mt-4 uppercase">Senha Requerida</p>
+                                        </div></div>
+                                    ) : (
+                                        <div className="space-y-6 fade-in pb-10">
+                                            <div className="flex justify-between items-end border-b border-neutral-200 pb-4">
+                                                <div><h2 className="text-3xl font-black uppercase text-black tracking-tighter leading-none">Gestão Master</h2><p className="text-[9px] font-bold text-neutral-400 mt-1 uppercase">Carga de Dados e Protocolos</p></div>
+                                                <button onClick={() => {
+                                                    const csv = prompt("COLE O CSV (OS,MODELO,FABRICANTE,COR,CHASSI,ETAPA,LOCALIZACAO)");
+                                                    if (csv) {
+                                                        const lines = csv.split('\n'); const batch = db.batch();
+                                                        lines.forEach(l => {
+                                                            const v = l.split(','); if(v.length >= 6) {
+                                                                const vRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('vehicles').doc();
+                                                                batch.set(vRef, {os: v[0].trim(), modelo: v[1].trim(), fabricante: v[2].trim(), cor: v[3].trim(), chassi: v[4].trim(), etapa: v[5].trim(), localizacao: v[6]?.trim() || ''});
+                                                            }
+                                                        });
+                                                        batch.commit().then(() => alert(`Carga Finalizada!`));
+                                                    }
+                                                }} className="bg-black text-white px-5 py-2.5 rounded-xl font-black uppercase text-[10px] border-b-4 border-red-600 flex items-center gap-2 hover:bg-neutral-900 shadow-xl"><Icon name="file-up" size={14} /> Importar Planilha</button>
+                                            </div>
+
+                                            <div className="space-y-4">
+                                                <h3 className="text-[10px] font-black uppercase tracking-[0.2em] border-l-4 border-red-600 pl-3 flex items-center gap-2 text-black"><Icon name="clock" size={14} className="text-red-600" /> Requisições Pendentes</h3>
+                                                <div className="grid grid-cols-1 gap-3">
+                                                    {requests.filter(r => r.status === 'Pendente').map(req => (
+                                                        <div key={req.id} className="bg-white p-4 rounded-2xl border border-neutral-200 shadow-sm flex items-center justify-between gap-4 hover:border-red-600 transition-all border-l-4 border-red-600">
+                                                            <div className="flex flex-1 gap-8 items-center min-w-0">
+                                                                <div className="text-center shrink-0"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">OS</p><p className="text-base font-black uppercase tracking-tighter">#{req.os}</p></div>
+                                                                <div className="min-w-0"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">Veículo / Cor</p><p className="text-[10px] font-black uppercase text-wrap-anywhere">{req.vehicleData?.modelo} <span className="text-red-600">[{req.vehicleData?.cor}]</span></p></div>
+                                                                <div className="min-w-0 hidden sm:block"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">Solicitante</p><p className="text-[10px] font-black uppercase text-wrap-anywhere">{req.responsavel}</p></div>
+                                                            </div>
+                                                            <button onClick={() => setEditingRequest(req)} className="bg-black text-white px-5 py-2.5 rounded-lg font-black uppercase text-[9px] tracking-widest border-b-4 border-red-600 hover:bg-neutral-900 active:translate-y-1 active:border-b-0 shadow-lg">Lançar</button>
+                                                        </div>
+                                                    ))}
+                                                    {requests.filter(r => r.status === 'Pendente').length === 0 && <div className="text-center py-10 text-neutral-300 font-black uppercase text-[10px]">Tudo em dia!</div>}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )
+                                )}
+                            </div>
+                        )}
+                    </main>
+
+                    {editingRequest && (
+                        <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-sm flex items-center justify-center p-4">
+                            <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden fade-in border-b-[12px] border-red-600">
+                                <header className="px-8 py-6 bg-black text-white flex justify-between items-center">
+                                    <div><h3 className="text-xl font-black uppercase tracking-tighter leading-none mb-1">Protocolar OS #{editingRequest.os}</h3><p className="text-red-500 text-[8px] font-black uppercase tracking-widest">{editingRequest.vehicleData.modelo}</p></div>
+                                    <button onClick={() => setEditingRequest(null)} className="p-3 bg-neutral-900 hover:bg-neutral-800 rounded-2xl transition-colors"><Icon name="x" size={24} /></button>
+                                </header>
+                                <form onSubmit={async (e) => {
+                                    e.preventDefault();
+                                    const formData = new FormData(e.target);
+                                    const resp = { valor: formData.get('valor'), fornecedor: formData.get('fornecedor'), dataCompra: formData.get('dataCompra'), dataEntrega: formData.get('dataEntrega') };
+                                    try { await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('requests').doc(editingRequest.id).update({ response: resp, status: 'Concluído' }); setEditingRequest(null); } catch (err) { alert('Erro.'); }
+                                }} className="p-8 space-y-8">
+                                    <div className="grid grid-cols-2 gap-6">
+                                        <div className="space-y-1"><label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block px-1">Custo Total (R$)</label><input name="valor" step="0.01" type="number" className="w-full px-4 py-3 bg-neutral-50 border-2 rounded-xl outline-none font-black text-xl focus:border-red-600 shadow-inner" placeholder="0.00" required /></div>
+                                        <div className="space-y-1"><label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block px-1">Loja / Fornecedor</label><input name="fornecedor" type="text" className="w-full px-4 py-3 bg-neutral-50 border-2 rounded-xl outline-none font-black text-[10px] uppercase focus:border-red-600 shadow-inner" placeholder="NOME..." required /></div>
+                                        <div className="space-y-1"><label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block px-1">Data Pedido</label><input name="dataCompra" type="date" className="w-full px-4 py-3 bg-neutral-50 border-2 rounded-xl outline-none font-black text-xs focus:border-red-600" required /></div>
+                                        <div className="space-y-1"><label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block px-1">Data Entrega</label><input name="dataEntrega" type="date" className="w-full px-4 py-3 bg-neutral-50 border-2 rounded-xl outline-none font-black text-xs focus:border-red-600" required /></div>
+                                    </div>
+                                    <button type="submit" className="w-full py-5 bg-red-600 text-white rounded-[1.5rem] font-black uppercase text-sm shadow-xl tracking-widest hover:bg-red-700 active:scale-95 transition-all">Sincronizar Lançamento</button>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
