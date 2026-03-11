@@ -22,7 +22,8 @@
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .text-wrap-anywhere { overflow-wrap: anywhere; word-break: break-word; }
         
-        .input-dense { padding: 0.5rem 0.75rem; font-size: 0.875rem; border-radius: 0.75rem; }
+        .card-compact { padding: 1rem; border-radius: 1rem; }
+        .input-compact { padding: 0.5rem 0.75rem; border-radius: 0.5rem; font-size: 0.75rem; }
     </style>
 
     <!-- Bibliotecas Externas -->
@@ -131,7 +132,7 @@
             };
 
             if (submitted) return (
-                <div className="flex flex-col items-center justify-center py-10 fade-in bg-white rounded-3xl border border-neutral-200 p-8 shadow-sm max-md mx-auto text-center">
+                <div className="flex flex-col items-center justify-center py-10 fade-in bg-white rounded-3xl border border-neutral-200 p-8 shadow-sm max-md mx-auto text-center text-wrap-anywhere">
                     <Icon name="check-circle" size={48} className="text-emerald-500 mb-4" />
                     <h2 className="text-xl font-black uppercase tracking-tight">Pedido Protocolado!</h2>
                     <button onClick={() => setSubmitted(false)} className="mt-8 w-full py-4 bg-red-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-red-700">Nova Solicitação</button>
@@ -141,7 +142,7 @@
             return (
                 <div className="space-y-4 fade-in">
                     <div className="flex flex-col">
-                        <h2 className="text-2xl font-black text-black tracking-tighter uppercase leading-none">Solicitar Peças</h2>
+                        <h2 className="text-2xl font-black text-black tracking-tighter uppercase leading-none">Nova Requisição</h2>
                         <span className="text-[9px] font-bold text-neutral-400 uppercase mt-1 tracking-widest italic">Operacional VRZ</span>
                     </div>
 
@@ -172,7 +173,7 @@
                                         <div className="text-wrap-anywhere leading-tight"><span className="text-neutral-500 text-[7px] block opacity-70">Local Veículo</span>{vehicle.localizacao}</div>
                                         <div className="col-span-2 pt-1 border-t border-white/5 text-[7px] font-mono text-neutral-500 tracking-wider text-wrap-anywhere">{vehicle.chassi}</div>
                                     </div>
-                                ) : <div className="w-full text-center text-neutral-600 text-[8px] font-black uppercase tracking-widest italic">Aguardando OS...</div>}
+                                ) : <div className="w-full text-center text-neutral-600 text-[8px] font-black uppercase tracking-widest italic leading-none">Aguardando OS...</div>}
                             </div>
                         </div>
 
@@ -195,12 +196,12 @@
                                         <div className="md:col-span-3">
                                             <label className="text-[8px] font-black text-neutral-400 uppercase block mb-1 text-red-600">Foto</label>
                                             {it.photo ? (
-                                                <div className="relative h-10 rounded-lg overflow-hidden border group shadow-inner">
+                                                <div className="relative h-12 rounded-lg overflow-hidden border group">
                                                     <img src={it.photo} className="h-full w-full object-cover" />
                                                     <button type="button" onClick={() => setItems(prev => prev.map(i => i.id === it.id ? {...i, photo: null} : i))} className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100"><Icon name="x" className="text-white" size={14} /></button>
                                                 </div>
                                             ) : (
-                                                <label className="h-10 flex flex-col items-center justify-center border-2 border-dashed border-neutral-200 rounded-lg cursor-pointer hover:bg-red-50 transition-all bg-neutral-50">
+                                                <label className="h-12 flex flex-col items-center justify-center border-2 border-dashed border-neutral-200 rounded-lg cursor-pointer hover:bg-red-50 transition-all bg-neutral-50">
                                                     <Icon name="camera" className="text-neutral-400" size={20} />
                                                     <input type="file" accept="image/*" onChange={(e) => {
                                                         const r = new FileReader(); r.onload = () => setItems(prev => prev.map(i => i.id === it.id ? {...i, photo: r.result} : i));
@@ -274,7 +275,7 @@
                                 <div className={`lg:w-44 p-4 rounded-xl flex flex-col justify-center shrink-0 ${r.response ? 'bg-black text-white' : 'bg-neutral-50 border-l border-neutral-100'}`}>
                                     {r.response ? (
                                         <div className="space-y-1">
-                                            <span className="text-[7px] font-black text-neutral-500 uppercase block">Investimento</span>
+                                            <span className="text-[7px] font-black text-neutral-500 uppercase block leading-none">Investimento</span>
                                             <span className="text-lg font-black text-red-600 leading-none">R$ {parseFloat(r.response.valor || 0).toLocaleString('pt-BR')}</span>
                                             <div className="pt-2 text-[7px] font-bold uppercase tracking-widest border-t border-white/5 mt-1">
                                                 <div className="flex justify-between"><span>Loja:</span><span className="text-white truncate max-w-[60px]">{r.response.fornecedor}</span></div>
@@ -301,7 +302,7 @@
             const [adminAuth, setAdminAuth] = useState(false);
             const [editingRequest, setEditingRequest] = useState(null);
             const [isSidebarOpen, setSidebarOpen] = useState(false);
-            const [adminSubView, setAdminSubView] = useState('pending'); // 'pending', 'completed', 'vehicles'
+            const [adminSubView, setAdminSubView] = useState('pending');
 
             useEffect(() => {
                 const unsubAuth = auth.onAuthStateChanged((u) => { 
@@ -323,24 +324,25 @@
             }, [user]);
 
             const handleImport = async () => {
-                const csv = prompt("COLE OS DADOS DA PLANILHA (CABEÇALHOS: OS, MODELO, FABRICANTE, COR, CHASSI, ETAPA, LOCALIZAÇÃO)");
+                const csv = prompt("COLE OS DADOS DA PLANILHA (CABEÇALHOS: OS,MODELO,FABRICANTE,COR,CHASSI,ETAPA,LOCALIZAÇÃO)");
                 if (!csv) return;
 
                 try {
-                    const lines = csv.split('\n');
-                    const headers = lines[0].split(',').map(h => h.trim().toUpperCase());
+                    const lines = csv.split('\n').filter(l => l.trim() !== '');
+                    const headerLine = lines[0].split(',').map(h => h.trim().toUpperCase());
                     
-                    // Mapeamento dinâmico de índices para evitar erro se houver espaços extras como "COR "
-                    const idxOS = headers.indexOf('OS');
-                    const idxModelo = headers.indexOf('MODELO');
-                    const idxFab = headers.indexOf('FABRICANTE');
-                    const idxCor = headers.findIndex(h => h.includes('COR'));
-                    const idxChassi = headers.indexOf('CHASSI');
-                    const idxEtapa = headers.indexOf('ETAPA');
-                    const idxLoc = headers.findIndex(h => h.includes('LOCALIZA'));
+                    const findHeader = (targets) => headerLine.findIndex(h => targets.some(t => h.includes(t)));
+
+                    const idxOS = findHeader(['OS']);
+                    const idxModelo = findHeader(['MODELO']);
+                    const idxFab = findHeader(['FABRICANTE']);
+                    const idxCor = findHeader(['COR']);
+                    const idxChassi = findHeader(['CHASSI']);
+                    const idxEtapa = findHeader(['ETAPA']);
+                    const idxLoc = findHeader(['LOCALIZA']);
 
                     if (idxOS === -1 || idxModelo === -1) {
-                        alert("Erro: Cabeçalhos não identificados. Certifique-se que a primeira linha contém 'OS' e 'MODELO'.");
+                        alert("Erro crítico: Colunas 'OS' ou 'MODELO' não encontradas.");
                         return;
                     }
 
@@ -348,19 +350,19 @@
                     let count = 0;
 
                     lines.slice(1).forEach(l => {
-                        const v = l.split(',');
+                        const v = l.split(',').map(val => val.trim());
                         if (v.length >= 2) {
-                            const osValue = v[idxOS]?.trim();
-                            if (osValue) {
-                                const vRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('vehicles').doc(osValue);
+                            const osVal = v[idxOS];
+                            if (osVal) {
+                                const vRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('vehicles').doc(osVal);
                                 batch.set(vRef, {
-                                    os: osValue,
-                                    modelo: v[idxModelo]?.trim() || '',
-                                    fabricante: v[idxFab]?.trim() || '',
-                                    cor: v[idxCor]?.trim() || '',
-                                    chassi: v[idxChassi]?.trim() || '',
-                                    etapa: v[idxEtapa]?.trim() || '',
-                                    localizacao: v[idxLoc]?.trim() || ''
+                                    os: osVal,
+                                    modelo: v[idxModelo] || '',
+                                    fabricante: v[idxFab] || '',
+                                    cor: v[idxCor] || '',
+                                    chassi: v[idxChassi] || '',
+                                    etapa: v[idxEtapa] || '',
+                                    localizacao: v[idxLoc] || ''
                                 });
                                 count++;
                             }
@@ -369,23 +371,20 @@
 
                     if (count > 0) {
                         await batch.commit();
-                        alert(`Sucesso! ${count} veículos cadastrados.`);
+                        alert(`Sucesso! ${count} veículos atualizados.`);
                     }
                 } catch (e) {
-                    console.error(e);
-                    alert("Erro ao processar planilha. Verifique a formatação.");
+                    alert("Falha na importação. Verifique se o formato está correto.");
                 }
             };
 
             return (
                 <div className="h-screen flex flex-col md:flex-row bg-slate-100 overflow-hidden">
-                    {/* Topbar Mobile */}
                     <div className="md:hidden bg-black text-white p-3 flex justify-between items-center z-[100] border-b-2 border-red-600 shadow-xl">
                         <div className="flex items-center gap-2"><div className="p-1 bg-red-600 rounded-lg"><Icon name="shopping-cart" size={16} /></div><span className="font-black text-sm uppercase tracking-tighter">VRZ PORTAL</span></div>
                         <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="p-2 bg-neutral-900 rounded-xl"><Icon name={isSidebarOpen ? "x" : "menu"} size={20} /></button>
                     </div>
 
-                    {/* Sidebar */}
                     <nav className={`fixed md:relative inset-y-0 left-0 w-52 bg-black text-white p-6 flex flex-col gap-6 z-[90] sidebar-transition transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} shadow-2xl shrink-0`}>
                         <div className="hidden md:flex items-center gap-3 mb-4"><div className="p-2 bg-red-600 rounded-xl shadow-lg shadow-red-600/30"><Icon name="shopping-cart" size={20} /></div><h1 className="text-sm font-black uppercase tracking-widest leading-none">VRZ COMPRAS</h1></div>
                         <div className="flex-1 space-y-1">
@@ -396,11 +395,11 @@
                         <div className="bg-neutral-900/60 p-3 rounded-xl border border-white/5 text-center"><div className={`text-[8px] font-black tracking-widest ${user ? 'text-red-600' : 'text-neutral-500'}`}>● {user ? 'SISTEMA ONLINE' : 'RECONECTANDO...'}</div></div>
                     </nav>
 
-                    <main className="flex-1 p-4 md:p-6 overflow-y-auto scrollbar-hide h-full">
+                    <main className="flex-1 p-4 md:p-6 overflow-y-auto scrollbar-hide h-full min-w-0">
                         {!user ? (
                             <div className="h-full flex flex-col items-center justify-center font-black animate-pulse text-neutral-400 gap-4"><Icon name="loader" size={32} className="animate-spin text-red-600" /><span className="text-[10px] uppercase tracking-[0.3em]">Sincronizando Sistema...</span></div>
                         ) : (
-                            <div className="max-w-5xl mx-auto">
+                            <div className="max-w-6xl mx-auto min-w-0">
                                 {view === 'request' && <RequestForm user={user} vehiclesDB={vehiclesDB} />}
                                 {view === 'status' && <StatusView requests={requests} />}
                                 
@@ -409,32 +408,26 @@
                                         <div className="max-w-xs mx-auto py-12 slide-up"><div className="bg-black p-8 rounded-3xl text-center text-white border-2 border-red-600 shadow-2xl">
                                             <Icon name="lock" size={32} className="text-red-600 mx-auto mb-6" />
                                             <h2 className="text-sm font-black uppercase mb-8 tracking-[0.2em]">Acesso Administrativo</h2>
-                                            <input type="password" autoFocus onKeyDown={(e) => { if(e.key === 'Enter' && e.target.value === 'VRZ2024') setAdminAuth(true); }} className="w-full p-4 bg-neutral-900 border border-white/10 rounded-xl outline-none text-center tracking-[1em] font-black focus:border-red-600" placeholder="••••" />
+                                            <input type="password" autoFocus onKeyDown={(e) => { if(e.key === 'Enter' && e.target.value === 'VRZ2024') setAdminAuth(true); }} className="w-full p-4 bg-neutral-900 border border-white/10 rounded-xl outline-none text-center tracking-[1em] font-black focus:border-red-600 shadow-inner" placeholder="••••" />
                                         </div></div>
                                     ) : (
-                                        <div className="space-y-6 fade-in pb-10">
-                                            {/* Cabeçalho Gestão */}
+                                        <div className="space-y-6 fade-in pb-10 min-w-0">
                                             <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-neutral-200 pb-4 gap-4">
-                                                <div><h2 className="text-3xl font-black uppercase text-black tracking-tighter leading-none">Gestão de Compras</h2><p className="text-[9px] font-bold text-neutral-400 mt-1 uppercase">Protocolos e Base de Veículos</p></div>
+                                                <div><h2 className="text-3xl font-black uppercase text-black tracking-tighter leading-none">Gestão de Compras</h2><p className="text-[9px] font-bold text-neutral-400 mt-1 uppercase tracking-widest">Controle de Ativos e Protocolos</p></div>
                                                 <button onClick={handleImport} className="bg-black text-white px-5 py-2.5 rounded-xl font-black uppercase text-[10px] border-b-4 border-red-600 flex items-center gap-2 hover:bg-neutral-900 shadow-xl"><Icon name="file-up" size={14} /> Importar Planilha</button>
                                             </div>
 
-                                            {/* Sub-abas Admin */}
-                                            <div className="flex gap-2 bg-white p-1 rounded-xl border border-neutral-200 w-fit">
-                                                <button onClick={() => setAdminSubView('pending')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase transition-all ${adminSubView === 'pending' ? 'bg-red-600 text-white shadow-md' : 'text-neutral-400 hover:text-black'}`}>Pedidos Pendentes ({requests.filter(r => r.status === 'Pendente').length})</button>
-                                                <button onClick={() => setAdminSubView('completed')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase transition-all ${adminSubView === 'completed' ? 'bg-black text-white shadow-md' : 'text-neutral-400 hover:text-black'}`}>Pedidos Concluídos ({requests.filter(r => r.status === 'Concluído').length})</button>
-                                                <button onClick={() => setAdminSubView('vehicles')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase transition-all ${adminSubView === 'vehicles' ? 'bg-neutral-800 text-white shadow-md' : 'text-neutral-400 hover:text-black'}`}>Veículos Ativos ({vehiclesDB.length})</button>
+                                            <div className="flex gap-2 bg-white p-1 rounded-xl border border-neutral-200 w-fit overflow-x-auto scrollbar-hide shrink-0">
+                                                <button onClick={() => setAdminSubView('pending')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase whitespace-nowrap transition-all ${adminSubView === 'pending' ? 'bg-red-600 text-white shadow-md' : 'text-neutral-400'}`}>Pendentes ({requests.filter(r => r.status === 'Pendente').length})</button>
+                                                <button onClick={() => setAdminSubView('completed')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase whitespace-nowrap transition-all ${adminSubView === 'completed' ? 'bg-black text-white shadow-md' : 'text-neutral-400'}`}>Concluídos ({requests.filter(r => r.status === 'Concluído').length})</button>
+                                                <button onClick={() => setAdminSubView('vehicles')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase whitespace-nowrap transition-all ${adminSubView === 'vehicles' ? 'bg-neutral-800 text-white shadow-md' : 'text-neutral-400'}`}>Base Veículos ({vehiclesDB.length})</button>
                                             </div>
 
-                                            <div className="grid grid-cols-1 gap-6">
-                                                {/* Visualização de Veículos */}
+                                            <div className="min-w-0 overflow-hidden">
                                                 {adminSubView === 'vehicles' && (
                                                     <div className="bg-white rounded-2xl border border-neutral-200 shadow-sm overflow-hidden fade-in">
-                                                        <div className="p-4 bg-neutral-50 border-b border-neutral-200 flex justify-between items-center">
-                                                            <h3 className="text-[10px] font-black uppercase tracking-widest text-black flex items-center gap-2"><Icon name="table" size={14} className="text-red-600" /> Base VRZ Atualizada</h3>
-                                                        </div>
                                                         <div className="overflow-x-auto max-h-[60vh] scrollbar-hide">
-                                                            <table className="w-full text-left border-collapse min-w-[800px]">
+                                                            <table className="w-full text-left border-collapse min-w-[1000px]">
                                                                 <thead className="bg-neutral-100 text-[8px] font-black uppercase text-neutral-500 sticky top-0">
                                                                     <tr>
                                                                         <th className="p-3 border-b">OS</th>
@@ -448,14 +441,14 @@
                                                                 </thead>
                                                                 <tbody className="text-[9px] font-medium text-neutral-700">
                                                                     {vehiclesDB.length === 0 ? (
-                                                                        <tr><td colSpan="7" className="p-8 text-center text-neutral-300 font-black uppercase tracking-widest">Base Vazia. Importe o CSV.</td></tr>
+                                                                        <tr><td colSpan="7" className="p-10 text-center text-neutral-300 font-black uppercase tracking-widest">Nenhum veículo na base. Use o botão acima.</td></tr>
                                                                     ) : vehiclesDB.map((v, i) => (
                                                                         <tr key={i} className="border-b border-neutral-50 hover:bg-slate-50 transition-colors">
-                                                                            <td className="p-3 font-black text-black tracking-tighter">#{v.os}</td>
+                                                                            <td className="p-3 font-black text-black">#{v.os}</td>
                                                                             <td className="p-3 uppercase">{v.modelo}</td>
                                                                             <td className="p-3 uppercase">{v.fabricante}</td>
                                                                             <td className="p-3 uppercase">{v.cor}</td>
-                                                                            <td className="p-3 font-mono text-[8px]">{v.chassi}</td>
+                                                                            <td className="p-3 font-mono text-[8px] tracking-tighter">{v.chassi}</td>
                                                                             <td className="p-3"><span className="bg-red-50 text-red-600 px-2 py-0.5 rounded font-black text-[8px] uppercase">{v.etapa}</span></td>
                                                                             <td className="p-3 uppercase">{v.localizacao}</td>
                                                                         </tr>
@@ -466,40 +459,34 @@
                                                     </div>
                                                 )}
 
-                                                {/* Pedidos Pendentes */}
                                                 {adminSubView === 'pending' && (
-                                                    <div className="space-y-4 fade-in">
-                                                        <div className="grid grid-cols-1 gap-3">
-                                                            {requests.filter(r => r.status === 'Pendente').map(req => (
-                                                                <div key={req.id} className="bg-white p-4 rounded-2xl border border-neutral-200 shadow-sm flex items-center justify-between gap-4 hover:border-red-600 transition-all border-l-4 border-l-red-600">
-                                                                    <div className="flex flex-1 gap-8 items-center min-w-0">
-                                                                        <div className="text-center shrink-0"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">OS</p><p className="text-base font-black uppercase tracking-tighter">#{req.os}</p></div>
-                                                                        <div className="min-w-0"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">Veículo / Cor</p><p className="text-[10px] font-black uppercase text-wrap-anywhere">{req.vehicleData?.modelo} <span className="text-red-600">[{req.vehicleData?.cor}]</span></p></div>
-                                                                        <div className="min-w-0 hidden sm:block"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">Solicitante</p><p className="text-[10px] font-black uppercase text-wrap-anywhere">{req.responsavel}</p></div>
-                                                                    </div>
-                                                                    <button onClick={() => setEditingRequest(req)} className="bg-black text-white px-5 py-2.5 rounded-lg font-black uppercase text-[9px] tracking-widest border-b-4 border-red-600 hover:bg-neutral-900 active:translate-y-1 active:border-b-0 shadow-lg">Protocolar</button>
+                                                    <div className="grid grid-cols-1 gap-3 fade-in">
+                                                        {requests.filter(r => r.status === 'Pendente').map(req => (
+                                                            <div key={req.id} className="bg-white p-4 rounded-2xl border border-neutral-200 shadow-sm flex items-center justify-between gap-4 border-l-4 border-l-red-600">
+                                                                <div className="flex flex-1 gap-8 items-center min-w-0">
+                                                                    <div className="text-center shrink-0"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">OS</p><p className="text-base font-black tracking-tighter">#{req.os}</p></div>
+                                                                    <div className="min-w-0"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">Veículo / Cor</p><p className="text-[10px] font-black uppercase text-wrap-anywhere">{req.vehicleData?.modelo} <span className="text-red-600">[{req.vehicleData?.cor}]</span></p></div>
+                                                                    <div className="min-w-0 hidden sm:block"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">Solicitante</p><p className="text-[10px] font-black uppercase text-wrap-anywhere">{req.responsavel}</p></div>
                                                                 </div>
-                                                            ))}
-                                                            {requests.filter(r => r.status === 'Pendente').length === 0 && <div className="text-center py-20 bg-white rounded-3xl border border-dashed text-neutral-300 font-black uppercase text-[10px]">Tudo em dia!</div>}
-                                                        </div>
+                                                                <button onClick={() => setEditingRequest(req)} className="bg-black text-white px-5 py-2.5 rounded-lg font-black uppercase text-[9px] tracking-widest border-b-4 border-red-600 shadow-lg shrink-0">Protocolar</button>
+                                                            </div>
+                                                        ))}
+                                                        {requests.filter(r => r.status === 'Pendente').length === 0 && <div className="text-center py-20 bg-white rounded-3xl border border-dashed text-neutral-300 font-black uppercase text-[10px]">Sem solicitações em aberto</div>}
                                                     </div>
                                                 )}
 
-                                                {/* Pedidos Concluídos */}
                                                 {adminSubView === 'completed' && (
-                                                    <div className="space-y-4 fade-in">
-                                                        <div className="grid grid-cols-1 gap-3">
-                                                            {requests.filter(r => r.status === 'Concluído').map(req => (
-                                                                <div key={req.id} className="bg-white p-4 rounded-2xl border border-neutral-200 shadow-sm flex items-center justify-between gap-4 border-l-4 border-l-black">
-                                                                    <div className="flex flex-1 gap-8 items-center min-w-0">
-                                                                        <div className="text-center shrink-0"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">OS</p><p className="text-base font-black uppercase tracking-tighter">#{req.os}</p></div>
-                                                                        <div className="min-w-0"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">Custo Lançado</p><p className="text-[10px] font-black uppercase text-red-600">R$ {parseFloat(req.response?.valor || 0).toLocaleString('pt-BR')}</p></div>
-                                                                        <div className="min-w-0 hidden sm:block"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">Fornecedor</p><p className="text-[10px] font-black uppercase truncate">{req.response?.fornecedor}</p></div>
-                                                                    </div>
-                                                                    <div className="bg-black text-white px-4 py-2 rounded-lg text-[8px] font-black uppercase">Finalizado</div>
+                                                    <div className="grid grid-cols-1 gap-3 fade-in">
+                                                        {requests.filter(r => r.status === 'Concluído').map(req => (
+                                                            <div key={req.id} className="bg-white p-4 rounded-2xl border border-neutral-200 shadow-sm flex items-center justify-between gap-4 border-l-4 border-l-black">
+                                                                <div className="flex flex-1 gap-8 items-center min-w-0">
+                                                                    <div className="text-center shrink-0"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">OS</p><p className="text-base font-black tracking-tighter">#{req.os}</p></div>
+                                                                    <div className="min-w-0"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">Valor Protocolado</p><p className="text-[10px] font-black uppercase text-red-600">R$ {parseFloat(req.response?.valor || 0).toLocaleString('pt-BR')}</p></div>
+                                                                    <div className="min-w-0 hidden sm:block"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">Loja</p><p className="text-[10px] font-black uppercase truncate">{req.response?.fornecedor}</p></div>
                                                                 </div>
-                                                            ))}
-                                                        </div>
+                                                                <div className="bg-neutral-100 text-neutral-500 px-4 py-2 rounded-lg text-[8px] font-black uppercase shrink-0">Arquivado</div>
+                                                            </div>
+                                                        ))}
                                                     </div>
                                                 )}
                                             </div>
@@ -521,15 +508,15 @@
                                     e.preventDefault();
                                     const formData = new FormData(e.target);
                                     const resp = { valor: formData.get('valor'), fornecedor: formData.get('fornecedor'), dataCompra: formData.get('dataCompra'), dataEntrega: formData.get('dataEntrega') };
-                                    try { await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('requests').doc(editingRequest.id).update({ response: resp, status: 'Concluído' }); setEditingRequest(null); } catch (err) { alert('Erro ao sincronizar dados.'); }
+                                    try { await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('requests').doc(editingRequest.id).update({ response: resp, status: 'Concluído' }); setEditingRequest(null); } catch (err) { alert('Erro ao salvar.'); }
                                 }} className="p-8 space-y-8">
                                     <div className="grid grid-cols-2 gap-6">
-                                        <div className="space-y-1"><label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block px-1">Valor de Compra (R$)</label><input name="valor" step="0.01" type="number" className="w-full px-4 py-3 bg-neutral-50 border-2 rounded-xl outline-none font-black text-xl focus:border-red-600 shadow-inner" placeholder="0.00" required /></div>
-                                        <div className="space-y-1"><label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block px-1">Fornecedor Selecionado</label><input name="fornecedor" type="text" className="w-full px-4 py-3 bg-neutral-50 border-2 rounded-xl outline-none font-black text-[10px] uppercase focus:border-red-600 shadow-inner" placeholder="NOME..." required /></div>
-                                        <div className="space-y-1"><label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block px-1">Data do Pedido</label><input name="dataCompra" type="date" className="w-full px-4 py-3 bg-neutral-50 border-2 rounded-xl outline-none font-black focus:border-red-600" required /></div>
-                                        <div className="space-y-1"><label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block px-1">Entrega Prevista</label><input name="dataEntrega" type="date" className="w-full px-4 py-3 bg-neutral-50 border-2 rounded-xl outline-none font-black focus:border-red-600" required /></div>
+                                        <div className="space-y-1"><label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block px-1">Valor Final (R$)</label><input name="valor" step="0.01" type="number" className="w-full px-4 py-3 bg-neutral-50 border-2 rounded-xl outline-none font-black text-xl focus:border-red-600 shadow-inner" placeholder="0.00" required /></div>
+                                        <div className="space-y-1"><label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block px-1">Loja de Origem</label><input name="fornecedor" type="text" className="w-full px-4 py-3 bg-neutral-50 border-2 rounded-xl outline-none font-black text-[10px] uppercase focus:border-red-600 shadow-inner" placeholder="NOME..." required /></div>
+                                        <div className="space-y-1"><label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block px-1">Data Pedido</label><input name="dataCompra" type="date" className="w-full px-4 py-3 bg-neutral-50 border-2 rounded-xl outline-none font-black focus:border-red-600" required /></div>
+                                        <div className="space-y-1"><label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block px-1">Previsão Chegada</label><input name="dataEntrega" type="date" className="w-full px-4 py-3 bg-neutral-50 border-2 rounded-xl outline-none font-black focus:border-red-600" required /></div>
                                     </div>
-                                    <button type="submit" className="w-full py-5 bg-red-600 text-white rounded-[1.5rem] font-black uppercase text-sm shadow-xl tracking-widest hover:bg-red-700 active:scale-95 transition-all">Sincronizar Lançamento</button>
+                                    <button type="submit" className="w-full py-5 bg-red-600 text-white rounded-[1.5rem] font-black uppercase text-sm shadow-xl tracking-widest hover:bg-red-700 active:scale-95 transition-all">Sincronizar Dados</button>
                                 </form>
                             </div>
                         </div>
