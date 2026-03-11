@@ -7,7 +7,7 @@
     
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&family=JetBrains+Mono:wght@700&display=swap');
         
         body { 
             font-family: 'Inter', sans-serif; 
@@ -33,6 +33,9 @@
             outline: none;
         }
         .excel-input:focus { background: #fffbeb; box-shadow: inset 0 0 0 2px #ef4444; }
+        
+        /* Fonte para o Chassi */
+        .font-chassi { font-family: 'JetBrains Mono', monospace; }
     </style>
 
     <!-- Bibliotecas Externas -->
@@ -41,6 +44,7 @@
     <script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
     <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     
     <!-- Firebase Compat SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -64,7 +68,6 @@
             appId: "1:713014398002:web:d89f485af020178b00002b"
         };
 
-        // Inicialização
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
         const auth = firebase.auth();
@@ -106,8 +109,12 @@
         }
 
         function StatusBadge({ status }) {
-            const isPendente = status === 'Pendente';
-            return <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-tighter border ${isPendente ? 'bg-red-600 text-white border-red-600' : 'bg-black text-white border-neutral-800'}`}>{status}</span>;
+            const configs = {
+                'Pendente': 'bg-orange-500 text-white border-orange-500',
+                'Em Cotação': 'bg-blue-600 text-white border-blue-600',
+                'Concluído': 'bg-black text-white border-neutral-800'
+            };
+            return <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-tighter border ${configs[status] || 'bg-neutral-400 text-white'}`}>{status}</span>;
         }
 
         // --- ABA: FORMULÁRIO DE SOLICITAÇÃO ---
@@ -123,7 +130,7 @@
             const handleOSBlur = () => {
                 const found = vehiclesDB.find(v => String(v.os).trim() === String(os).trim());
                 if (found) setVehicle(found);
-                else { setVehicle(null); if(os.length > 0) alert('OS não encontrada na base de dados.'); }
+                else { setVehicle(null); if(os.length > 0) alert('OS não cadastrada na base de dados.'); }
             };
 
             const handleSubmit = async (e) => {
@@ -151,7 +158,7 @@
             return (
                 <div className="space-y-4 fade-in">
                     <div className="flex flex-col">
-                        <h2 className="text-2xl font-black text-black tracking-tighter uppercase leading-none">Nova Solicitação</h2>
+                        <h2 className="text-2xl font-black text-black tracking-tighter uppercase leading-none">Nova Requisição</h2>
                         <span className="text-[9px] font-bold text-neutral-400 uppercase mt-1 tracking-widest italic">Operacional VRZ</span>
                     </div>
 
@@ -163,27 +170,56 @@
                                     <input type="text" value={os} onChange={(e) => setOs(e.target.value)} onBlur={handleOSBlur} placeholder="Nº OS" className="w-full px-3 py-2 bg-neutral-50 border-2 rounded-xl focus:border-red-600 outline-none font-black text-base" required />
                                 </div>
                                 <div className="grid grid-cols-2 gap-2">
-                                    <input type="text" value={responsavel} onChange={(e) => setResponsavel(e.target.value)} placeholder="RESPONSÁVEL" className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-lg font-black uppercase text-[10px] focus:border-red-600 outline-none" required />
-                                    <input type="text" value={localizacao} onChange={(e) => setLocalizacao(e.target.value)} placeholder="SETOR" className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-lg font-black uppercase text-[10px] focus:border-red-600 outline-none" required />
+                                    <input type="text" value={responsavel} onChange={(e) => setResponsavel(e.target.value)} placeholder="SOLICITANTE" className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-lg font-black uppercase text-[9px] focus:border-red-600 outline-none" required />
+                                    <input type="text" value={localizacao} onChange={(e) => setLocalizacao(e.target.value)} placeholder="SETOR" className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-lg font-black uppercase text-[9px] focus:border-red-600 outline-none" required />
                                 </div>
                             </div>
-                            <div className="md:col-span-3 bg-neutral-900 rounded-xl p-4 text-white border-l-4 border-red-600 flex items-center min-h-[100px]">
+
+                            <div className="md:col-span-3 bg-neutral-950 rounded-xl p-5 text-white border-l-[10px] border-red-600 shadow-2xl flex flex-col justify-center min-h-[140px]">
                                 {vehicle ? (
-                                    <div className="grid grid-cols-2 gap-x-6 gap-y-2 w-full text-[9px] uppercase font-black">
-                                        <div className="text-wrap-anywhere leading-tight"><span className="text-neutral-500 text-[7px] block opacity-70">Modelo</span>{vehicle.modelo}</div>
-                                        <div className="text-wrap-anywhere leading-tight"><span className="text-neutral-500 text-[7px] block opacity-70">Etapa</span><span className="text-red-500">{vehicle.etapa}</span></div>
-                                        <div className="text-wrap-anywhere leading-tight"><span className="text-neutral-500 text-[7px] block opacity-70">Cor</span>{vehicle.cor}</div>
-                                        <div className="text-wrap-anywhere leading-tight"><span className="text-neutral-500 text-[7px] block opacity-70">Local Veículo</span>{vehicle.localizacao}</div>
-                                        <div className="col-span-2 pt-1 border-t border-white/5 text-[7px] font-mono text-neutral-500 tracking-wider text-wrap-anywhere">{vehicle.chassi}</div>
+                                    <div className="flex flex-col gap-4 w-full">
+                                        <div className="grid grid-cols-2 gap-4 border-b border-white/5 pb-3">
+                                            <div className="min-w-0">
+                                                <span className="text-neutral-500 text-[8px] font-black uppercase block mb-0.5 tracking-widest">Modelo</span>
+                                                <span className="text-white text-sm font-black uppercase truncate block leading-none text-wrap-anywhere">{vehicle.modelo}</span>
+                                            </div>
+                                            <div className="min-w-0">
+                                                <span className="text-neutral-500 text-[8px] font-black uppercase block mb-0.5 tracking-widest">Fabricante</span>
+                                                <span className="text-white text-xs font-bold uppercase truncate block leading-none text-wrap-anywhere">{vehicle.fabricante || 'N/A'}</span>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-3 gap-2 pb-3">
+                                            <div>
+                                                <span className="text-neutral-500 text-[8px] font-black uppercase block mb-0.5 tracking-widest">Etapa</span>
+                                                <span className="text-red-500 text-[10px] font-black uppercase block leading-none">{vehicle.etapa}</span>
+                                            </div>
+                                            <div>
+                                                <span className="text-neutral-500 text-[8px] font-black uppercase block mb-0.5 tracking-widest">Cor</span>
+                                                <span className="text-white text-[10px] font-bold uppercase block leading-none">{vehicle.cor}</span>
+                                            </div>
+                                            <div>
+                                                <span className="text-neutral-500 text-[8px] font-black uppercase block mb-0.5 tracking-widest">Local</span>
+                                                <span className="text-white text-[10px] font-bold uppercase block leading-none">{vehicle.localizacao}</span>
+                                            </div>
+                                        </div>
+                                        <div className="bg-white/5 p-3 rounded-xl border border-white/10">
+                                            <span className="text-neutral-500 text-[8px] font-black uppercase block mb-1.5 tracking-[0.2em] text-center">Número do Chassi</span>
+                                            <span className="text-white font-chassi text-base font-black tracking-[0.15em] block text-center leading-none select-all">{vehicle.chassi}</span>
+                                        </div>
                                     </div>
-                                ) : <div className="w-full text-center text-neutral-600 text-[8px] font-black uppercase tracking-widest italic leading-none">Aguardando OS...</div>}
+                                ) : (
+                                    <div className="w-full text-center space-y-2">
+                                        <div className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-2"><Icon name="search" size={20} className="text-neutral-700" /></div>
+                                        <p className="text-neutral-600 text-[9px] font-black uppercase tracking-[0.3em] italic leading-none">Aguardando OS...</p>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
                         <div className="space-y-3">
                             <div className="flex justify-between items-center px-1">
-                                <h3 className="font-black text-black uppercase text-[10px] flex items-center gap-2"><Icon name="package" size={14} /> Itens Pedidos</h3>
-                                <button type="button" onClick={() => setItems([...items, {id: Date.now(), description: '', quantity: 1, photo: null}])} className="bg-red-600 text-white px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm">+ ITEM</button>
+                                <h3 className="font-black text-black uppercase text-[10px] flex items-center gap-2"><Icon name="package" size={14} /> Peças Necessárias</h3>
+                                <button type="button" onClick={() => setItems([...items, {id: Date.now(), description: '', quantity: 1, photo: null}])} className="bg-red-600 text-white px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm hover:bg-red-700">+ ITEM</button>
                             </div>
                             <div className="grid grid-cols-1 gap-2">
                                 {items.map((it, idx) => (
@@ -193,19 +229,19 @@
                                             <input type="number" min="1" value={it.quantity} onChange={(e) => setItems(prev => prev.map(i => i.id === it.id ? {...i, quantity: e.target.value} : i))} className="w-full p-2 bg-neutral-50 border rounded-lg font-black text-center text-sm" />
                                         </div>
                                         <div className="md:col-span-7">
-                                            <label className="text-[8px] font-black text-neutral-400 uppercase block mb-1">Descrição da Peça</label>
+                                            <label className="text-[8px] font-black text-neutral-400 uppercase block mb-1 text-wrap-anywhere">Descrição da Peça</label>
                                             <input type="text" value={it.description} onChange={(e) => setItems(prev => prev.map(i => i.id === it.id ? {...i, description: e.target.value} : i))} placeholder="NOME DA PEÇA" className="w-full p-2 bg-neutral-50 border rounded-lg font-black text-[10px] uppercase focus:border-red-600 outline-none" required />
                                         </div>
-                                        <div className="md:col-span-3">
+                                        <div className="md:col-span-3 text-center">
                                             <label className="text-[8px] font-black text-neutral-400 uppercase block mb-1 text-red-600">Foto</label>
                                             {it.photo ? (
-                                                <div className="relative h-10 rounded-lg overflow-hidden border group">
+                                                <div className="relative h-12 rounded-lg overflow-hidden border group">
                                                     <img src={it.photo} className="h-full w-full object-cover" />
                                                     <button type="button" onClick={() => setItems(prev => prev.map(i => i.id === it.id ? {...i, photo: null} : i))} className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100"><Icon name="x" className="text-white" size={14} /></button>
                                                 </div>
                                             ) : (
-                                                <label className="h-10 flex flex-col items-center justify-center border-2 border-dashed border-neutral-200 rounded-lg cursor-pointer hover:bg-red-50 transition-all bg-neutral-50">
-                                                    <Icon name="camera" className="text-neutral-400" size={20} />
+                                                <label className="h-12 flex flex-col items-center justify-center border-2 border-dashed border-neutral-200 rounded-lg cursor-pointer hover:bg-red-50 transition-all bg-neutral-50">
+                                                    <Icon name="camera" className="text-neutral-400" size={24} />
                                                     <input type="file" accept="image/*" onChange={(e) => {
                                                         const r = new FileReader(); r.onload = () => setItems(prev => prev.map(i => i.id === it.id ? {...i, photo: r.result} : i));
                                                         if(e.target.files[0]) r.readAsDataURL(e.target.files[0]);
@@ -227,7 +263,7 @@
             );
         }
 
-        // --- ABA: CONSULTAR OS ---
+        // --- ABA: CONSULTAR (HISTÓRICO) ---
         function StatusView({ requests }) {
             const [search, setSearch] = useState('');
             const filtered = useMemo(() => requests.filter(r => {
@@ -237,16 +273,87 @@
                        (String(r.vehicleData?.modelo || '').toLowerCase().includes(t));
             }), [requests, search]);
 
+            const deleteRequest = async (id) => {
+                if(!window.confirm("Deseja realmente excluir esta solicitação?")) return;
+                try {
+                    await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('requests').doc(id).delete();
+                } catch(e) { alert("Erro ao excluir."); }
+            };
+
+            const exportGeneralReport = () => {
+                const csvRows = [
+                    ["Data", "OS", "Chassi", "Veiculo", "Status", "Solicitante", "Setor", "Valor", "Loja", "Prazo Entrega"].join(";")
+                ];
+                requests.forEach(r => {
+                    csvRows.push([
+                        new Date(r.timestamp).toLocaleDateString(),
+                        r.os,
+                        r.vehicleData?.chassi || "-",
+                        r.vehicleData?.modelo || "-",
+                        r.status,
+                        r.responsavel,
+                        r.localizacaoSolicitacao || "-",
+                        r.response?.valor || "0",
+                        r.response?.fornecedor || "-",
+                        r.response?.dataEntrega ? new Date(r.response.dataEntrega).toLocaleDateString() : "-"
+                    ].join(";"));
+                });
+                const blob = new Blob([csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(blob);
+                link.download = `Estratificacao_Compras_VRZ_${new Date().toLocaleDateString()}.csv`;
+                link.click();
+            };
+
+            const exportPDF = async (request) => {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+                
+                doc.setFontSize(18);
+                doc.text("Relatório de Solicitação de Peças - VRZ", 10, 15);
+                
+                doc.setFontSize(10);
+                doc.text(`Ordem de Serviço: #${request.os}`, 10, 25);
+                doc.text(`Data: ${new Date(request.timestamp).toLocaleString()}`, 10, 30);
+                doc.text(`Veículo: ${request.vehicleData?.modelo} (${request.vehicleData?.fabricante})`, 10, 35);
+                doc.text(`Chassi: ${request.vehicleData?.chassi}`, 10, 40);
+                doc.text(`Cor/Etapa: ${request.vehicleData?.cor} / ${request.vehicleData?.etapa}`, 10, 45);
+                doc.text(`Solicitante: ${request.responsavel} (${request.localizacaoSolicitacao})`, 10, 50);
+                
+                let y = 60;
+                doc.setFontSize(12);
+                doc.text("ITENS SOLICITADOS:", 10, y);
+                y += 10;
+
+                request.items.forEach((item, index) => {
+                    if (y > 250) { doc.addPage(); y = 20; }
+                    doc.setFontSize(10);
+                    doc.text(`${index + 1}. Qtd: ${item.quantity} - ${item.description}`, 15, y);
+                    y += 10;
+                    if (item.photo) {
+                        try {
+                            doc.addImage(item.photo, 'JPEG', 15, y, 50, 30);
+                            y += 35;
+                        } catch(e) { console.error("Erro foto", e); }
+                    }
+                });
+
+                doc.save(`OS_${request.os}_Pedido.pdf`);
+            };
+
             return (
                 <div className="space-y-4 fade-in">
                     <div className="flex flex-col md:flex-row md:items-end justify-between gap-3">
                         <div>
                             <h2 className="text-2xl font-black uppercase text-black leading-none tracking-tighter">Histórico de OS</h2>
-                            <p className="text-[9px] font-bold text-neutral-400 uppercase tracking-widest mt-1">Sincronização em Tempo Real</p>
+                            <p className="text-[9px] font-bold text-neutral-400 uppercase tracking-widest mt-1 italic">Gestão e Exportação</p>
                         </div>
-                        <div className="relative">
-                            <input type="text" placeholder="BUSCAR OS / NOME..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full md:w-56 pl-9 pr-4 py-2 bg-white border border-neutral-200 rounded-xl text-[9px] font-black uppercase outline-none focus:border-red-600 shadow-sm" />
-                            <div className="absolute left-3 top-2.5 text-neutral-300"><Icon name="search" size={12} /></div>
+                        <div className="flex gap-2">
+                            <button onClick={exportGeneralReport} className="bg-emerald-600 text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase flex items-center gap-2 shadow-lg"><Icon name="file-text" size={12}/> Estratificar Tudo</button>
+                            <div className="relative">
+                                <input type="text" placeholder="BUSCAR OS / NOME..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full md:w-56 pl-9 pr-4 py-2 bg-white border border-neutral-200 rounded-xl text-[9px] font-black uppercase outline-none focus:border-red-600 shadow-sm" />
+                                <div className="absolute left-3 top-2.5 text-neutral-300"><Icon name="search" size={12} /></div>
+                            </div>
                         </div>
                     </div>
                     
@@ -254,12 +361,21 @@
                         {filtered.length === 0 ? (
                             <div className="py-20 text-center bg-white rounded-2xl border border-neutral-100 border-dashed">
                                 <Icon name="inbox" size={32} className="text-neutral-200 mx-auto mb-2" />
-                                <p className="text-[9px] font-black uppercase text-neutral-300 tracking-widest leading-none">Nenhum registro encontrado</p>
+                                <p className="text-[9px] font-black uppercase text-neutral-300 tracking-widest leading-none">Vazio</p>
                             </div>
                         ) : filtered.map(r => (
-                            <div key={r.id} className="bg-white rounded-2xl border border-neutral-200 p-4 shadow-sm flex flex-col lg:flex-row gap-4 hover:border-red-200 transition-all border-l-4 border-l-red-600">
+                            <div key={r.id} className="bg-white rounded-2xl border border-neutral-200 p-4 shadow-sm flex flex-col lg:flex-row gap-4 hover:border-red-200 transition-all border-l-4 border-l-red-600 relative group">
                                 <div className="flex-1 space-y-3 min-w-0">
-                                    <div className="flex items-center gap-3"><span className="text-sm font-black uppercase">OS #{r.os}</span><StatusBadge status={r.status} /></div>
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-sm font-black uppercase">OS #{r.os}</span>
+                                            <StatusBadge status={r.status} />
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => exportPDF(r)} className="p-1.5 bg-neutral-100 hover:bg-red-50 text-neutral-400 hover:text-red-600 rounded-lg transition-colors" title="Exportar PDF"><Icon name="file-down" size={14}/></button>
+                                            <button onClick={() => deleteRequest(r.id)} className="p-1.5 bg-neutral-100 hover:bg-red-100 text-neutral-400 hover:text-red-600 rounded-lg transition-colors" title="Excluir"><Icon name="trash-2" size={14}/></button>
+                                        </div>
+                                    </div>
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[8px] font-black uppercase tracking-wider text-neutral-400">
                                         <div className="min-w-0"><span className="text-red-600 block mb-0.5">Solicitante</span><span className="text-black text-wrap-anywhere">{r.responsavel}</span></div>
                                         <div className="min-w-0"><span>Veículo</span><span className="text-black text-wrap-anywhere">{r.vehicleData?.modelo}</span></div>
@@ -278,7 +394,7 @@
                                 <div className={`lg:w-44 p-4 rounded-xl flex flex-col justify-center shrink-0 ${r.response ? 'bg-black text-white' : 'bg-neutral-50 border-l border-neutral-100'}`}>
                                     {r.response ? (
                                         <div className="space-y-1">
-                                            <span className="text-[7px] font-black text-neutral-500 uppercase block leading-none">Investimento</span>
+                                            <span className="text-[7px] font-black text-neutral-500 uppercase block">Investimento</span>
                                             <span className="text-lg font-black text-red-600 leading-none">R$ {parseFloat(r.response.valor || 0).toLocaleString('pt-BR')}</span>
                                             <div className="pt-2 text-[7px] font-bold uppercase tracking-widest border-t border-white/5 mt-1">
                                                 <div className="flex justify-between"><span>Loja:</span><span className="text-white truncate max-w-[60px]">{r.response.fornecedor}</span></div>
@@ -286,7 +402,7 @@
                                             </div>
                                         </div>
                                     ) : (
-                                        <div className="text-center opacity-30"><Icon name="clock" className="mx-auto mb-1" size={14} /><p className="text-[7px] font-black uppercase">Cotação Aberta</p></div>
+                                        <div className="text-center opacity-30"><Icon name="clock" className="mx-auto mb-1" size={14} /><p className="text-[7px] font-black uppercase">Aguardando Cotação</p></div>
                                     )}
                                 </div>
                             </div>
@@ -296,7 +412,7 @@
             );
         }
 
-        // --- COMPONENTE PRINCIPAL APP ---
+        // --- COMPONENTE PRINCIPAL ---
         function App() {
             const [user, setUser] = useState(null);
             const [view, setView] = useState('request');
@@ -332,12 +448,9 @@
                 const text = e.clipboardData.getData('text');
                 const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
                 if (lines.length === 0) return;
-
                 const firstLine = lines[0].split(/[,\t]/);
                 const headers = firstLine.map(h => h.trim().toUpperCase());
-                
                 const findIndex = (targets) => headers.findIndex(h => targets.some(t => h.includes(t)));
-
                 const idxOS = findIndex(['OS']);
                 const idxMod = findIndex(['MODELO']);
                 const idxFab = findIndex(['FABRICANTE', 'MARCA']);
@@ -345,9 +458,7 @@
                 const idxCha = findIndex(['CHASSI']);
                 const idxEta = findIndex(['ETAPA']);
                 const idxLoc = findIndex(['LOCALIZA']);
-
                 const rowsToParse = (idxOS !== -1) ? lines.slice(1) : lines;
-                
                 const parsed = rowsToParse.map(l => {
                     const v = l.split(/[,\t]/);
                     return {
@@ -360,7 +471,6 @@
                         localizacao: (idxLoc !== -1 ? v[idxLoc] : v[6])?.trim() || ''
                     };
                 }).filter(r => r.os !== '');
-
                 setImportData(parsed);
             };
 
@@ -373,34 +483,35 @@
                 });
                 await batch.commit();
                 alert(`Sucesso! ${importData.length} veículos importados.`);
-                setImportData([]);
-                setShowImportModal(false);
+                setImportData([]); setShowImportModal(false);
+            };
+
+            const updateRequestStatus = async (id, newStatus) => {
+                try { await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('requests').doc(id).update({ status: newStatus }); } catch (e) { alert("Erro status."); }
             };
 
             return (
                 <div className="h-screen flex flex-col md:flex-row bg-slate-100 overflow-hidden">
-                    {/* Topbar Mobile */}
                     <div className="md:hidden bg-black text-white p-3 flex justify-between items-center z-[100] border-b-2 border-red-600 shadow-xl">
-                        <div className="flex items-center gap-2"><div className="p-1 bg-red-600 rounded-lg"><Icon name="shopping-cart" size={16} /></div><span className="font-black text-sm uppercase tracking-tighter">VRZ PORTAL</span></div>
+                        <div className="flex items-center gap-2"><div className="p-1 bg-red-600 rounded-lg"><Icon name="shopping-cart" size={16} /></div><span className="font-black text-sm uppercase tracking-tighter">VRZ</span></div>
                         <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="p-2 bg-neutral-900 rounded-xl"><Icon name={isSidebarOpen ? "x" : "menu"} size={20} /></button>
                     </div>
 
-                    {/* Sidebar */}
                     <nav className={`fixed md:relative inset-y-0 left-0 w-52 bg-black text-white p-6 flex flex-col gap-6 z-[90] sidebar-transition transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} shadow-2xl shrink-0`}>
                         <div className="hidden md:flex items-center gap-3 mb-4"><div className="p-2 bg-red-600 rounded-xl shadow-lg shadow-red-600/30"><Icon name="shopping-cart" size={20} /></div><h1 className="text-sm font-black uppercase tracking-widest leading-none">VRZ COMPRAS</h1></div>
                         <div className="flex-1 space-y-1">
                             <NavItem active={view === 'request'} onClick={() => { setView('request'); setSidebarOpen(false); }} iconName="plus" label="Nova Peça" />
-                            <NavItem active={view === 'status'} onClick={() => { setView('status'); setSidebarOpen(false); }} iconName="search" label="Consultar OS" />
-                            <div className="pt-6 border-t border-white/5"><NavItem active={view === 'admin'} onClick={() => { setView('admin'); setSidebarOpen(false); }} iconName="shield" label="Painel Admin" /></div>
+                            <NavItem active={view === 'status'} onClick={() => { setView('status'); setSidebarOpen(false); }} iconName="search" label="Histórico de OS" />
+                            <div className="pt-6 border-t border-white/5"><NavItem active={view === 'admin'} onClick={() => { setView('admin'); setSidebarOpen(false); }} iconName="shield" label="Gestão Admin" /></div>
                         </div>
                         <div className="bg-neutral-900/60 p-3 rounded-xl border border-white/5 text-center"><div className={`text-[8px] font-black tracking-widest ${user ? 'text-red-600' : 'text-neutral-500'}`}>● {user ? 'SISTEMA ONLINE' : 'RECONECTANDO...'}</div></div>
                     </nav>
 
-                    <main className="flex-1 p-4 md:p-6 overflow-y-auto scrollbar-hide h-full min-w-0">
+                    <main className="flex-1 p-4 md:p-6 overflow-y-auto scrollbar-hide h-full min-w-0 text-wrap-anywhere">
                         {!user ? (
                             <div className="h-full flex flex-col items-center justify-center font-black animate-pulse text-neutral-400 gap-4"><Icon name="loader" size={32} className="animate-spin text-red-600" /><span className="text-[10px] uppercase tracking-[0.3em]">Sincronizando Sistema...</span></div>
                         ) : (
-                            <div className="max-w-5xl mx-auto min-w-0">
+                            <div className="max-w-6xl mx-auto min-w-0">
                                 {view === 'request' && <RequestForm user={user} vehiclesDB={vehiclesDB} />}
                                 {view === 'status' && <StatusView requests={requests} />}
                                 
@@ -408,23 +519,24 @@
                                     !adminAuth ? (
                                         <div className="max-w-xs mx-auto py-12 slide-up"><div className="bg-black p-8 rounded-3xl text-center text-white border-2 border-red-600 shadow-2xl">
                                             <Icon name="lock" size={32} className="text-red-600 mx-auto mb-6" />
-                                            <h2 className="text-sm font-black uppercase mb-8 tracking-[0.2em]">Acesso Administrativo</h2>
+                                            <h2 className="text-sm font-black uppercase mb-8 tracking-[0.2em]">Área de Gestão</h2>
                                             <input type="password" autoFocus onKeyDown={(e) => { if(e.key === 'Enter' && e.target.value === 'VRZ2024') setAdminAuth(true); }} className="w-full p-4 bg-neutral-900 border border-white/10 rounded-xl outline-none text-center tracking-[1em] font-black focus:border-red-600 shadow-inner" placeholder="••••" />
                                         </div></div>
                                     ) : (
                                         <div className="space-y-6 fade-in pb-10 min-w-0">
                                             <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-neutral-200 pb-4 gap-4">
-                                                <div><h2 className="text-3xl font-black uppercase text-black tracking-tighter leading-none">Gestão de Compras</h2><p className="text-[9px] font-bold text-neutral-400 mt-1 uppercase tracking-widest">Controle de Ativos e Protocolos</p></div>
+                                                <div><h2 className="text-3xl font-black uppercase text-black tracking-tighter leading-none">Gestão de Compras</h2><p className="text-[9px] font-bold text-neutral-400 mt-1 uppercase tracking-widest">Controle de Ativos e Fluxo</p></div>
                                                 <button onClick={() => setShowImportModal(true)} className="bg-black text-white px-5 py-2.5 rounded-xl font-black uppercase text-[10px] border-b-4 border-red-600 flex items-center gap-2 hover:bg-neutral-900 shadow-xl"><Icon name="file-up" size={14} /> Importar Planilha</button>
                                             </div>
 
-                                            <div className="flex gap-2 bg-white p-1 rounded-xl border border-neutral-200 w-fit shrink-0">
-                                                <button onClick={() => setAdminSubView('pending')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase whitespace-nowrap transition-all ${adminSubView === 'pending' ? 'bg-red-600 text-white shadow-md' : 'text-neutral-400'}`}>Pendentes ({requests.filter(r => r.status === 'Pendente').length})</button>
+                                            <div className="flex gap-2 bg-white p-1 rounded-xl border border-neutral-200 w-fit shrink-0 overflow-x-auto scrollbar-hide">
+                                                <button onClick={() => setAdminSubView('pending')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase whitespace-nowrap transition-all ${adminSubView === 'pending' ? 'bg-orange-500 text-white shadow-md' : 'text-neutral-400'}`}>Pendentes ({requests.filter(r => r.status === 'Pendente').length})</button>
+                                                <button onClick={() => setAdminSubView('quoting')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase whitespace-nowrap transition-all ${adminSubView === 'quoting' ? 'bg-blue-600 text-white shadow-md' : 'text-neutral-400'}`}>Em Cotação ({requests.filter(r => r.status === 'Em Cotação').length})</button>
                                                 <button onClick={() => setAdminSubView('completed')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase whitespace-nowrap transition-all ${adminSubView === 'completed' ? 'bg-black text-white shadow-md' : 'text-neutral-400'}`}>Concluídos ({requests.filter(r => r.status === 'Concluído').length})</button>
-                                                <button onClick={() => setAdminSubView('vehicles')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase whitespace-nowrap transition-all ${adminSubView === 'vehicles' ? 'bg-neutral-800 text-white shadow-md' : 'text-neutral-400'}`}>Base Veículos ({vehiclesDB.length})</button>
+                                                <button onClick={() => setAdminSubView('vehicles')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase whitespace-nowrap transition-all ${adminSubView === 'vehicles' ? 'bg-neutral-800 text-white shadow-md' : 'text-neutral-400'}`}>Base dos Veículos ({vehiclesDB.length})</button>
                                             </div>
 
-                                            <div className="min-w-0 overflow-hidden">
+                                            <div className="min-w-0">
                                                 {adminSubView === 'vehicles' && (
                                                     <div className="bg-white rounded-2xl border border-neutral-200 shadow-sm overflow-hidden fade-in">
                                                         <div className="overflow-x-auto max-h-[60vh] scrollbar-hide">
@@ -442,14 +554,14 @@
                                                                 </thead>
                                                                 <tbody className="text-[10px] font-medium text-neutral-700">
                                                                     {vehiclesDB.length === 0 ? (
-                                                                        <tr><td colSpan="7" className="p-10 text-center text-neutral-300 font-black uppercase tracking-widest">Nenhum veículo na base. Use o botão acima.</td></tr>
+                                                                        <tr><td colSpan="7" className="p-10 text-center text-neutral-300 font-black uppercase tracking-widest">Base de dados vazia. Use o botão de Importar.</td></tr>
                                                                     ) : vehiclesDB.map((v, i) => (
                                                                         <tr key={i} className="border-b border-neutral-50 hover:bg-slate-50 transition-colors">
                                                                             <td className="p-3 font-black text-black">#{v.os}</td>
-                                                                            <td className="p-3 uppercase font-bold">{v.modelo}</td>
+                                                                            <td className="p-3 uppercase font-bold text-neutral-800">{v.modelo}</td>
                                                                             <td className="p-3 uppercase">{v.fabricante}</td>
                                                                             <td className="p-3 uppercase">{v.cor}</td>
-                                                                            <td className="p-3 font-mono text-black text-xs font-black tracking-tighter bg-neutral-50/50">{v.chassi}</td>
+                                                                            <td className="p-3 font-mono text-black text-[10px] font-black tracking-widest bg-neutral-50/50">{v.chassi}</td>
                                                                             <td className="p-3"><span className="bg-red-50 text-red-600 px-2 py-0.5 rounded font-black uppercase">{v.etapa}</span></td>
                                                                             <td className="p-3 uppercase">{v.localizacao}</td>
                                                                         </tr>
@@ -463,16 +575,35 @@
                                                 {adminSubView === 'pending' && (
                                                     <div className="grid grid-cols-1 gap-3 fade-in">
                                                         {requests.filter(r => r.status === 'Pendente').map(req => (
-                                                            <div key={req.id} className="bg-white p-4 rounded-2xl border border-neutral-200 shadow-sm flex items-center justify-between gap-4 border-l-4 border-l-red-600">
+                                                            <div key={req.id} className="bg-white p-4 rounded-2xl border border-neutral-200 shadow-sm flex items-center justify-between gap-4 border-l-4 border-l-orange-500">
                                                                 <div className="flex flex-1 gap-8 items-center min-w-0">
-                                                                    <div className="text-center shrink-0"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">OS</p><p className="text-base font-black tracking-tighter">#{req.os}</p></div>
+                                                                    <div className="text-center shrink-0"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">OS</p><p className="text-base font-black uppercase tracking-tighter">#{req.os}</p></div>
                                                                     <div className="min-w-0"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">Veículo / Cor</p><p className="text-[10px] font-black uppercase text-wrap-anywhere">{req.vehicleData?.modelo} <span className="text-red-600">[{req.vehicleData?.cor}]</span></p></div>
                                                                     <div className="min-w-0 hidden sm:block"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">Solicitante</p><p className="text-[10px] font-black uppercase text-wrap-anywhere">{req.responsavel}</p></div>
                                                                 </div>
-                                                                <button onClick={() => setEditingRequest(req)} className="bg-black text-white px-5 py-2.5 rounded-lg font-black uppercase text-[9px] tracking-widest border-b-4 border-red-600 shadow-lg shrink-0">Protocolar</button>
+                                                                <button onClick={() => updateRequestStatus(req.id, 'Em Cotação')} className="bg-blue-600 text-white px-5 py-2.5 rounded-lg font-black uppercase text-[9px] tracking-widest shadow-lg hover:bg-blue-700 shrink-0">Iniciar Cotação</button>
                                                             </div>
                                                         ))}
-                                                        {requests.filter(r => r.status === 'Pendente').length === 0 && <div className="text-center py-20 bg-white rounded-3xl border border-dashed text-neutral-300 font-black uppercase text-[10px]">Sem solicitações em aberto</div>}
+                                                        {requests.filter(r => r.status === 'Pendente').length === 0 && <div className="text-center py-20 bg-white rounded-3xl border border-dashed text-neutral-300 font-black uppercase text-[10px]">Tudo em dia!</div>}
+                                                    </div>
+                                                )}
+
+                                                {adminSubView === 'quoting' && (
+                                                    <div className="grid grid-cols-1 gap-3 fade-in">
+                                                        {requests.filter(r => r.status === 'Em Cotação').map(req => (
+                                                            <div key={req.id} className="bg-white p-4 rounded-2xl border border-neutral-200 shadow-sm flex items-center justify-between gap-4 border-l-4 border-l-blue-600">
+                                                                <div className="flex flex-1 gap-8 items-center min-w-0">
+                                                                    <div className="text-center shrink-0"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">OS</p><p className="text-base font-black uppercase tracking-tighter">#{req.os}</p></div>
+                                                                    <div className="min-w-0"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">Veículo</p><p className="text-[10px] font-black uppercase text-wrap-anywhere">{req.vehicleData?.modelo}</p></div>
+                                                                    <div className="min-w-0 hidden sm:block"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">Status</p><p className="text-[10px] font-black uppercase text-blue-600">Cotando Valores...</p></div>
+                                                                </div>
+                                                                <div className="flex gap-2">
+                                                                    <button onClick={() => updateRequestStatus(req.id, 'Pendente')} className="bg-neutral-100 text-neutral-500 px-3 py-2.5 rounded-lg font-black uppercase text-[9px]">Recuar</button>
+                                                                    <button onClick={() => setEditingRequest(req)} className="bg-black text-white px-5 py-2.5 rounded-lg font-black uppercase text-[9px] tracking-widest border-b-4 border-red-600 shadow-lg hover:bg-neutral-900 shrink-0">Protocolar</button>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                        {requests.filter(r => r.status === 'Em Cotação').length === 0 && <div className="text-center py-20 bg-white rounded-3xl border border-dashed text-neutral-300 font-black uppercase text-[10px]">Sem cotações</div>}
                                                     </div>
                                                 )}
 
@@ -481,11 +612,14 @@
                                                         {requests.filter(r => r.status === 'Concluído').map(req => (
                                                             <div key={req.id} className="bg-white p-4 rounded-2xl border border-neutral-200 shadow-sm flex items-center justify-between gap-4 border-l-4 border-l-black">
                                                                 <div className="flex flex-1 gap-8 items-center min-w-0">
-                                                                    <div className="text-center shrink-0"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">OS</p><p className="text-base font-black tracking-tighter">#{req.os}</p></div>
-                                                                    <div className="min-w-0"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">Valor Protocolado</p><p className="text-[10px] font-black uppercase text-red-600 font-bold">R$ {parseFloat(req.response?.valor || 0).toLocaleString('pt-BR')}</p></div>
+                                                                    <div className="text-center shrink-0"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">OS</p><p className="text-base font-black uppercase tracking-tighter">#{req.os}</p></div>
+                                                                    <div className="min-w-0"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">Valor Lançado</p><p className="text-[10px] font-black uppercase text-red-600 font-bold">R$ {parseFloat(req.response?.valor || 0).toLocaleString('pt-BR')}</p></div>
                                                                     <div className="min-w-0 hidden sm:block"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">Loja</p><p className="text-[10px] font-black uppercase truncate">{req.response?.fornecedor}</p></div>
                                                                 </div>
-                                                                <div className="bg-neutral-100 text-neutral-500 px-4 py-2 rounded-lg text-[8px] font-black uppercase">Arquivado</div>
+                                                                <div className="flex gap-2">
+                                                                    <button onClick={() => setEditingRequest(req)} className="text-neutral-300 hover:text-black p-2 transition-colors"><Icon name="edit" size={16} /></button>
+                                                                    <div className="bg-neutral-100 text-neutral-500 px-4 py-2 rounded-lg text-[8px] font-black uppercase shrink-0">Arquivado</div>
+                                                                </div>
                                                             </div>
                                                         ))}
                                                     </div>
@@ -505,7 +639,7 @@
                                 <header className="p-6 bg-black text-white flex justify-between items-center border-b-8 border-red-600">
                                     <div>
                                         <h3 className="text-2xl font-black uppercase tracking-tighter leading-none">Simulador de Planilha VRZ</h3>
-                                        <p className="text-neutral-500 text-[10px] font-bold uppercase tracking-widest mt-1 italic">Dica: Selecione os dados no Excel, copie e cole aqui (CTRL+V)</p>
+                                        <p className="text-neutral-500 text-[10px] font-bold uppercase tracking-widest mt-1 italic">Cole os dados (CTRL+V)</p>
                                     </div>
                                     <button onClick={() => { setShowImportModal(false); setImportData([]); }} className="p-3 bg-neutral-900 rounded-2xl"><Icon name="x" size={24} /></button>
                                 </header>
@@ -514,8 +648,8 @@
                                         <div className="flex-1 flex flex-col items-center justify-center border-4 border-dashed border-neutral-100 rounded-[2rem] bg-neutral-50 space-y-6">
                                             <Icon name="file-spreadsheet" size={60} className="text-neutral-200" />
                                             <div className="text-center space-y-2">
-                                                <p className="text-sm font-black uppercase text-neutral-400">Clique aqui e cole os dados (CTRL+V)</p>
-                                                <p className="text-[10px] font-bold uppercase text-neutral-300">OS, MODELO, FABRICANTE, COR, CHASSI, ETAPA, LOCALIZAÇÃO</p>
+                                                <p className="text-sm font-black uppercase text-neutral-400">Pronto para importar</p>
+                                                <p className="text-[10px] font-bold uppercase text-neutral-300">Clique nesta área e use CTRL+V</p>
                                             </div>
                                             <textarea onPaste={handlePaste} className="absolute inset-0 opacity-0 cursor-pointer" autoFocus />
                                         </div>
@@ -559,7 +693,7 @@
                                                 <p className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">{importData.length} registros prontos</p>
                                                 <div className="flex gap-4">
                                                     <button onClick={() => setImportData([])} className="px-8 py-3 bg-neutral-100 text-neutral-500 rounded-xl font-black uppercase text-[10px]">Limpar Tudo</button>
-                                                    <button onClick={commitImport} className="px-10 py-3 bg-red-600 text-white rounded-xl font-black uppercase text-[10px] shadow-xl shadow-red-600/20">Sincronizar Dados</button>
+                                                    <button onClick={commitImport} className="px-10 py-3 bg-red-600 text-white rounded-xl font-black uppercase text-[10px] shadow-xl shadow-red-600/20">Sincronizar Banco</button>
                                                 </div>
                                             </div>
                                         </div>
@@ -583,12 +717,12 @@
                                     try { await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('requests').doc(editingRequest.id).update({ response: resp, status: 'Concluído' }); setEditingRequest(null); } catch (err) { alert('Erro.'); }
                                 }} className="p-8 space-y-8">
                                     <div className="grid grid-cols-2 gap-6">
-                                        <div className="space-y-1"><label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block px-1">Custo Total (R$)</label><input name="valor" step="0.01" type="number" className="w-full px-4 py-3 bg-neutral-50 border-2 rounded-xl outline-none font-black text-xl focus:border-red-600 shadow-inner" placeholder="0.00" required /></div>
-                                        <div className="space-y-1"><label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block px-1">Loja / Fornecedor</label><input name="fornecedor" type="text" className="w-full px-4 py-3 bg-neutral-50 border-2 rounded-xl outline-none font-black text-[10px] uppercase focus:border-red-600 shadow-inner" placeholder="NOME..." required /></div>
-                                        <div className="space-y-1"><label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block px-1">Data Pedido</label><input name="dataCompra" type="date" className="w-full px-4 py-3 bg-neutral-50 border-2 rounded-xl outline-none font-black focus:border-red-600" required /></div>
-                                        <div className="space-y-1"><label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block px-1">Data Entrega</label><input name="dataEntrega" type="date" className="w-full px-4 py-3 bg-neutral-50 border-2 rounded-xl outline-none font-black focus:border-red-600" required /></div>
+                                        <div className="space-y-1"><label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block px-1">Valor de Compra (R$)</label><input name="valor" step="0.01" type="number" defaultValue={editingRequest.response?.valor} className="w-full px-4 py-3 bg-neutral-50 border-2 rounded-xl outline-none font-black text-xl focus:border-red-600 shadow-inner" placeholder="0.00" required /></div>
+                                        <div className="space-y-1"><label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block px-1">Fornecedor Selecionado</label><input name="fornecedor" type="text" defaultValue={editingRequest.response?.fornecedor} className="w-full px-4 py-3 bg-neutral-50 border-2 rounded-xl outline-none font-black text-[10px] uppercase focus:border-red-600 shadow-inner" placeholder="NOME..." required /></div>
+                                        <div className="space-y-1"><label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block px-1">Data do Pedido</label><input name="dataCompra" type="date" defaultValue={editingRequest.response?.dataCompra} className="w-full px-4 py-3 bg-neutral-50 border-2 rounded-xl outline-none font-black focus:border-red-600" required /></div>
+                                        <div className="space-y-1"><label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block px-1">Previsão Chegada</label><input name="dataEntrega" type="date" defaultValue={editingRequest.response?.dataEntrega} className="w-full px-4 py-3 bg-neutral-50 border-2 rounded-xl outline-none font-black focus:border-red-600" required /></div>
                                     </div>
-                                    <button type="submit" className="w-full py-5 bg-red-600 text-white rounded-[1.5rem] font-black uppercase text-sm shadow-xl tracking-widest hover:bg-red-700 active:scale-95 transition-all">Sincronizar Lançamento</button>
+                                    <button type="submit" className="w-full py-5 bg-red-600 text-white rounded-[1.5rem] font-black uppercase text-sm shadow-xl tracking-widest hover:bg-red-700 active:scale-95 transition-all">Sincronizar Dados</button>
                                 </form>
                             </div>
                         </div>
