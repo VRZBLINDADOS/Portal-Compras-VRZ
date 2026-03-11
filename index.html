@@ -22,8 +22,17 @@
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .text-wrap-anywhere { overflow-wrap: anywhere; word-break: break-word; }
         
-        .card-compact { padding: 1rem; border-radius: 1rem; }
-        .input-compact { padding: 0.5rem 0.75rem; border-radius: 0.5rem; font-size: 0.75rem; }
+        /* Efeito de planilha */
+        .excel-input { 
+            border: none; 
+            width: 100%; 
+            height: 100%; 
+            padding: 4px 8px; 
+            background: transparent; 
+            font-size: 11px;
+            outline: none;
+        }
+        .excel-input:focus { background: #fffbeb; box-shadow: inset 0 0 0 2px #ef4444; }
     </style>
 
     <!-- Bibliotecas Externas -->
@@ -55,7 +64,6 @@
             appId: "1:713014398002:web:d89f485af020178b00002b"
         };
 
-        // Inicialização
         if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
         const db = firebase.firestore();
         const auth = firebase.auth();
@@ -114,13 +122,13 @@
             const handleOSBlur = () => {
                 const found = vehiclesDB.find(v => String(v.os).trim() === String(os).trim());
                 if (found) setVehicle(found);
-                else { setVehicle(null); if(os.length > 0) alert('OS não cadastrada na base de dados.'); }
+                else { setVehicle(null); if(os.length > 0) alert('OS não encontrada na base de dados.'); }
             };
 
             const handleSubmit = async (e) => {
                 e.preventDefault();
-                if (!vehicle || !responsavel) return alert('Informe a OS e o responsável pelo pedido.');
-                if (items.some(i => !i.photo)) return alert('A foto é obrigatória para cada peça.');
+                if (!vehicle || !responsavel) return alert('Informe OS e Responsável.');
+                if (items.some(i => !i.photo)) return alert('Foto obrigatória para cada peça.');
                 setIsSubmitting(true);
                 try {
                     await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('requests').add({
@@ -128,11 +136,11 @@
                         timestamp: Date.now(), status: 'Pendente', response: null, userId: user.uid
                     });
                     setSubmitted(true);
-                } catch (err) { alert('Falha ao comunicar com o servidor VRZ.'); } finally { setIsSubmitting(false); }
+                } catch (err) { alert('Erro no servidor.'); } finally { setIsSubmitting(false); }
             };
 
             if (submitted) return (
-                <div className="flex flex-col items-center justify-center py-10 fade-in bg-white rounded-3xl border border-neutral-200 p-8 shadow-sm max-md mx-auto text-center text-wrap-anywhere">
+                <div className="flex flex-col items-center justify-center py-10 fade-in bg-white rounded-3xl border border-neutral-200 p-8 shadow-sm max-md mx-auto text-center">
                     <Icon name="check-circle" size={48} className="text-emerald-500 mb-4" />
                     <h2 className="text-xl font-black uppercase tracking-tight">Pedido Protocolado!</h2>
                     <button onClick={() => setSubmitted(false)} className="mt-8 w-full py-4 bg-red-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-red-700">Nova Solicitação</button>
@@ -142,7 +150,7 @@
             return (
                 <div className="space-y-4 fade-in">
                     <div className="flex flex-col">
-                        <h2 className="text-2xl font-black text-black tracking-tighter uppercase leading-none">Nova Requisição</h2>
+                        <h2 className="text-2xl font-black text-black tracking-tighter uppercase leading-none">Solicitar Peças</h2>
                         <span className="text-[9px] font-bold text-neutral-400 uppercase mt-1 tracking-widest italic">Operacional VRZ</span>
                     </div>
 
@@ -150,18 +158,12 @@
                         <div className="bg-white p-4 rounded-2xl border border-neutral-200 shadow-sm grid grid-cols-1 md:grid-cols-5 gap-4">
                             <div className="md:col-span-2 space-y-3">
                                 <div>
-                                    <label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1">Ordem de Serviço (OS)</label>
+                                    <label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1">OS</label>
                                     <input type="text" value={os} onChange={(e) => setOs(e.target.value)} onBlur={handleOSBlur} placeholder="Nº OS" className="w-full px-3 py-2 bg-neutral-50 border-2 rounded-xl focus:border-red-600 outline-none font-black text-base" required />
                                 </div>
                                 <div className="grid grid-cols-2 gap-2">
-                                    <div className="space-y-1">
-                                        <label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block ml-1">Responsável</label>
-                                        <input type="text" value={responsavel} onChange={(e) => setResponsavel(e.target.value)} placeholder="NOME..." className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-lg font-black uppercase text-[10px] focus:border-red-600 outline-none" required />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block ml-1">Setor</label>
-                                        <input type="text" value={localizacao} onChange={(e) => setLocalizacao(e.target.value)} placeholder="SETOR..." className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-lg font-black uppercase text-[10px] focus:border-red-600 outline-none" required />
-                                    </div>
+                                    <input type="text" value={responsavel} onChange={(e) => setResponsavel(e.target.value)} placeholder="RESPONSÁVEL" className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-lg font-black uppercase text-[10px] focus:border-red-600 outline-none" required />
+                                    <input type="text" value={localizacao} onChange={(e) => setLocalizacao(e.target.value)} placeholder="SETOR" className="w-full px-3 py-2 bg-neutral-50 border border-neutral-200 rounded-lg font-black uppercase text-[10px] focus:border-red-600 outline-none" required />
                                 </div>
                             </div>
                             <div className="md:col-span-3 bg-neutral-900 rounded-xl p-4 text-white border-l-4 border-red-600 flex items-center min-h-[100px]">
@@ -179,8 +181,8 @@
 
                         <div className="space-y-3">
                             <div className="flex justify-between items-center px-1">
-                                <h3 className="font-black text-black uppercase text-[10px] flex items-center gap-2"><Icon name="package" size={14} /> Peças Necessárias</h3>
-                                <button type="button" onClick={() => setItems([...items, {id: Date.now(), description: '', quantity: 1, photo: null}])} className="bg-red-600 text-white px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm">+ ITEM</button>
+                                <h3 className="font-black text-black uppercase text-[10px] flex items-center gap-2"><Icon name="package" size={14} /> Itens</h3>
+                                <button type="button" onClick={() => setItems([...items, {id: Date.now(), description: '', quantity: 1, photo: null}])} className="bg-red-600 text-white px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm">+ PEÇA</button>
                             </div>
                             <div className="grid grid-cols-1 gap-2">
                                 {items.map((it, idx) => (
@@ -303,6 +305,8 @@
             const [editingRequest, setEditingRequest] = useState(null);
             const [isSidebarOpen, setSidebarOpen] = useState(false);
             const [adminSubView, setAdminSubView] = useState('pending');
+            const [importData, setImportData] = useState([]);
+            const [showImportModal, setShowImportModal] = useState(false);
 
             useEffect(() => {
                 const unsubAuth = auth.onAuthStateChanged((u) => { 
@@ -323,59 +327,42 @@
                 return () => { unsubReq(); unsubVeh(); };
             }, [user]);
 
-            const handleImport = async () => {
-                const csv = prompt("COLE OS DADOS DA PLANILHA (CABEÇALHOS: OS,MODELO,FABRICANTE,COR,CHASSI,ETAPA,LOCALIZAÇÃO)");
-                if (!csv) return;
+            const handlePaste = (e) => {
+                const text = e.clipboardData.getData('text');
+                const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+                if (lines.length === 0) return;
 
-                try {
-                    const lines = csv.split('\n').filter(l => l.trim() !== '');
-                    const headerLine = lines[0].split(',').map(h => h.trim().toUpperCase());
-                    
-                    const findHeader = (targets) => headerLine.findIndex(h => targets.some(t => h.includes(t)));
+                const firstLine = lines[0].split(/[,\t]/);
+                const isHeader = firstLine.some(h => ['OS', 'MODELO', 'ETAPA'].includes(h.toUpperCase()));
+                
+                const rowsToParse = isHeader ? lines.slice(1) : lines;
+                const parsed = rowsToParse.map(l => {
+                    const v = l.split(/[,\t]/);
+                    return {
+                        os: v[0]?.trim() || '',
+                        modelo: v[1]?.trim() || '',
+                        fabricante: v[2]?.trim() || '',
+                        cor: v[3]?.trim() || '',
+                        chassi: v[4]?.trim() || '',
+                        etapa: v[5]?.trim() || '',
+                        localizacao: v[6]?.trim() || ''
+                    };
+                }).filter(r => r.os !== '');
 
-                    const idxOS = findHeader(['OS']);
-                    const idxModelo = findHeader(['MODELO']);
-                    const idxFab = findHeader(['FABRICANTE']);
-                    const idxCor = findHeader(['COR']);
-                    const idxChassi = findHeader(['CHASSI']);
-                    const idxEtapa = findHeader(['ETAPA']);
-                    const idxLoc = findHeader(['LOCALIZA']);
+                setImportData(parsed);
+            };
 
-                    if (idxOS === -1 || idxModelo === -1) {
-                        alert("Erro crítico: Colunas 'OS' ou 'MODELO' não encontradas.");
-                        return;
-                    }
-
-                    const batch = db.batch();
-                    let count = 0;
-
-                    lines.slice(1).forEach(l => {
-                        const v = l.split(',').map(val => val.trim());
-                        if (v.length >= 2) {
-                            const osVal = v[idxOS];
-                            if (osVal) {
-                                const vRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('vehicles').doc(osVal);
-                                batch.set(vRef, {
-                                    os: osVal,
-                                    modelo: v[idxModelo] || '',
-                                    fabricante: v[idxFab] || '',
-                                    cor: v[idxCor] || '',
-                                    chassi: v[idxChassi] || '',
-                                    etapa: v[idxEtapa] || '',
-                                    localizacao: v[idxLoc] || ''
-                                });
-                                count++;
-                            }
-                        }
-                    });
-
-                    if (count > 0) {
-                        await batch.commit();
-                        alert(`Sucesso! ${count} veículos atualizados.`);
-                    }
-                } catch (e) {
-                    alert("Falha na importação. Verifique se o formato está correto.");
-                }
+            const commitImport = async () => {
+                if (importData.length === 0) return;
+                const batch = db.batch();
+                importData.forEach(v => {
+                    const vRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('vehicles').doc(v.os);
+                    batch.set(vRef, v);
+                });
+                await batch.commit();
+                alert(`Sucesso! ${importData.length} veículos importados.`);
+                setImportData([]);
+                setShowImportModal(false);
             };
 
             return (
@@ -399,7 +386,7 @@
                         {!user ? (
                             <div className="h-full flex flex-col items-center justify-center font-black animate-pulse text-neutral-400 gap-4"><Icon name="loader" size={32} className="animate-spin text-red-600" /><span className="text-[10px] uppercase tracking-[0.3em]">Sincronizando Sistema...</span></div>
                         ) : (
-                            <div className="max-w-6xl mx-auto min-w-0">
+                            <div className="max-w-5xl mx-auto min-w-0">
                                 {view === 'request' && <RequestForm user={user} vehiclesDB={vehiclesDB} />}
                                 {view === 'status' && <StatusView requests={requests} />}
                                 
@@ -408,22 +395,22 @@
                                         <div className="max-w-xs mx-auto py-12 slide-up"><div className="bg-black p-8 rounded-3xl text-center text-white border-2 border-red-600 shadow-2xl">
                                             <Icon name="lock" size={32} className="text-red-600 mx-auto mb-6" />
                                             <h2 className="text-sm font-black uppercase mb-8 tracking-[0.2em]">Acesso Administrativo</h2>
-                                            <input type="password" autoFocus onKeyDown={(e) => { if(e.key === 'Enter' && e.target.value === 'VRZ2024') setAdminAuth(true); }} className="w-full p-4 bg-neutral-900 border border-white/10 rounded-xl outline-none text-center tracking-[1em] font-black focus:border-red-600 shadow-inner" placeholder="••••" />
+                                            <input type="password" autoFocus onKeyDown={(e) => { if(e.key === 'Enter' && e.target.value === 'VRZ2024') setAdminAuth(true); }} className="w-full p-4 bg-neutral-900 border border-white/10 rounded-xl outline-none text-center tracking-[1em] font-black focus:border-red-600" placeholder="••••" />
                                         </div></div>
                                     ) : (
                                         <div className="space-y-6 fade-in pb-10 min-w-0">
                                             <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-neutral-200 pb-4 gap-4">
                                                 <div><h2 className="text-3xl font-black uppercase text-black tracking-tighter leading-none">Gestão de Compras</h2><p className="text-[9px] font-bold text-neutral-400 mt-1 uppercase tracking-widest">Controle de Ativos e Protocolos</p></div>
-                                                <button onClick={handleImport} className="bg-black text-white px-5 py-2.5 rounded-xl font-black uppercase text-[10px] border-b-4 border-red-600 flex items-center gap-2 hover:bg-neutral-900 shadow-xl"><Icon name="file-up" size={14} /> Importar Planilha</button>
+                                                <button onClick={() => setShowImportModal(true)} className="bg-black text-white px-5 py-2.5 rounded-xl font-black uppercase text-[10px] border-b-4 border-red-600 flex items-center gap-2 hover:bg-neutral-900 shadow-xl"><Icon name="file-up" size={14} /> Importar Planilha</button>
                                             </div>
 
-                                            <div className="flex gap-2 bg-white p-1 rounded-xl border border-neutral-200 w-fit overflow-x-auto scrollbar-hide shrink-0">
+                                            <div className="flex gap-2 bg-white p-1 rounded-xl border border-neutral-200 w-fit shrink-0">
                                                 <button onClick={() => setAdminSubView('pending')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase whitespace-nowrap transition-all ${adminSubView === 'pending' ? 'bg-red-600 text-white shadow-md' : 'text-neutral-400'}`}>Pendentes ({requests.filter(r => r.status === 'Pendente').length})</button>
                                                 <button onClick={() => setAdminSubView('completed')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase whitespace-nowrap transition-all ${adminSubView === 'completed' ? 'bg-black text-white shadow-md' : 'text-neutral-400'}`}>Concluídos ({requests.filter(r => r.status === 'Concluído').length})</button>
                                                 <button onClick={() => setAdminSubView('vehicles')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase whitespace-nowrap transition-all ${adminSubView === 'vehicles' ? 'bg-neutral-800 text-white shadow-md' : 'text-neutral-400'}`}>Base Veículos ({vehiclesDB.length})</button>
                                             </div>
 
-                                            <div className="min-w-0 overflow-hidden">
+                                            <div className="min-w-0">
                                                 {adminSubView === 'vehicles' && (
                                                     <div className="bg-white rounded-2xl border border-neutral-200 shadow-sm overflow-hidden fade-in">
                                                         <div className="overflow-x-auto max-h-[60vh] scrollbar-hide">
@@ -481,10 +468,10 @@
                                                             <div key={req.id} className="bg-white p-4 rounded-2xl border border-neutral-200 shadow-sm flex items-center justify-between gap-4 border-l-4 border-l-black">
                                                                 <div className="flex flex-1 gap-8 items-center min-w-0">
                                                                     <div className="text-center shrink-0"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">OS</p><p className="text-base font-black tracking-tighter">#{req.os}</p></div>
-                                                                    <div className="min-w-0"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">Valor Protocolado</p><p className="text-[10px] font-black uppercase text-red-600">R$ {parseFloat(req.response?.valor || 0).toLocaleString('pt-BR')}</p></div>
+                                                                    <div className="min-w-0"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">Protocolado</p><p className="text-[10px] font-black uppercase text-red-600 font-bold">R$ {parseFloat(req.response?.valor || 0).toLocaleString('pt-BR')}</p></div>
                                                                     <div className="min-w-0 hidden sm:block"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">Loja</p><p className="text-[10px] font-black uppercase truncate">{req.response?.fornecedor}</p></div>
                                                                 </div>
-                                                                <div className="bg-neutral-100 text-neutral-500 px-4 py-2 rounded-lg text-[8px] font-black uppercase shrink-0">Arquivado</div>
+                                                                <div className="bg-neutral-100 text-neutral-500 px-4 py-2 rounded-lg text-[8px] font-black uppercase">Arquivado</div>
                                                             </div>
                                                         ))}
                                                     </div>
@@ -497,6 +484,77 @@
                         )}
                     </main>
 
+                    {/* MODAL PLANILHA DE IMPORTAÇÃO */}
+                    {showImportModal && (
+                        <div className="fixed inset-0 z-[300] bg-black/95 flex items-center justify-center p-4">
+                            <div className="bg-white w-full max-w-6xl h-[85vh] rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden border-4 border-white/10">
+                                <header className="p-6 bg-black text-white flex justify-between items-center border-b-8 border-red-600">
+                                    <div>
+                                        <h3 className="text-2xl font-black uppercase tracking-tighter leading-none">Simulador de Planilha VRZ</h3>
+                                        <p className="text-neutral-500 text-[10px] font-bold uppercase tracking-widest mt-1 italic">Dica: Copie os dados do seu Excel e cole aqui</p>
+                                    </div>
+                                    <button onClick={() => { setShowImportModal(false); setImportData([]); }} className="p-3 bg-neutral-900 rounded-2xl"><Icon name="x" size={24} /></button>
+                                </header>
+                                <div className="flex-1 overflow-hidden flex flex-col p-6 gap-6">
+                                    {importData.length === 0 ? (
+                                        <div className="flex-1 flex flex-col items-center justify-center border-4 border-dashed border-neutral-100 rounded-[2rem] bg-neutral-50 space-y-6">
+                                            <Icon name="file-spreadheet" size={60} className="text-neutral-200" />
+                                            <div className="text-center space-y-2">
+                                                <p className="text-sm font-black uppercase text-neutral-400">Pronto para receber dados</p>
+                                                <p className="text-[10px] font-bold uppercase text-neutral-300">Selecione os dados no Excel e cole (CTRL+V) nesta janela</p>
+                                            </div>
+                                            <textarea onPaste={handlePaste} className="absolute inset-0 opacity-0 cursor-default" autoFocus />
+                                        </div>
+                                    ) : (
+                                        <div className="flex-1 overflow-hidden flex flex-col">
+                                            <div className="overflow-auto border rounded-2xl bg-neutral-50 flex-1 scrollbar-hide">
+                                                <table className="w-full text-left border-collapse min-w-[1000px]">
+                                                    <thead className="bg-neutral-200 text-[9px] font-black uppercase sticky top-0 z-10">
+                                                        <tr>
+                                                            <th className="p-3 border">OS</th>
+                                                            <th className="p-3 border">Modelo</th>
+                                                            <th className="p-3 border">Fabricante</th>
+                                                            <th className="p-3 border">Cor</th>
+                                                            <th className="p-3 border">Chassi</th>
+                                                            <th className="p-3 border">Etapa</th>
+                                                            <th className="p-3 border">Localização</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {importData.map((row, rIdx) => (
+                                                            <tr key={rIdx} className="bg-white border-b hover:bg-red-50 transition-colors">
+                                                                {['os', 'modelo', 'fabricante', 'cor', 'chassi', 'etapa', 'localizacao'].map(key => (
+                                                                    <td key={key} className="border p-0">
+                                                                        <input 
+                                                                            className="excel-input" 
+                                                                            value={row[key]} 
+                                                                            onChange={(e) => {
+                                                                                const newData = [...importData];
+                                                                                newData[rIdx][key] = e.target.value;
+                                                                                setImportData(newData);
+                                                                            }}
+                                                                        />
+                                                                    </td>
+                                                                ))}
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            <div className="pt-6 flex justify-between items-center">
+                                                <p className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">{importData.length} registros prontos para sincronização</p>
+                                                <div className="flex gap-4">
+                                                    <button onClick={() => setImportData([])} className="px-8 py-3 bg-neutral-100 text-neutral-500 rounded-xl font-black uppercase text-[10px]">Limpar Tudo</button>
+                                                    <button onClick={commitImport} className="px-10 py-3 bg-red-600 text-white rounded-xl font-black uppercase text-[10px] shadow-xl shadow-red-600/20">Sincronizar com Banco</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {editingRequest && (
                         <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-sm flex items-center justify-center p-4">
                             <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden fade-in border-b-[12px] border-red-600">
@@ -508,15 +566,15 @@
                                     e.preventDefault();
                                     const formData = new FormData(e.target);
                                     const resp = { valor: formData.get('valor'), fornecedor: formData.get('fornecedor'), dataCompra: formData.get('dataCompra'), dataEntrega: formData.get('dataEntrega') };
-                                    try { await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('requests').doc(editingRequest.id).update({ response: resp, status: 'Concluído' }); setEditingRequest(null); } catch (err) { alert('Erro ao salvar.'); }
+                                    try { await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('requests').doc(editingRequest.id).update({ response: resp, status: 'Concluído' }); setEditingRequest(null); } catch (err) { alert('Erro.'); }
                                 }} className="p-8 space-y-8">
                                     <div className="grid grid-cols-2 gap-6">
-                                        <div className="space-y-1"><label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block px-1">Valor Final (R$)</label><input name="valor" step="0.01" type="number" className="w-full px-4 py-3 bg-neutral-50 border-2 rounded-xl outline-none font-black text-xl focus:border-red-600 shadow-inner" placeholder="0.00" required /></div>
-                                        <div className="space-y-1"><label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block px-1">Loja de Origem</label><input name="fornecedor" type="text" className="w-full px-4 py-3 bg-neutral-50 border-2 rounded-xl outline-none font-black text-[10px] uppercase focus:border-red-600 shadow-inner" placeholder="NOME..." required /></div>
+                                        <div className="space-y-1"><label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block px-1">Custo Total (R$)</label><input name="valor" step="0.01" type="number" className="w-full px-4 py-3 bg-neutral-50 border-2 rounded-xl outline-none font-black text-xl focus:border-red-600 shadow-inner" placeholder="0.00" required /></div>
+                                        <div className="space-y-1"><label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block px-1">Loja / Fornecedor</label><input name="fornecedor" type="text" className="w-full px-4 py-3 bg-neutral-50 border-2 rounded-xl outline-none font-black text-[10px] uppercase focus:border-red-600 shadow-inner" placeholder="NOME..." required /></div>
                                         <div className="space-y-1"><label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block px-1">Data Pedido</label><input name="dataCompra" type="date" className="w-full px-4 py-3 bg-neutral-50 border-2 rounded-xl outline-none font-black focus:border-red-600" required /></div>
-                                        <div className="space-y-1"><label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block px-1">Previsão Chegada</label><input name="dataEntrega" type="date" className="w-full px-4 py-3 bg-neutral-50 border-2 rounded-xl outline-none font-black focus:border-red-600" required /></div>
+                                        <div className="space-y-1"><label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block px-1">Data Entrega</label><input name="dataEntrega" type="date" className="w-full px-4 py-3 bg-neutral-50 border-2 rounded-xl outline-none font-black focus:border-red-600" required /></div>
                                     </div>
-                                    <button type="submit" className="w-full py-5 bg-red-600 text-white rounded-[1.5rem] font-black uppercase text-sm shadow-xl tracking-widest hover:bg-red-700 active:scale-95 transition-all">Sincronizar Dados</button>
+                                    <button type="submit" className="w-full py-5 bg-red-600 text-white rounded-[1.5rem] font-black uppercase text-sm shadow-xl tracking-widest hover:bg-red-700 active:scale-95 transition-all">Sincronizar Lançamento</button>
                                 </form>
                             </div>
                         </div>
