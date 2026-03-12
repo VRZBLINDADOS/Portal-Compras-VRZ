@@ -1,926 +1,1143 @@
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Portal de Compras VRZ</title>
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getAuth, 
+  signInAnonymously, 
+  signInWithCustomToken, 
+  onAuthStateChanged 
+} from 'firebase/auth';
+import { 
+  getFirestore, 
+  collection, 
+  doc, 
+  setDoc, 
+  getDoc, 
+  addDoc, 
+  updateDoc, 
+  deleteDoc, 
+  onSnapshot, 
+  query,
+  writeBatch
+} from 'firebase/firestore';
+import { 
+  ShoppingCart, 
+  Plus, 
+  Search, 
+  Shield, 
+  User, 
+  Lock, 
+  Eye, 
+  EyeOff, 
+  AlertCircle, 
+  CheckCircle, 
+  Package, 
+  Camera, 
+  Trash2, 
+  X, 
+  FileText, 
+  FileDown, 
+  Inbox, 
+  Loader, 
+  Menu, 
+  FileUp,
+  RefreshCw,
+  AlertTriangle
+} from 'lucide-react';
+
+// --- CONFIGURAÇÃO AMBIENTE ---
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'portal-compras-vrz';
+
+const INITIAL_USERS = [
+  { user: "Lucas.Sabino", pass: "29623298", active: true },
+  { user: "Eduardo.Rocha", pass: "Helito@1313", active: true },
+  { user: "Gabriela.Bueno", pass: "Dani123", active: true },
+  { user: "Josmar.Valentini", pass: "Josa123", active: true },
+  { user: "Luciano.Souza", pass: "Luciano123", active: true },
+  { user: "Daniel.Svanci", pass: "Dani123", active: true }
+];
+
+// --- COMPONENTES AUXILIARES ---
+
+function StatusBadge({ status }) {
+  const configs = {
+    'Pendente': 'bg-orange-500 text-white border-orange-500',
+    'Em Cotação': 'bg-blue-600 text-white border-blue-600',
+    'Concluído': 'bg-black text-white border-neutral-800'
+  };
+  return <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-tighter border ${configs[status] || 'bg-neutral-400 text-white'}`}>{status}</span>;
+}
+
+function NavItem({ active, onClick, icon: IconComp, label }) {
+  return (
+    <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-300 group ${active ? 'bg-red-600 text-white shadow-lg' : 'hover:bg-white/5 text-neutral-400 hover:text-white'}`}>
+      <IconComp className={active ? 'text-white' : 'text-red-500'} size={16} />
+      <span className="text-[10px] font-black uppercase tracking-wider">{label}</span>
+    </button>
+  );
+}
+
+// --- VIEWS ---
+
+function LoginView({ onLogin, usersList }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleLogin = (e) => {
+    e.preventDefault();
+    const cleanUser = username.trim();
+    const cleanPass = password.trim();
+    const found = usersList.find(u => u.user.toLowerCase() === cleanUser.toLowerCase() && u.pass === cleanPass);
     
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&family=JetBrains+Mono:wght@700&display=swap');
+    if (found) {
+      if (found.active === false) {
+        setError('Sua conta está desativada. Entre em contato com o Admin.');
+      } else {
+        onLogin(found);
+      }
+    } else {
+      setError('Usuário ou senha incorretos.');
+    }
+  };
+
+  return (
+    <div className="h-screen w-full flex items-center justify-center bg-neutral-900 p-4 animate-in fade-in duration-500">
+      <div className="bg-white w-full max-w-sm rounded-[2.5rem] shadow-2xl overflow-hidden border-b-[10px] border-red-600">
+        <div className="bg-black p-8 text-center text-white space-y-2">
+          <div className="p-3 bg-red-600 rounded-2xl shadow-lg shadow-red-600/30 w-fit mx-auto mb-4">
+            <ShoppingCart size={32} />
+          </div>
+          <h1 className="text-xl font-black uppercase tracking-[0.2em] leading-none">VRZ COMPRAS</h1>
+          <p className="text-[9px] font-bold text-neutral-500 uppercase tracking-widest italic">Acesso Restrito ao Sistema</p>
+        </div>
         
-        body { 
-            font-family: 'Inter', sans-serif; 
-            margin: 0; 
-            background: #f1f5f9; 
-            overflow: hidden; 
-        }
+        <form onSubmit={handleLogin} className="p-8 space-y-6">
+          {error && (
+            <div className="bg-red-50 border border-red-100 p-3 rounded-xl flex items-center gap-2 text-red-600 animate-bounce">
+              <AlertCircle size={14} />
+              <span className="text-[10px] font-black uppercase tracking-tight">{error}</span>
+            </div>
+          )}
 
-        .fade-in { animation: fadeIn 0.3s ease-out forwards; }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        
-        .scrollbar-hide::-webkit-scrollbar { display: none; }
-        .text-wrap-anywhere { overflow-wrap: anywhere; word-break: break-word; }
-        
-        /* Efeito de planilha */
-        .excel-input { 
-            border: none; 
-            width: 100%; 
-            height: 100%; 
-            padding: 4px 8px; 
-            background: transparent; 
-            font-size: 11px;
-            outline: none;
-        }
-        .excel-input:focus { background: #fffbeb; box-shadow: inset 0 0 0 2px #ef4444; }
-        
-        /* Fonte para o Chassi */
-        .font-chassi { font-family: 'JetBrains Mono', monospace; }
-        
-        .sidebar-transition {
-            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
+          <div className="space-y-4">
+            <div>
+              <label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1 ml-1">Usuário</label>
+              <div className="relative">
+                <div className="absolute left-4 top-3.5 text-neutral-300">
+                  <User size={16} />
+                </div>
+                <input 
+                  type="text" 
+                  value={username} 
+                  onChange={(e) => setUsername(e.target.value)} 
+                  className="w-full pl-11 pr-4 py-3 bg-neutral-50 border-2 border-neutral-100 rounded-2xl focus:border-red-600 outline-none font-bold text-sm" 
+                  placeholder="NOME.SOBRENOME"
+                  required
+                />
+              </div>
+            </div>
 
-        .login-bg {
-            background: linear-gradient(135deg, #000000 0%, #1a1a1a 100%);
-        }
-
-        @keyframes shake {
-            0%, 100% { transform: translateX(0); }
-            25% { transform: translateX(-5px); }
-            75% { transform: translateX(5px); }
-        }
-        .animate-shake { animation: shake 0.2s ease-in-out 0s 2; }
-    </style>
-
-    <!-- Bibliotecas Externas -->
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    
-    <!-- Firebase Compat SDK -->
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-    
-    <!-- Ícones -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-</head>
-<body>
-    <div id="root"></div>
-
-    <script type="text/babel">
-        // --- CONFIGURAÇÃO FIREBASE ---
-        const firebaseConfig = {
-            apiKey: "AIzaSyBT1N43mp6hoxXOj6bmTlqouQWSmfn32-E",
-            authDomain: "portal-compras-vrz.firebaseapp.com",
-            projectId: "portal-compras-vrz",
-            storageBucket: "portal-compras-vrz.firebasestorage.app",
-            messagingSenderId: "713014398002",
-            appId: "1:713014398002:web:d89f485af020178b00002b"
-        };
-
-        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-        const db = firebase.firestore();
-        const auth = firebase.auth();
-        const appId = 'portal-compras-vrz';
-
-        const { useState, useEffect, useMemo, useRef } = React;
-
-        const INITIAL_USERS = [
-            { user: "Lucas.Sabino", pass: "29623298", active: true },
-            { user: "Eduardo.Rocha", pass: "Helito@1313", active: true },
-            { user: "Gabriela.Bueno", pass: "Dani123", active: true },
-            { user: "Josmar.Valentini", pass: "Josa123", active: true },
-            { user: "Luciano.Souza", pass: "Luciano123", active: true },
-            { user: "Daniel.Svanci", pass: "Dani123", active: true }
-        ];
-
-        function Icon({ name, className = "", size = 18 }) {
-            const iconRef = useRef(null);
-            useEffect(() => {
-                if (iconRef.current && window.lucide) {
-                    const iconData = window.lucide.icons[name];
-                    if (iconData) {
-                        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-                        const [tag, attrs, children] = iconData;
-                        Object.entries({...attrs, width: size, height: size, class: `lucide lucide-${name} ${className}`, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round"}).forEach(([k, v]) => svg.setAttribute(k, v));
-                        children.forEach(([ct, ca]) => {
-                            const c = document.createElementNS("http://www.w3.org/2000/svg", ct);
-                            Object.entries(ca).forEach(([k, v]) => c.setAttribute(k, v));
-                            svg.appendChild(c);
-                        });
-                        iconRef.current.innerHTML = '';
-                        iconRef.current.appendChild(svg);
-                    }
-                }
-            }, [name, className, size]);
-            return <span ref={iconRef} className="inline-flex shrink-0 items-center justify-center"></span>;
-        }
-
-        function NavItem({ iconName, label, active, onClick }) {
-            return (
-                <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-300 group ${active ? 'bg-red-600 text-white shadow-lg' : 'hover:bg-white/5 text-neutral-400 hover:text-white'}`}>
-                    <Icon name={iconName} className={active ? 'text-white' : 'text-red-500'} size={16} />
-                    <span className="text-[10px] font-black uppercase tracking-wider">{label}</span>
+            <div>
+              <label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1 ml-1">Senha</label>
+              <div className="relative">
+                <div className="absolute left-4 top-3.5 text-neutral-300">
+                  <Lock size={16} />
+                </div>
+                <input 
+                  type={showPassword ? "text" : "password"} 
+                  value={password} 
+                  onChange={(e) => setPassword(e.target.value)} 
+                  className="w-full pl-11 pr-12 py-3 bg-neutral-50 border-2 border-neutral-100 rounded-2xl focus:border-red-600 outline-none font-bold text-sm tracking-widest" 
+                  placeholder="••••••••"
+                  required
+                />
+                <button 
+                  type="button" 
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-3.5 text-neutral-400 hover:text-red-600 transition-colors"
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
-            );
-        }
+              </div>
+            </div>
+          </div>
 
-        function StatusBadge({ status }) {
-            const configs = {
-                'Pendente': 'bg-orange-500 text-white border-orange-500',
-                'Em Cotação': 'bg-blue-600 text-white border-blue-600',
-                'Concluído': 'bg-black text-white border-neutral-800'
-            };
-            return <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-tighter border ${configs[status] || 'bg-neutral-400 text-white'}`}>{status}</span>;
-        }
+          <button type="submit" className="w-full py-4 bg-red-600 text-white rounded-2xl font-black uppercase text-xs shadow-xl shadow-red-600/20 hover:bg-red-700 active:scale-95 transition-all tracking-[0.2em]">Entrar no Portal</button>
+        </form>
+      </div>
+    </div>
+  );
+}
 
-        function LoginView({ onLogin, usersList }) {
-            const [username, setUsername] = useState('');
-            const [password, setPassword] = useState('');
-            const [showPassword, setShowPassword] = useState(false);
-            const [rememberMe, setRememberMe] = useState(false);
-            const [error, setError] = useState('');
+function RequestForm({ loggedInUser, vehiclesDB, requests }) {
+  const [os, setOs] = useState('');
+  const [vehicle, setVehicle] = useState(null);
+  const [items, setItems] = useState([{ id: Date.now(), description: '', quantity: 1, photo: null, status: 'Pendente' }]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [showExistingAlert, setShowExistingAlert] = useState(false);
+  const [existingRequests, setExistingRequests] = useState([]);
 
-            const handleLogin = (e) => {
-                e.preventDefault();
-                const cleanUser = username.trim();
-                const cleanPass = password.trim();
-                const found = usersList.find(u => u.user.toLowerCase() === cleanUser.toLowerCase() && u.pass === cleanPass);
-                if (found) {
-                    if (found.active === false) {
-                        setError('Sua conta está desativada. Entre em contato com o Admin.');
-                    } else {
-                        onLogin(found);
-                    }
-                } else {
-                    setError('Usuário ou senha incorretos.');
-                }
-            };
+  const handleOSBlur = () => {
+    const cleanOS = String(os).trim();
+    const found = vehiclesDB.find(v => String(v.os).trim() === cleanOS);
+    
+    if (found) {
+      setVehicle(found);
+      // Check for duplicates
+      const duplicated = requests.filter(r => String(r.os).trim() === cleanOS);
+      if (duplicated.length > 0) {
+        setExistingRequests(duplicated);
+        setShowExistingAlert(true);
+      }
+    } else { 
+      setVehicle(null); 
+      if(os.length > 0) alert('Atenção: OS não localizada na base de dados.'); 
+    }
+  };
 
-            return (
-                <div className="h-screen w-full flex items-center justify-center login-bg p-4 fade-in">
-                    <div className="bg-white w-full max-w-sm rounded-[2.5rem] shadow-2xl overflow-hidden border-b-[10px] border-red-600">
-                        <div className="bg-black p-8 text-center text-white space-y-2">
-                            <div className="p-3 bg-red-600 rounded-2xl shadow-lg shadow-red-600/30 w-fit mx-auto mb-4">
-                                <Icon name="shopping-cart" size={32} />
-                            </div>
-                            <h1 className="text-xl font-black uppercase tracking-[0.2em] leading-none">VRZ COMPRAS</h1>
-                            <p className="text-[9px] font-bold text-neutral-500 uppercase tracking-widest italic">Acesso Restrito ao Sistema</p>
-                        </div>
-                        
-                        <form onSubmit={handleLogin} className="p-8 space-y-6">
-                            {error && (
-                                <div className="bg-red-50 border border-red-100 p-3 rounded-xl flex items-center gap-2 text-red-600 animate-shake">
-                                    <Icon name="alert-circle" size={14} />
-                                    <span className="text-[10px] font-black uppercase tracking-tight">{error}</span>
-                                </div>
-                            )}
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!auth.currentUser) return;
+    if (!os.trim() || !vehicle) return alert('Por favor, insira uma OS válida e cadastrada.');
+    
+    // Validação estrita de foto obrigatória conforme solicitado
+    const itemsWithoutPhoto = items.filter(i => !i.photo);
+    if (itemsWithoutPhoto.length > 0) {
+      return alert('Aviso: É obrigatório adicionar a foto para todos os itens antes de finalizar o pedido.');
+    }
 
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1 ml-1">Usuário</label>
-                                    <div className="relative">
-                                        <div className="absolute left-4 top-3.5 text-neutral-300">
-                                            <Icon name="user" size={16} />
-                                        </div>
-                                        <input 
-                                            type="text" 
-                                            value={username} 
-                                            onChange={(e) => setUsername(e.target.value)} 
-                                            className="w-full pl-11 pr-4 py-3 bg-neutral-50 border-2 border-neutral-100 rounded-2xl focus:border-red-600 outline-none font-bold text-sm" 
-                                            placeholder="DIGITE O USUÁRIO"
-                                            required
-                                        />
-                                    </div>
-                                </div>
+    if (items.some(i => !i.description.trim())) {
+      return alert('Cada item precisa de uma descrição preenchida.');
+    }
 
-                                <div>
-                                    <label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1 ml-1">Senha</label>
-                                    <div className="relative">
-                                        <div className="absolute left-4 top-3.5 text-neutral-300">
-                                            <Icon name="lock" size={16} />
-                                        </div>
-                                        <input 
-                                            type={showPassword ? "text" : "password"} 
-                                            value={password} 
-                                            onChange={(e) => setPassword(e.target.value)} 
-                                            className="w-full pl-11 pr-12 py-3 bg-neutral-50 border-2 border-neutral-100 rounded-2xl focus:border-red-600 outline-none font-bold text-sm tracking-widest" 
-                                            placeholder="••••••••"
-                                            required
-                                        />
-                                        <button 
-                                            type="button" 
-                                            onClick={() => setShowPassword(!showPassword)}
-                                            className="absolute right-4 top-3.5 text-neutral-400 hover:text-red-600 transition-colors"
-                                            title="Ver senha"
-                                        >
-                                            <Icon name={showPassword ? "eye-off" : "eye"} size={16} />
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
+    setIsSubmitting(true);
+    try {
+      const requestsCol = collection(db, 'artifacts', appId, 'public', 'data', 'requests');
+      await addDoc(requestsCol, {
+        os: String(os).trim(), 
+        responsavel: loggedInUser.user, 
+        vehicleData: vehicle, 
+        items,
+        timestamp: Date.now(), 
+        status: 'Pendente',
+        uid: auth.currentUser.uid
+      });
+      setSubmitted(true);
+    } catch (err) { 
+      console.error(err);
+      alert('Erro ao processar solicitação.'); 
+    } finally { 
+      setIsSubmitting(false); 
+    }
+  };
 
-                            <div className="flex items-center justify-between px-1">
-                                <label className="flex items-center gap-2 cursor-pointer group">
-                                    <input 
-                                        type="checkbox" 
-                                        checked={rememberMe} 
-                                        onChange={(e) => setRememberMe(e.target.checked)}
-                                        className="w-4 h-4 rounded border-2 border-neutral-200 text-red-600 focus:ring-0 cursor-pointer"
-                                    />
-                                    <span className="text-[10px] font-black text-neutral-500 uppercase tracking-tight group-hover:text-black">Lembrar</span>
-                                </label>
-                                
-                                <button 
-                                    type="button" 
-                                    onClick={() => setShowPassword(!showPassword)}
-                                    className="flex items-center gap-1.5 text-neutral-400 hover:text-red-600 transition-colors px-2 py-1 rounded-lg hover:bg-neutral-50"
-                                >
-                                    <Icon name={showPassword ? "eye-off" : "eye"} size={14} />
-                                    <span className="text-[9px] font-black uppercase tracking-tighter">{showPassword ? 'Ocultar' : 'Ver Senha'}</span>
-                                </button>
-                            </div>
+  if (submitted) return (
+    <div className="flex flex-col items-center justify-center py-20 animate-in zoom-in duration-300">
+      <div className="bg-white rounded-3xl border border-neutral-200 p-12 shadow-xl max-w-md text-center">
+        <CheckCircle size={64} className="text-emerald-500 mx-auto mb-6" />
+        <h2 className="text-2xl font-black uppercase tracking-tight text-neutral-900">Pedido Protocolado!</h2>
+        <p className="text-neutral-500 mt-2 text-sm">Sua solicitação já está disponível para o setor de compras.</p>
+        <button onClick={() => {setSubmitted(false); setOs(''); setVehicle(null); setItems([{ id: Date.now(), description: '', quantity: 1, photo: null, status: 'Pendente' }]);}} className="mt-8 w-full py-4 bg-red-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-red-700 transition-all">Nova Solicitação</button>
+      </div>
+    </div>
+  );
 
-                            <button type="submit" className="w-full py-4 bg-red-600 text-white rounded-2xl font-black uppercase text-xs shadow-xl shadow-red-600/20 hover:bg-red-700 active:scale-95 transition-all tracking-[0.2em]">Entrar no Portal</button>
-                        </form>
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      {/* Modal de Alerta de OS Existente */}
+      {showExistingAlert && (
+        <div className="fixed inset-0 z-[600] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in duration-200">
+            <div className="bg-orange-500 p-6 text-white flex items-center gap-4">
+              <AlertTriangle size={32} />
+              <div>
+                <h3 className="text-lg font-black uppercase leading-none">Atenção: OS em Aberto</h3>
+                <p className="text-[10px] font-bold opacity-90 mt-1 uppercase">Já existem pedidos de compra para esta OS</p>
+              </div>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="max-h-60 overflow-y-auto space-y-2 pr-2 scrollbar-hide">
+                {existingRequests.map((req, ridx) => (
+                  <div key={ridx} className="bg-neutral-50 p-4 rounded-2xl border border-neutral-100">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-[10px] font-black uppercase text-neutral-400">Pedido de {new Date(req.timestamp).toLocaleDateString()}</span>
+                      <StatusBadge status={req.status} />
                     </div>
-                </div>
-            );
-        }
-
-        function RequestForm({ user, loggedInUser, vehiclesDB }) {
-            const [os, setOs] = useState('');
-            const [vehicle, setVehicle] = useState(null);
-            const [items, setItems] = useState([{ id: Date.now(), description: '', quantity: 1, photo: null, status: 'Pendente' }]);
-            const [isSubmitting, setIsSubmitting] = useState(false);
-            const [submitted, setSubmitted] = useState(false);
-
-            const handleOSBlur = () => {
-                const found = vehiclesDB.find(v => String(v.os).trim() === String(os).trim());
-                if (found) setVehicle(found);
-                else { setVehicle(null); if(os.length > 0) alert('OS não cadastrada.'); }
-            };
-
-            const handleSubmit = async (e) => {
-                e.preventDefault();
-                if (!os.trim()) return alert('AVISO: O campo Ordem de Serviço (OS) é obrigatório.');
-                if (!vehicle) return alert('AVISO: Por favor, insira uma OS válida e cadastrada no sistema.');
-                const missingItemInfo = items.some(i => !i.description.trim());
-                if (missingItemInfo) return alert('AVISO: Todos os itens devem ter uma descrição preenchida.');
-                
-                const missingPhoto = items.some(i => !i.photo);
-                if (missingPhoto) return alert('AVISO: É obrigatório anexar uma foto para cada item da lista. A foto é essencial para prosseguir.');
-
-                setIsSubmitting(true);
-                try {
-                    await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('requests').add({
-                        os, responsavel: loggedInUser.user, localizacaoSolicitacao: "-", vehicleData: vehicle, items,
-                        timestamp: Date.now(), status: 'Pendente', userId: user.uid || 'anon'
-                    });
-                    setSubmitted(true);
-                } catch (err) { alert('Erro no servidor.'); } finally { setIsSubmitting(false); }
-            };
-
-            if (submitted) return (
-                <div className="flex flex-col items-center justify-center py-10 fade-in bg-white rounded-3xl border border-neutral-200 p-8 shadow-sm max-w-md mx-auto text-center">
-                    <Icon name="check-circle" size={48} className="text-emerald-500 mb-4" />
-                    <h2 className="text-xl font-black uppercase tracking-tight">Pedido Protocolado!</h2>
-                    <button onClick={() => setSubmitted(false)} className="mt-8 w-full py-4 bg-red-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-red-700">Nova Solicitação</button>
-                </div>
-            );
-
-            return (
-                <div className="space-y-4 fade-in text-wrap-anywhere">
-                    <div className="flex flex-col">
-                        <h2 className="text-2xl font-black text-black tracking-tighter uppercase leading-none">Nova Requisição</h2>
-                        <span className="text-[9px] font-bold text-neutral-400 uppercase mt-1 tracking-widest italic">Operacional VRZ</span>
+                    <div className="space-y-1">
+                      {req.items?.map((it, iidx) => (
+                        <div key={iidx} className="flex justify-between items-center text-[10px] font-bold">
+                          <span className="truncate max-w-[70%] uppercase">{it.description}</span>
+                          <span className="text-neutral-400">QTD: {it.quantity}</span>
+                        </div>
+                      ))}
                     </div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs font-bold text-neutral-600 text-center">Deseja continuar e fazer um novo pedido para esta OS?</p>
+              <div className="grid grid-cols-2 gap-3">
+                <button onClick={() => {setShowExistingAlert(false); setOs(''); setVehicle(null);}} className="py-3 bg-neutral-100 text-neutral-500 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-neutral-200">Cancelar</button>
+                <button onClick={() => setShowExistingAlert(false)} className="py-3 bg-orange-500 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg shadow-orange-200">Sim, Continuar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                        <div className="bg-white p-4 rounded-2xl border border-neutral-200 shadow-sm grid grid-cols-1 md:grid-cols-5 gap-4">
-                            <div className="md:col-span-2 space-y-4">
-                                <div>
-                                    <label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1">Ordem de Serviço (OS)</label>
-                                    <input type="text" value={os} onChange={(e) => setOs(e.target.value)} onBlur={handleOSBlur} placeholder="Nº OS" className="w-full px-3 py-2 bg-neutral-50 border-2 rounded-xl focus:border-red-600 outline-none font-black text-base" required />
-                                </div>
-                                <div className="px-1 border-t border-neutral-100 pt-3">
-                                    <label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1.5">Solicitante Identificado</label>
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center text-red-600 border border-red-100">
-                                            <Icon name="user" size={14} />
-                                        </div>
-                                        <span className="text-xs font-black uppercase text-neutral-800">{loggedInUser.user}</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="md:col-span-3 bg-neutral-950 rounded-xl p-5 text-white border-l-[10px] border-red-600 shadow-2xl flex flex-col justify-center min-h-[140px]">
-                                {vehicle ? (
-                                    <div className="flex flex-col gap-4 w-full">
-                                        <div className="grid grid-cols-2 gap-4 border-b border-white/5 pb-3">
-                                            <div className="min-w-0"><span className="text-neutral-500 text-[8px] font-black uppercase block mb-0.5 tracking-widest">Modelo</span><span className="text-white text-sm font-black uppercase truncate block leading-none">{vehicle.modelo}</span></div>
-                                            <div className="min-w-0"><span className="text-neutral-500 text-[8px] font-black uppercase block mb-0.5 tracking-widest">Fabricante</span><span className="text-white text-xs font-bold uppercase truncate block leading-none">{vehicle.fabricante || 'N/A'}</span></div>
-                                        </div>
-                                        <div className="grid grid-cols-3 gap-2 pb-3">
-                                            <div><span className="text-neutral-500 text-[8px] font-black uppercase block mb-0.5 tracking-widest">Etapa</span><span className="text-red-500 text-[10px] font-black uppercase block leading-none">{vehicle.etapa}</span></div>
-                                            <div><span className="text-neutral-500 text-[8px] font-black uppercase block mb-0.5 tracking-widest">Cor</span><span className="text-white text-[10px] font-bold uppercase block leading-none">{vehicle.cor}</span></div>
-                                            <div><span className="text-neutral-500 text-[8px] font-black uppercase block mb-0.5 tracking-widest">Local</span><span className="text-white text-[10px] font-bold uppercase block leading-none">{vehicle.localizacao}</span></div>
-                                        </div>
-                                        <div className="bg-white/5 p-3 rounded-xl border border-white/10">
-                                            <span className="text-neutral-500 text-[8px] font-black uppercase block mb-1.5 tracking-[0.2em] text-center">Número do Chassi</span>
-                                            <span className="text-white font-chassi text-base font-black tracking-[0.15em] block text-center leading-none select-all">{vehicle.chassi}</span>
-                                        </div>
-                                    </div>
-                                ) : <div className="w-full text-center space-y-2"><div className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-2"><Icon name="search" size={20} className="text-neutral-700" /></div><p className="text-neutral-600 text-[9px] font-black uppercase tracking-[0.3em] italic leading-none">Aguardando OS...</p></div>}
-                            </div>
-                        </div>
+      <div className="flex flex-col">
+        <h2 className="text-3xl font-black text-black tracking-tighter uppercase leading-none">Nova Requisição</h2>
+        <span className="text-[10px] font-bold text-neutral-400 uppercase mt-1 tracking-widest italic">Operacional VRZ</span>
+      </div>
 
-                        <div className="space-y-3">
-                            <div className="flex justify-between items-center px-1">
-                                <h3 className="font-black text-black uppercase text-[10px] flex items-center gap-2"><Icon name="package" size={14} /> Peças Necessárias</h3>
-                                <button type="button" onClick={() => setItems([...items, {id: Date.now(), description: '', quantity: 1, photo: null, status: 'Pendente'}])} className="bg-red-600 text-white px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm hover:bg-red-700">+ ITEM</button>
-                            </div>
-                            <div className="grid grid-cols-1 gap-2">
-                                {items.map((it, idx) => (
-                                    <div key={it.id} className="bg-white p-3 rounded-xl border border-neutral-200 shadow-sm relative grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-                                        <div className="md:col-span-2">
-                                            <label className="text-[8px] font-black text-neutral-400 uppercase block mb-1">Qtd</label>
-                                            <input type="number" min="1" value={it.quantity} onChange={(e) => setItems(prev => prev.map(i => i.id === it.id ? {...i, quantity: e.target.value} : i))} className="w-full p-2 bg-neutral-50 border rounded-lg font-black text-center text-sm" />
-                                        </div>
-                                        <div className="md:col-span-7">
-                                            <label className="text-[8px] font-black text-neutral-400 uppercase block mb-1">Descrição da Peça</label>
-                                            <input type="text" value={it.description} onChange={(e) => setItems(prev => prev.map(i => i.id === it.id ? {...i, description: e.target.value} : i))} placeholder="NOME DA PEÇA" className="w-full p-2 bg-neutral-50 border rounded-lg font-black text-[10px] uppercase focus:border-red-600 outline-none" required />
-                                        </div>
-                                        <div className="md:col-span-3 text-center">
-                                            <label className="text-[8px] font-black text-neutral-400 uppercase block mb-1 text-red-600 font-bold">Foto (Obrigatória)</label>
-                                            {it.photo ? (
-                                                <div className="relative h-12 rounded-lg overflow-hidden border group shadow-inner"><img src={it.photo} className="h-full w-full object-cover" /><button type="button" onClick={() => setItems(prev => prev.map(i => i.id === it.id ? {...i, photo: null} : i))} className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100"><Icon name="x" className="text-white" size={14} /></button></div>
-                                            ) : (
-                                                <label className="h-12 flex flex-col items-center justify-center border-2 border-dashed border-neutral-200 rounded-lg cursor-pointer hover:bg-red-50 transition-all bg-neutral-50"><Icon name="camera" className="text-neutral-400" size={24} /><input type="file" accept="image/*" onChange={(e) => { const r = new FileReader(); r.onload = () => setItems(prev => prev.map(i => i.id === it.id ? {...i, photo: r.result} : i)); if(e.target.files[0]) r.readAsDataURL(e.target.files[0]); }} className="hidden" required /></label>
-                                            )}
-                                        </div>
-                                        {items.length > 1 && <button type="button" onClick={() => setItems(items.filter(i => i.id !== it.id))} className="absolute top-1 right-1 text-neutral-300 hover:text-red-600"><Icon name="trash-2" size={14} /></button>}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                        <button disabled={isSubmitting || !vehicle} className={`w-full py-4 rounded-xl font-black text-base uppercase flex items-center justify-center gap-3 shadow-lg ${isSubmitting || !vehicle ? 'bg-neutral-200 text-neutral-400' : 'bg-red-600 text-white border-b-4 border-red-800 hover:bg-red-700 active:translate-y-1 active:border-b-0'}`}>{isSubmitting ? <Icon name="refresh-cw" className="animate-spin" size={18} /> : 'Finalizar Pedido'}</button>
-                    </form>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="bg-white p-6 rounded-3xl border border-neutral-200 shadow-sm grid grid-cols-1 md:grid-cols-5 gap-6">
+          <div className="md:col-span-2 space-y-6">
+            <div>
+              <label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block mb-2">Ordem de Serviço (OS)</label>
+              <div className="relative">
+                <Search className="absolute left-4 top-3.5 text-neutral-300" size={18} />
+                <input 
+                  type="text" 
+                  value={os} 
+                  onChange={(e) => setOs(e.target.value)} 
+                  onBlur={handleOSBlur} 
+                  placeholder="EX: 12345" 
+                  className="w-full pl-12 pr-4 py-3 bg-neutral-50 border-2 border-neutral-100 rounded-2xl focus:border-red-600 outline-none font-black text-lg transition-all" 
+                  required 
+                />
+              </div>
+            </div>
+            <div className="px-1 border-t border-neutral-100 pt-4">
+              <label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-2">Solicitante Identificado</label>
+              <div className="flex items-center gap-3 bg-red-50/50 p-3 rounded-2xl border border-red-100">
+                <div className="w-10 h-10 rounded-xl bg-red-600 flex items-center justify-center text-white shadow-md shadow-red-200">
+                  <User size={18} />
                 </div>
-            );
+                <div>
+                  <span className="text-xs font-black uppercase text-neutral-800 block leading-none">{loggedInUser.user}</span>
+                  <span className="text-[8px] font-bold text-red-600 uppercase tracking-tighter">Autenticado</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="md:col-span-3 bg-neutral-950 rounded-[2rem] p-6 text-white border-l-[12px] border-red-600 shadow-2xl flex flex-col justify-center min-h-[180px] transition-all overflow-hidden">
+            {vehicle ? (
+              <div className="space-y-4 animate-in slide-in-from-right duration-300">
+                <div className="grid grid-cols-2 gap-4 border-b border-white/10 pb-4">
+                  <div>
+                    <span className="text-neutral-500 text-[8px] font-black uppercase block mb-1 tracking-widest">Modelo</span>
+                    <span className="text-white text-base font-black uppercase truncate block leading-tight">{vehicle.modelo}</span>
+                  </div>
+                  <div>
+                    <span className="text-neutral-500 text-[8px] font-black uppercase block mb-1 tracking-widest">Fabricante</span>
+                    <span className="text-white text-sm font-bold uppercase truncate block leading-tight">{vehicle.fabricante || 'N/A'}</span>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <span className="text-neutral-500 text-[8px] font-black uppercase block mb-1">Etapa</span>
+                    <span className="text-red-500 text-[11px] font-black uppercase">{vehicle.etapa}</span>
+                  </div>
+                  <div>
+                    <span className="text-neutral-500 text-[8px] font-black uppercase block mb-1">Cor</span>
+                    <span className="text-white text-[11px] font-bold uppercase">{vehicle.cor}</span>
+                  </div>
+                  <div>
+                    <span className="text-neutral-500 text-[8px] font-black uppercase block mb-1">Local</span>
+                    <span className="text-white text-[11px] font-bold uppercase">{vehicle.localizacao}</span>
+                  </div>
+                </div>
+                <div className="bg-white/5 p-4 rounded-2xl border border-white/10 text-center">
+                  <span className="text-neutral-500 text-[7px] font-black uppercase block mb-1.5 tracking-[0.3em]">NÚMERO DO CHASSI</span>
+                  <span className="text-white font-mono text-lg font-black tracking-[0.2em] block select-all">{vehicle.chassi}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center space-y-3 opacity-40">
+                <div className="w-12 h-12 bg-white/5 rounded-full flex items-center justify-center mx-auto">
+                  <ShoppingCart size={24} className="text-neutral-500" />
+                </div>
+                <p className="text-neutral-500 text-[9px] font-black uppercase tracking-[0.4em] italic leading-none">Aguardando OS...</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex justify-between items-center px-2">
+            <h3 className="font-black text-black uppercase text-xs flex items-center gap-2"><Package size={16} className="text-red-600" /> Itens da Requisição</h3>
+            <button 
+                type="button" 
+                onClick={() => setItems([...items, {id: Date.now(), description: '', quantity: 1, photo: null, status: 'Pendente'}])} 
+                className="bg-black text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg hover:bg-neutral-800 active:scale-95 transition-all"
+            >
+                + ADICIONAR ITEM
+            </button>
+          </div>
+          
+          <div className="grid grid-cols-1 gap-3">
+            {items.map((it, idx) => (
+              <div key={it.id} className="bg-white p-5 rounded-3xl border border-neutral-200 shadow-sm relative grid grid-cols-1 md:grid-cols-12 gap-6 items-end animate-in slide-in-from-bottom duration-300">
+                <div className="md:col-span-2">
+                  <label className="text-[8px] font-black text-neutral-400 uppercase block mb-2 text-center">Quantidade</label>
+                  <input 
+                    type="number" 
+                    min="1" 
+                    value={it.quantity} 
+                    onChange={(e) => setItems(prev => prev.map(i => i.id === it.id ? {...i, quantity: e.target.value} : i))} 
+                    className="w-full p-3 bg-neutral-50 border-2 border-neutral-100 rounded-2xl font-black text-center text-base focus:border-red-600 outline-none" 
+                  />
+                </div>
+                <div className="md:col-span-7">
+                  <label className="text-[8px] font-black text-neutral-400 uppercase block mb-2">Descrição da Peça / Serviço</label>
+                  <input 
+                    type="text" 
+                    value={it.description} 
+                    onChange={(e) => setItems(prev => prev.map(i => i.id === it.id ? {...i, description: e.target.value} : i))} 
+                    placeholder="DESCREVA O QUE É NECESSÁRIO" 
+                    className="w-full p-3 bg-neutral-50 border-2 border-neutral-100 rounded-2xl font-black text-xs uppercase focus:border-red-600 outline-none placeholder:text-neutral-300" 
+                    required 
+                  />
+                </div>
+                <div className="md:col-span-3">
+                  <label className="text-[8px] font-black text-red-600 uppercase block mb-2 text-center font-bold">Foto (Obrigatória)</label>
+                  {it.photo ? (
+                    <div className="relative h-14 rounded-2xl overflow-hidden border-2 border-neutral-100 group shadow-inner">
+                      <img src={it.photo} className="h-full w-full object-cover" />
+                      <button 
+                        type="button" 
+                        onClick={() => setItems(prev => prev.map(i => i.id === it.id ? {...i, photo: null} : i))} 
+                        className="absolute inset-0 bg-red-600/80 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all text-white"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="h-14 flex flex-col items-center justify-center border-2 border-dashed border-neutral-200 rounded-2xl cursor-pointer hover:bg-red-50 hover:border-red-200 transition-all bg-neutral-50 group">
+                      <Camera className="text-neutral-300 group-hover:text-red-400" size={24} />
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={(e) => { 
+                          const file = e.target.files[0];
+                          if(file) {
+                             const r = new FileReader(); 
+                             r.onload = () => setItems(prev => prev.map(i => i.id === it.id ? {...i, photo: r.result} : i)); 
+                             r.readAsDataURL(file);
+                          }
+                        }} 
+                        className="hidden" 
+                        required 
+                      />
+                    </label>
+                  )}
+                </div>
+                {items.length > 1 && (
+                  <button 
+                    type="button" 
+                    onClick={() => setItems(items.filter(i => i.id !== it.id))} 
+                    className="absolute -top-2 -right-2 w-8 h-8 bg-neutral-100 hover:bg-red-600 text-neutral-400 hover:text-white rounded-full flex items-center justify-center border-2 border-white shadow-md transition-all"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <button 
+          disabled={isSubmitting || !vehicle} 
+          className={`w-full py-5 rounded-[2rem] font-black text-lg uppercase flex items-center justify-center gap-3 shadow-xl transition-all ${isSubmitting || !vehicle ? 'bg-neutral-200 text-neutral-400' : 'bg-red-600 text-white border-b-8 border-red-800 hover:bg-red-700 active:translate-y-1 active:border-b-0'}`}
+        >
+          {isSubmitting ? <RefreshCw className="animate-spin" size={24} /> : 'Finalizar e Enviar Protocolo'}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function StatusView({ requests }) {
+  const [search, setSearch] = useState('');
+  const [requestToDelete, setRequestToDelete] = useState(null);
+  const [deletePass, setDeletePass] = useState('');
+  const [deleteError, setDeleteError] = useState(false);
+
+  const filtered = useMemo(() => requests.filter(r => {
+    const t = search.toLowerCase();
+    return (String(r.os || '').toLowerCase().includes(t)) || 
+           (String(r.responsavel || '').toLowerCase().includes(t)) || 
+           (String(r.vehicleData?.modelo || '').toLowerCase().includes(t));
+  }).sort((a, b) => b.timestamp - a.timestamp), [requests, search]);
+
+  const confirmDeletion = async () => {
+    if (deletePass !== 'VRZ2024') {
+      setDeleteError(true);
+      return;
+    }
+    try {
+      const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'requests', requestToDelete);
+      await deleteDoc(docRef);
+      setRequestToDelete(null);
+      setDeletePass('');
+    } catch(e) { alert("Erro ao excluir."); }
+  };
+
+  const exportPDF = async (request) => {
+    if (!window.jspdf) {
+      alert("Erro: Biblioteca PDF não carregada.");
+      return;
+    }
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    
+    // Cabeçalho
+    doc.setFillColor(0, 0, 0);
+    doc.rect(0, 0, 210, 40, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(22);
+    doc.setFont('helvetica', 'bold');
+    doc.text("PORTAL DE COMPRAS VRZ", 10, 20);
+    doc.setFontSize(10);
+    doc.text(`SOLICITAÇÃO DE PEÇAS - OS #${request.os}`, 10, 30);
+    
+    // Dados do Pedido
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(12);
+    doc.text("DADOS DA SOLICITAÇÃO", 10, 50);
+    doc.setDrawColor(239, 68, 68); // Red-600
+    doc.setLineWidth(1);
+    doc.line(10, 52, 60, 52);
+    
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Solicitante: ${request.responsavel}`, 10, 62);
+    doc.text(`Data: ${new Date(request.timestamp).toLocaleString()}`, 10, 68);
+    doc.text(`Veículo: ${request.vehicleData?.modelo} (${request.vehicleData?.fabricante})`, 10, 74);
+    doc.text(`Chassi: ${request.vehicleData?.chassi}`, 10, 80);
+    doc.text(`Cor: ${request.vehicleData?.cor}`, 10, 86);
+    doc.text(`Status Geral: ${request.status}`, 10, 92);
+    
+    let yPos = 105;
+    
+    // Itens
+    request.items.forEach((item, index) => {
+      // Verificar se precisa de nova página
+      if (yPos > 240) {
+        doc.addPage();
+        yPos = 20;
+      }
+      
+      doc.setFillColor(245, 245, 245);
+      doc.rect(10, yPos, 190, 45, 'F');
+      
+      doc.setFont('helvetica', 'bold');
+      doc.text(`${index + 1}. ${item.description.toUpperCase()}`, 15, yPos + 8);
+      
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Quantidade: ${item.quantity}`, 15, yPos + 15);
+      doc.text(`Status do Item: ${item.status}`, 15, yPos + 21);
+      
+      if (item.photo) {
+        try {
+          doc.addImage(item.photo, 'JPEG', 120, yPos + 5, 60, 35);
+        } catch (e) {
+          doc.text("[Erro ao carregar imagem]", 130, yPos + 20);
         }
+      } else {
+        doc.text("[Sem foto disponível]", 130, yPos + 20);
+      }
+      
+      yPos += 52;
+    });
+    
+    // Rodapé
+    doc.setFontSize(8);
+    doc.setTextColor(150, 150, 150);
+    doc.text("Documento gerado automaticamente pelo Portal VRZ", 10, 285);
+    
+    doc.save(`Pedido_VRZ_OS_${request.os}.pdf`);
+  };
 
-        function StatusView({ requests }) {
-            const [search, setSearch] = useState('');
-            const [requestToDelete, setRequestToDelete] = useState(null);
-            const [deletePass, setDeletePass] = useState('');
-            const [showDeletePass, setShowDeletePass] = useState(false);
-            const [deleteError, setDeleteError] = useState(false);
+  const exportExcel = () => {
+    let csv = "DATA;OS;CHASSI;VEICULO;ITEM;QTD;STATUS;PRECO;LOJA;PRAZO\n";
+    requests.forEach(r => {
+      r.items?.forEach(it => {
+        csv += `${new Date(r.timestamp).toLocaleDateString()};${r.os};${r.vehicleData?.chassi};${r.vehicleData?.modelo};${it.description};${it.quantity};${it.status};${it.price || 0};${it.supplier || '-'};${it.deliveryDate || '-'}\n`;
+      });
+    });
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Relatorio_VRZ_${Date.now()}.csv`;
+    link.click();
+  };
 
-            const filtered = useMemo(() => requests.filter(r => {
-                const t = search.toLowerCase();
-                return (String(r.os || '').toLowerCase().includes(t)) || (String(r.responsavel || '').toLowerCase().includes(t)) || (String(r.vehicleData?.modelo || '').toLowerCase().includes(t));
-            }), [requests, search]);
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      {requestToDelete && (
+        <div className="fixed inset-0 z-[500] bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-sm rounded-[3rem] shadow-2xl overflow-hidden p-8 space-y-6">
+            <div className="text-center space-y-2">
+              <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Trash2 size={32} />
+              </div>
+              <h3 className="text-xl font-black uppercase tracking-tight">Confirmar Exclusão</h3>
+              <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">Senha de Admin Necessária</p>
+            </div>
+            <input 
+              type="password" 
+              value={deletePass} 
+              onChange={(e) => {setDeletePass(e.target.value); setDeleteError(false);}}
+              className={`w-full p-4 bg-neutral-50 border-2 rounded-2xl text-center font-black tracking-[1em] outline-none ${deleteError ? 'border-red-600 animate-shake' : 'focus:border-red-600'}`}
+              placeholder="••••"
+              autoFocus
+            />
+            <div className="flex gap-4">
+              <button onClick={() => setRequestToDelete(null)} className="flex-1 py-4 bg-neutral-100 text-neutral-400 font-black uppercase text-[10px] rounded-2xl">Cancelar</button>
+              <button onClick={confirmDeletion} className="flex-1 py-4 bg-red-600 text-white font-black uppercase text-[10px] rounded-2xl shadow-lg shadow-red-200">Confirmar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
-            const confirmDeletion = async () => {
-                if (deletePass !== 'VRZ2024') {
-                    setDeleteError(true);
-                    return;
-                }
-                try {
-                    await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('requests').doc(requestToDelete).delete();
-                    closeDeleteModal();
-                } catch(e) { alert("Erro ao excluir."); }
-            };
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div>
+          <h2 className="text-3xl font-black uppercase text-black leading-none tracking-tighter">Histórico Geral</h2>
+          <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest mt-1 italic">Gestão e Auditoria de Protocolos</p>
+        </div>
+        <div className="flex gap-3">
+          <button onClick={exportExcel} className="bg-emerald-600 text-white px-5 py-3 rounded-2xl text-[10px] font-black uppercase flex items-center gap-2 shadow-xl hover:bg-emerald-700 transition-all">
+            <FileText size={16}/> EXPORTAR CSV
+          </button>
+          <div className="relative">
+            <Search className="absolute left-4 top-3.5 text-neutral-300" size={18} />
+            <input 
+              type="text" 
+              placeholder="BUSCAR OS / MODELO / NOME" 
+              value={search} 
+              onChange={(e) => setSearch(e.target.value)} 
+              className="w-full md:w-64 pl-12 pr-4 py-3 bg-white border border-neutral-200 rounded-2xl text-[10px] font-black uppercase outline-none focus:border-red-600 shadow-sm" 
+            />
+          </div>
+        </div>
+      </div>
 
-            const closeDeleteModal = () => {
-                setRequestToDelete(null);
-                setDeletePass('');
-                setShowDeletePass(false);
-                setDeleteError(false);
-            };
+      <div className="grid grid-cols-1 gap-4 overflow-y-auto max-h-[70vh] pr-2 scrollbar-hide">
+        {filtered.length === 0 ? (
+          <div className="py-24 text-center bg-white rounded-[3rem] border border-neutral-100 border-dashed">
+            <Inbox size={48} className="text-neutral-200 mx-auto mb-4" />
+            <p className="text-xs font-black uppercase text-neutral-300 tracking-widest">Nenhum registro localizado</p>
+          </div>
+        ) : filtered.map(r => (
+          <div key={r.id} className="bg-white rounded-[2rem] border border-neutral-200 p-6 shadow-sm hover:border-red-200 transition-all border-l-[12px] border-l-red-600 group relative">
+            <div className="flex flex-col lg:flex-row gap-6">
+              <div className="flex-1 space-y-4 min-w-0">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <span className="text-xl font-black uppercase tracking-tighter">OS #{r.os}</span>
+                    <StatusBadge status={r.status || 'Pendente'} />
+                  </div>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => exportPDF(r)} 
+                      className="p-2 text-neutral-400 hover:text-blue-600 transition-colors flex items-center gap-1.5"
+                      title="Exportar PDF desta OS"
+                    >
+                      <FileDown size={18} />
+                      <span className="text-[9px] font-black uppercase">PDF</span>
+                    </button>
+                    <button 
+                      onClick={() => setRequestToDelete(r.id)} 
+                      className="p-2 text-neutral-300 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                </div>
 
-            const exportGeneralReport = () => {
-                const csvRows = [["Data", "OS", "Chassi", "Veiculo", "Peca", "Qtd", "Status Peca", "Valor", "Loja", "Prazo", "Data Real Entrega"].join(";")];
-                requests.forEach(r => {
-                    r.items?.forEach(item => {
-                        csvRows.push([new Date(r.timestamp).toLocaleDateString(), r.os, r.vehicleData?.chassi || "-", r.vehicleData?.modelo || "-", item.description || "-", item.quantity || "1", item.status || "Pendente", item.price || "0", item.supplier || "-", item.deliveryDate ? new Date(item.deliveryDate).toLocaleDateString() : "-", item.actualDeliveryDate ? new Date(item.actualDeliveryDate).toLocaleDateString() : "-"].join(";"));
-                    });
-                });
-                const blob = new Blob([csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
-                const link = document.createElement("a"); link.href = URL.createObjectURL(blob);
-                link.download = `Relatorio_VRZ_${new Date().toLocaleDateString()}.csv`;
-                link.click();
-            };
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-[9px] font-black uppercase tracking-wider text-neutral-400">
+                  <div>
+                    <span className="text-red-600 block mb-1">Solicitante</span>
+                    <span className="text-black text-[11px]">{r.responsavel}</span>
+                  </div>
+                  <div>
+                    <span className="block mb-1">Veículo</span>
+                    <span className="text-black text-[11px]">{r.vehicleData?.modelo}</span>
+                  </div>
+                  <div>
+                    <span className="block mb-1">Data Registro</span>
+                    <span className="text-black text-[11px]">{new Date(r.timestamp).toLocaleDateString()}</span>
+                  </div>
+                  <div>
+                    <span className="block mb-1">Itens</span>
+                    <span className="text-black text-[11px]">{r.items?.length} Unidades</span>
+                  </div>
+                </div>
 
-            const exportPDF = async (request) => {
-                const { jsPDF } = window.jspdf; const doc = new jsPDF();
-                doc.setFontSize(18); doc.text("Solicitacao de Pecas - VRZ", 10, 15);
-                doc.setFontSize(10);
-                doc.text(`OS: #${request.os}`, 10, 25); doc.text(`Data: ${new Date(request.timestamp).toLocaleString()}`, 10, 30);
-                doc.text(`Veiculo: ${request.vehicleData?.modelo}`, 10, 35); doc.text(`Chassi: ${request.vehicleData?.chassi}`, 10, 40);
-                doc.text(`Solicitante: ${request.responsavel} (${request.localizacaoSolicitacao})`, 10, 45);
-                let y = 55; doc.setFontSize(12); doc.text("ITENS:", 10, y); y += 10;
-                request.items.forEach((item, index) => {
-                    if (y > 250) { doc.addPage(); y = 20; }
-                    doc.setFontSize(10); doc.text(`${index + 1}. Qtd: ${item.quantity} - ${item.description} [${item.status || 'Pendente'}]`, 15, y);
-                    y += 10; if (item.photo) { try { doc.addImage(item.photo, 'JPEG', 15, y, 50, 30); y += 35; } catch(e) {} }
-                });
-                doc.save(`OS_${request.os}_VRZ.pdf`);
-            };
+                <div className="flex gap-3 overflow-x-auto scrollbar-hide py-2">
+                  {r.items?.map((it, idx) => (
+                    <div key={idx} className="flex-shrink-0 flex items-center gap-3 bg-neutral-50 p-2 rounded-2xl border border-neutral-100 min-w-[200px] shadow-sm">
+                      {it.photo && <img src={it.photo} className="w-12 h-12 rounded-xl object-cover border-2 border-white shadow-sm" />}
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-black uppercase leading-tight truncate text-neutral-800">{it.description}</p>
+                        <p className="text-[8px] font-bold text-red-600 mt-1">QTD: {it.quantity}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
-            return (
-                <div className="space-y-4 fade-in">
-                    {requestToDelete && (
-                        <div className="fixed inset-0 z-[500] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-                            <div className="bg-white w-full max-w-sm rounded-[2rem] shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
-                                <div className="bg-red-600 p-6 text-center text-white">
-                                    <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3">
-                                        <Icon name="trash-2" size={24} />
-                                    </div>
-                                    <h3 className="text-lg font-black uppercase tracking-tight">Excluir Registro</h3>
-                                    <p className="text-[10px] font-bold opacity-80 uppercase mt-1 tracking-wider">Esta ação não pode ser desfeita</p>
-                                </div>
-                                <div className="p-6 space-y-4">
-                                    <div className="space-y-1">
-                                        <label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest ml-1">Senha Admin Requerida</label>
-                                        <div className="relative">
-                                            <input 
-                                                type={showDeletePass ? "text" : "password"} 
-                                                value={deletePass} 
-                                                onChange={(e) => { setDeletePass(e.target.value); setDeleteError(false); }}
-                                                className={`w-full p-3 bg-neutral-50 border-2 rounded-xl outline-none text-center font-black tracking-[0.5em] transition-colors ${deleteError ? 'border-red-600 animate-shake' : 'border-neutral-100 focus:border-red-600'}`}
-                                                placeholder="••••"
-                                                autoFocus
-                                            />
-                                            <button 
-                                                onClick={() => setShowDeletePass(!showDeletePass)}
-                                                className="absolute right-3 top-3 text-neutral-300 hover:text-red-600"
-                                            >
-                                                <Icon name={showDeletePass ? "eye-off" : "eye"} size={16} />
-                                            </button>
-                                        </div>
-                                        {deleteError && <p className="text-red-600 text-[8px] font-black uppercase text-center mt-1 animate-pulse">Senha Incorreta!</p>}
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-3 pt-2">
-                                        <button onClick={closeDeleteModal} className="py-3 bg-neutral-100 text-neutral-500 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-neutral-200 transition-colors">Cancelar</button>
-                                        <button onClick={confirmDeletion} className="py-3 bg-red-600 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg shadow-red-600/20 hover:bg-red-700 transition-colors">Confirmar</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+// --- APP PRINCIPAL ---
+
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [loggedInUser, setLoggedInUser] = useState(null);
+  const [view, setView] = useState('request');
+  const [requests, setRequests] = useState([]);
+  const [vehiclesDB, setVehiclesDB] = useState([]);
+  const [usersDB, setUsersDB] = useState([]);
+  const [adminAuth, setAdminAuth] = useState(false);
+  const [adminPassValue, setAdminPassValue] = useState('');
+  const [showAdminPass, setShowAdminPass] = useState(false);
+  const [adminPassError, setAdminPassError] = useState(false);
+  const [isSidebarOpen, setSidebarOpen] = useState(false);
+  const [adminSubView, setAdminSubView] = useState('pending');
+  const [importData, setImportData] = useState([]);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [editingRequest, setEditingRequest] = useState(null);
+
+  // Auth Init
+  useEffect(() => {
+    const initAuth = async () => {
+      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+        await signInWithCustomToken(auth, __initial_auth_token);
+      } else {
+        await signInAnonymously(auth);
+      }
+    };
+    initAuth();
+    const unsub = onAuthStateChanged(auth, setUser);
+    return () => unsub();
+  }, []);
+
+  // Data Sync
+  useEffect(() => {
+    if (!user) return;
+    
+    const requestsCol = collection(db, 'artifacts', appId, 'public', 'data', 'requests');
+    const unsubReq = onSnapshot(requestsCol, (s) => {
+      setRequests(s.docs.map(d => ({id: d.id, ...d.data()})));
+    }, (err) => console.error(err));
+
+    const vehiclesCol = collection(db, 'artifacts', appId, 'public', 'data', 'vehicles');
+    const unsubVeh = onSnapshot(vehiclesCol, (s) => {
+      setVehiclesDB(s.docs.map(d => d.data()));
+    }, (err) => console.error(err));
+
+    const usersCol = collection(db, 'artifacts', appId, 'public', 'data', 'users');
+    const unsubUsers = onSnapshot(usersCol, (s) => {
+      const dbUsers = s.docs.map(d => ({id: d.id, ...d.data()}));
+      const combined = [...dbUsers];
+      INITIAL_USERS.forEach(iu => {
+        if (!dbUsers.find(du => du.user.toLowerCase() === iu.user.toLowerCase())) {
+          combined.push(iu);
+        }
+      });
+      setUsersDB(combined);
+    }, (err) => console.error(err));
+
+    return () => { unsubReq(); unsubVeh(); unsubUsers(); };
+  }, [user]);
+
+  const handleAdminLogin = () => {
+    if (adminPassValue === 'VRZ2024') {
+      setAdminAuth(true);
+      setAdminPassError(false);
+    } else {
+      setAdminPassError(true);
+      setAdminPassValue('');
+    }
+  };
+
+  const handlePasteImport = (e) => {
+    const text = e.clipboardData.getData('text');
+    const lines = text.split(/\r?\n/).filter(l => l.trim() !== '');
+    if (lines.length === 0) return;
+
+    const rows = lines.map(line => {
+      const parts = line.split(/[,\t;]/);
+      return {
+        os: parts[0]?.trim() || '',
+        modelo: parts[1]?.trim() || '',
+        fabricante: parts[2]?.trim() || '',
+        cor: parts[3]?.trim() || '',
+        chassi: parts[4]?.trim() || '',
+        etapa: parts[5]?.trim() || '',
+        localizacao: parts[6]?.trim() || ''
+      };
+    }).filter(r => r.os !== '');
+    setImportData(rows);
+  };
+
+  const commitImport = async () => {
+    if (importData.length === 0) return;
+    const batch = writeBatch(db);
+    importData.forEach(v => {
+      const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'vehicles', v.os);
+      batch.set(docRef, v);
+    });
+    await batch.commit();
+    alert(`Sucesso! ${importData.length} veículos importados.`);
+    setShowImportModal(false);
+    setImportData([]);
+  };
+
+  const updateRequestItem = async (reqId, itemIdx, fields) => {
+    const req = requests.find(r => r.id === reqId);
+    if (!req) return;
+    const newItems = [...req.items];
+    newItems[itemIdx] = { ...newItems[itemIdx], ...fields };
+
+    // Auto status
+    let item = newItems[itemIdx];
+    if (item.price && item.supplier && item.deliveryDate) item.status = 'Em Cotação';
+    if (item.actualDeliveryDate) item.status = 'Concluído';
+
+    // Global status
+    let global = 'Concluído';
+    if (newItems.some(i => i.status === 'Pendente')) global = 'Pendente';
+    else if (newItems.some(i => i.status === 'Em Cotação')) global = 'Em Cotação';
+
+    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'requests', reqId);
+    await updateDoc(docRef, { items: newItems, status: global });
+    setEditingRequest(prev => prev?.id === reqId ? {...prev, items: newItems, status: global} : prev);
+  };
+
+  if (!loggedInUser) return <LoginView usersList={usersDB} onLogin={setLoggedInUser} />;
+
+  return (
+    <div className="h-screen flex flex-col md:flex-row bg-slate-100 overflow-hidden font-sans">
+      {/* Mobile Top Bar */}
+      <div className="md:hidden bg-black text-white p-4 flex justify-between items-center z-[100] border-b-4 border-red-600 shadow-xl shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="p-1.5 bg-red-600 rounded-lg"><ShoppingCart size={18} /></div>
+          <span className="font-black text-sm uppercase tracking-widest">VRZ</span>
+        </div>
+        <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="p-2 bg-neutral-900 rounded-xl">
+          {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
+        </button>
+      </div>
+
+      {/* Sidebar Nav */}
+      <nav className={`fixed md:relative inset-y-0 left-0 w-64 bg-black text-white p-8 flex flex-col gap-8 z-[90] transition-transform duration-300 transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} shadow-2xl shrink-0`}>
+        <div className="hidden md:flex items-center gap-4">
+          <div className="p-3 bg-red-600 rounded-2xl shadow-xl shadow-red-600/20"><ShoppingCart size={24} /></div>
+          <div>
+            <h1 className="text-sm font-black uppercase tracking-[0.2em] leading-none">VRZ COMPRAS</h1>
+            <p className="text-[7px] text-neutral-500 font-bold uppercase mt-1 tracking-widest">Varejão de Peças</p>
+          </div>
+        </div>
+
+        <div className="flex-1 space-y-2">
+          <NavItem active={view === 'request'} onClick={() => {setView('request'); setSidebarOpen(false);}} icon={Plus} label="Nova Requisição" />
+          <NavItem active={view === 'status'} onClick={() => {setView('status'); setSidebarOpen(false);}} icon={Search} label="Histórico OS" />
+          <div className="pt-8 border-t border-white/5 space-y-2">
+            <NavItem active={view === 'admin'} onClick={() => {setView('admin'); setSidebarOpen(false);}} icon={Shield} label="Gestão Admin" />
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          <div className="bg-neutral-900 p-4 rounded-3xl border border-white/5 shadow-inner">
+            <p className="text-[7px] font-black text-neutral-500 uppercase tracking-widest mb-1.5">Usuário Ativo:</p>
+            <p className="text-[11px] font-black uppercase text-red-500 truncate">{loggedInUser.user}</p>
+            <button onClick={() => {setLoggedInUser(null); setAdminAuth(false);}} className="mt-4 w-full py-2 bg-neutral-800 hover:bg-red-600 rounded-xl text-[9px] font-black uppercase transition-all">Desconectar</button>
+          </div>
+          <div className="text-center">
+            <span className="text-[8px] font-black text-red-600 animate-pulse tracking-widest uppercase">● Sistema Operacional</span>
+          </div>
+        </div>
+      </nav>
+
+      <main className="flex-1 p-6 overflow-y-auto scrollbar-hide h-full">
+        {!user ? (
+          <div className="h-full flex flex-col items-center justify-center gap-4">
+            <RefreshCw className="animate-spin text-red-600" size={48} />
+            <span className="text-xs font-black uppercase tracking-[0.5em] text-neutral-400">Sincronizando...</span>
+          </div>
+        ) : (
+          <div className="max-w-6xl mx-auto pb-12">
+            {view === 'request' && <RequestForm loggedInUser={loggedInUser} vehiclesDB={vehiclesDB} requests={requests} />}
+            {view === 'status' && <StatusView requests={requests} />}
+            {view === 'admin' && (!adminAuth ? (
+              <div className="max-w-sm mx-auto py-20 text-center space-y-8 animate-in zoom-in duration-300">
+                <div className="bg-black p-10 rounded-[3rem] border-2 border-red-600 shadow-2xl space-y-8">
+                  <Lock size={48} className="text-red-600 mx-auto" />
+                  <h2 className="text-lg font-black uppercase tracking-[0.3em] text-white">Acesso de Gestão</h2>
+                  <div className="space-y-4">
+                    <div className="relative">
+                      <input 
+                        type={showAdminPass ? "text" : "password"} 
+                        value={adminPassValue} 
+                        onChange={(e) => {setAdminPassValue(e.target.value); setAdminPassError(false);}}
+                        className={`w-full p-4 bg-neutral-900 border-2 rounded-2xl text-center font-black tracking-[1em] outline-none text-white transition-all ${adminPassError ? 'border-red-600 animate-shake' : 'border-white/10 focus:border-red-600'}`}
+                        placeholder="••••"
+                        autoFocus
+                        onKeyDown={(e) => e.key === 'Enter' && handleAdminLogin()}
+                      />
+                      <button 
+                        onClick={() => setShowAdminPass(!showAdminPass)} 
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white transition-colors"
+                      >
+                        {showAdminPass ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
+                    {adminPassError && (
+                      <p className="text-[10px] font-black text-red-500 uppercase tracking-widest animate-pulse">Senha Incorreta</p>
                     )}
+                  </div>
+                  <button onClick={handleAdminLogin} className="w-full py-4 bg-red-600 text-white rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-red-600/20 active:scale-95 transition-all">Acessar Painel</button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-8 animate-in fade-in duration-500">
+                <div className="flex flex-col md:flex-row justify-between items-end gap-6 border-b border-neutral-200 pb-6">
+                  <div>
+                    <h2 className="text-4xl font-black uppercase text-black tracking-tighter leading-none">Gestão de Compras</h2>
+                    <p className="text-[10px] font-bold text-neutral-400 mt-1 uppercase tracking-widest">Controle de cotações e base de dados</p>
+                  </div>
+                  <button onClick={() => setShowImportModal(true)} className="bg-black text-white px-8 py-4 rounded-2xl font-black uppercase text-xs flex items-center gap-3 shadow-2xl border-b-8 border-red-600 hover:bg-neutral-900 active:translate-y-1 active:border-b-0 transition-all">
+                    <FileUp size={18} /> Importar Excel
+                  </button>
+                </div>
 
-                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-3">
-                        <div><h2 className="text-2xl font-black uppercase text-black leading-none tracking-tighter">Histórico de OS</h2><p className="text-[9px] font-bold text-neutral-400 uppercase tracking-widest mt-1 italic">Gestão e Exportação Detalhada</p></div>
-                        <div className="flex gap-2"><button onClick={exportGeneralReport} className="bg-emerald-600 text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase flex items-center gap-2 shadow-lg hover:bg-emerald-700 transition-all"><Icon name="file-text" size={12}/> EXTRATIFICAR TUDO (EXCEL)</button>
-                            <div className="relative"><input type="text" placeholder="BUSCAR OS / NOME..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full md:w-56 pl-9 pr-4 py-2 bg-white border border-neutral-200 rounded-xl text-[9px] font-black uppercase outline-none focus:border-red-600 shadow-sm" /><div className="absolute left-3 top-2.5 text-neutral-300"><Icon name="search" size={12} /></div></div>
-                        </div>
+                <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
+                  {[
+                    {id: 'pending', label: 'Pendentes', color: 'orange'},
+                    {id: 'quoting', label: 'Em Cotação', color: 'blue'},
+                    {id: 'completed', label: 'Concluídos', color: 'black'},
+                    {id: 'vehicles', label: 'Base Veículos', color: 'neutral'}
+                  ].map(tab => (
+                    <button 
+                      key={tab.id}
+                      onClick={() => setAdminSubView(tab.id)}
+                      className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase whitespace-nowrap transition-all shadow-sm ${adminSubView === tab.id ? `bg-${tab.color === 'black' ? 'black' : tab.color + '-600'} text-white shadow-xl scale-105` : 'bg-white text-neutral-400 border border-neutral-200'}`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                {adminSubView === 'vehicles' ? (
+                  <div className="bg-white rounded-[2rem] border border-neutral-200 shadow-xl overflow-hidden">
+                    <div className="overflow-x-auto max-h-[60vh] scrollbar-hide">
+                      <table className="w-full text-left">
+                        <thead className="bg-neutral-100 text-[9px] font-black uppercase text-neutral-500 sticky top-0">
+                          <tr><th className="p-4 border-b">OS</th><th className="p-4 border-b">Modelo</th><th className="p-4 border-b">Fabricante</th><th className="p-4 border-b">Cor</th><th className="p-4 border-b">Chassi</th><th className="p-4 border-b">Etapa</th></tr>
+                        </thead>
+                        <tbody className="text-[10px] font-bold">
+                          {vehiclesDB.map((v, i) => (
+                            <tr key={i} className="border-b border-neutral-50 hover:bg-red-50/50">
+                              <td className="p-4 text-black">#{v.os}</td>
+                              <td className="p-4 uppercase text-neutral-600">{v.modelo}</td>
+                              <td className="p-4 uppercase text-neutral-600">{v.fabricante}</td>
+                              <td className="p-4 uppercase text-neutral-600">{v.cor}</td>
+                              <td className="p-4 font-mono text-black text-xs">{v.chassi}</td>
+                              <td className="p-4"><span className="bg-red-600 text-white px-2 py-0.5 rounded text-[8px]">{v.etapa}</span></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
-                    <div className="grid grid-cols-1 gap-3 max-h-[75vh] overflow-y-auto pr-2 scrollbar-hide">
-                        {filtered.length === 0 ? (<div className="py-20 text-center bg-white rounded-2xl border border-neutral-100 border-dashed"><Icon name="inbox" size={32} className="text-neutral-200 mx-auto mb-2" /><p className="text-[9px] font-black uppercase text-neutral-300 tracking-widest leading-none">Vazio</p></div>) : filtered.map(r => (
-                            <div key={r.id} className="bg-white rounded-2xl border border-neutral-200 p-4 shadow-sm flex flex-col lg:flex-row gap-4 hover:border-red-200 transition-all border-l-4 border-l-red-600 relative group">
-                                <div className="flex-1 space-y-3 min-w-0">
-                                    <div className="flex items-center justify-between"><div className="flex items-center gap-3"><span className="text-sm font-black uppercase">OS #{r.os}</span></div><div className="flex gap-2"><button onClick={() => exportPDF(r)} className="px-3 py-1.5 bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-2 text-[9px] font-black uppercase shadow-sm"><Icon name="file-down" size={12}/> <span>Exportar PDF</span></button><button onClick={() => setRequestToDelete(r.id)} className="px-3 py-1.5 bg-red-600 text-white hover:bg-red-700 rounded-lg transition-colors flex items-center gap-2 text-[9px] font-black uppercase shadow-sm"><Icon name="trash-2" size={12}/> <span>Excluir</span></button></div></div>
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[8px] font-black uppercase tracking-wider text-neutral-400"><div className="min-w-0"><span className="text-red-600 block mb-0.5">Solicitante</span><span className="text-black">{r.responsavel}</span></div><div className="min-w-0"><span>Veículo</span><span className="text-black">{r.vehicleData?.modelo}</span></div><div className="min-w-0"><span>Setor</span><span className="text-black">{r.localizacaoSolicitacao}</span></div><div className="min-w-0"><span>Data</span><span className="text-black">{new Date(r.timestamp).toLocaleDateString()}</span></div></div>
-                                    <div className="flex gap-2 overflow-x-auto scrollbar-hide py-1">
-                                        {r.items?.map((it, idx) => (
-                                            <div key={idx} className="flex-shrink-0 flex items-center gap-2 bg-neutral-50 p-1.5 rounded-lg border border-neutral-100 min-w-[140px] shadow-inner">
-                                                {it.photo && <img src={it.photo} className="w-8 h-8 rounded-md object-cover border" />}
-                                                <div className="min-w-0 flex-1"><p className="text-[8px] font-black uppercase leading-tight truncate text-neutral-800">{it.description}</p><div className="flex justify-between items-center mt-1"><span className="text-[7px] text-red-600 font-bold">QTD: {it.quantity}</span><StatusBadge status={it.status || 'Pendente'} /></div></div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4">
+                    {requests.filter(r => {
+                      if (adminSubView === 'pending') return r.items?.some(it => it.status === 'Pendente');
+                      if (adminSubView === 'quoting') return r.items?.some(it => it.status === 'Em Cotação');
+                      if (adminSubView === 'completed') return r.items?.every(it => it.status === 'Concluído');
+                      return true;
+                    }).map(req => (
+                      <div key={req.id} className="bg-white p-6 rounded-[2rem] border border-neutral-200 shadow-sm flex items-center justify-between gap-6 border-l-[10px] border-l-red-600">
+                        <div className="flex flex-1 gap-12 items-center min-w-0">
+                          <div className="text-center shrink-0">
+                            <p className="text-[8px] font-black text-neutral-400 uppercase">Ordem</p>
+                            <p className="text-2xl font-black uppercase tracking-tighter text-black">#{req.os}</p>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[8px] font-black text-neutral-400 uppercase mb-2">Itens Solicitados</p>
+                            <div className="flex gap-2 flex-wrap">
+                              {req.items?.map((it, idx) => (
+                                <span key={idx} className={`text-[8px] px-3 py-1 rounded-full font-black uppercase ${it.status === 'Concluído' ? 'bg-black text-white' : it.status === 'Em Cotação' ? 'bg-blue-600 text-white' : 'bg-orange-500 text-white'}`}>
+                                  {it.description}
+                                </span>
+                              ))}
                             </div>
+                          </div>
+                        </div>
+                        <button onClick={() => setEditingRequest(req)} className="bg-black text-white px-6 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl border-b-4 border-red-600 hover:bg-neutral-900 transition-all">Gerenciar</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </main>
+
+      {/* Modal de Importação */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-[300] bg-black/95 flex items-center justify-center p-8">
+          <div className="bg-white w-full max-w-6xl h-full rounded-[3rem] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in duration-300">
+            <header className="p-8 bg-black text-white flex justify-between items-center border-b-8 border-red-600">
+              <div>
+                <h3 className="text-2xl font-black uppercase tracking-tighter leading-none">Importador Inteligente</h3>
+                <p className="text-neutral-500 text-[10px] font-bold mt-1 uppercase italic">Cole seus dados do Excel diretamente abaixo</p>
+              </div>
+              <button onClick={() => { setShowImportModal(false); setImportData([]); }} className="p-3 bg-neutral-900 rounded-2xl hover:bg-red-600 transition-all">
+                <X size={24} />
+              </button>
+            </header>
+            <div className="flex-1 overflow-hidden flex flex-col p-8 gap-8">
+              {importData.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center border-8 border-dashed border-neutral-50 rounded-[3rem] bg-neutral-50/50 space-y-8 relative group cursor-pointer hover:bg-white transition-all">
+                  <div className="p-8 bg-white rounded-full shadow-2xl text-neutral-200 group-hover:text-red-600 transition-all">
+                    <FileUp size={64} />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-lg font-black uppercase text-neutral-400">Sistema pronto para ler Excel</p>
+                    <p className="text-xs font-bold uppercase text-neutral-300 mt-2">Clique aqui e use CTRL+V com sua planilha</p>
+                  </div>
+                  <textarea onPaste={handlePasteImport} className="absolute inset-0 opacity-0 cursor-pointer" autoFocus />
+                </div>
+              ) : (
+                <div className="flex-1 overflow-hidden flex flex-col gap-6">
+                  <div className="overflow-auto border-2 border-neutral-100 rounded-[2rem] bg-white flex-1 scrollbar-hide shadow-inner">
+                    <table className="w-full text-left">
+                      <thead className="bg-neutral-50 text-[10px] font-black uppercase sticky top-0 z-10 border-b-2 border-neutral-100">
+                        <tr><th className="p-4">OS</th><th className="p-4">Modelo</th><th className="p-4">Fabricante</th><th className="p-4">Cor</th><th className="p-4">Chassi</th><th className="p-4">Etapa</th><th className="p-4">Localização</th></tr>
+                      </thead>
+                      <tbody>
+                        {importData.map((row, rIdx) => (
+                          <tr key={rIdx} className="border-b border-neutral-50 text-[10px] font-bold uppercase hover:bg-red-50">
+                            <td className="p-4 text-red-600">#{row.os}</td>
+                            <td className="p-4">{row.modelo}</td>
+                            <td className="p-4">{row.fabricante}</td>
+                            <td className="p-4">{row.cor}</td>
+                            <td className="p-4 font-mono text-neutral-400">{row.chassi}</td>
+                            <td className="p-4">{row.etapa}</td>
+                            <td className="p-4">{row.localizacao}</td>
+                          </tr>
                         ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="flex justify-between items-center p-4 bg-neutral-900 rounded-[2rem] text-white">
+                    <p className="text-xs font-black uppercase tracking-widest ml-4">{importData.length} Veículos identificados</p>
+                    <div className="flex gap-4">
+                      <button onClick={() => setImportData([])} className="px-8 py-3 bg-neutral-800 text-neutral-400 rounded-xl font-black uppercase text-[10px] hover:text-white">Limpar</button>
+                      <button onClick={commitImport} className="px-12 py-3 bg-red-600 text-white rounded-xl font-black uppercase text-[10px] shadow-2xl hover:bg-red-700">Confirmar Importação</button>
                     </div>
+                  </div>
                 </div>
-            );
-        }
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
-        function UserManagement({ users, onAddUser, onDeleteUser, onToggleStatus }) {
-            const [newUser, setNewUser] = useState('');
-            const [newPass, setNewPass] = useState('');
-            const [showNewPass, setShowNewPass] = useState(false);
-
-            const handleAdd = () => {
-                if (!newUser || !newPass) return alert("Preencha todos os campos para criar o usuário.");
-                onAddUser(newUser, newPass);
-                setNewUser('');
-                setNewPass('');
-            };
-
-            return (
-                <div className="space-y-6 fade-in max-w-2xl mx-auto">
-                    <div className="bg-white p-6 rounded-3xl border border-neutral-200 shadow-sm space-y-4">
-                        <h3 className="text-xs font-black uppercase tracking-widest text-red-600">Cadastrar Novo Acesso</h3>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1">Nome de Usuário</label>
-                                <input type="text" value={newUser} onChange={(e) => setNewUser(e.target.value)} className="w-full px-4 py-2.5 bg-neutral-50 border rounded-xl font-bold text-xs outline-none focus:border-red-600" placeholder="Nome.Sobrenome" />
-                            </div>
-                            <div>
-                                <label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1">Senha de Acesso</label>
-                                <div className="relative">
-                                    <input 
-                                        type={showNewPass ? "text" : "password"} 
-                                        value={newPass} 
-                                        onChange={(e) => setNewPass(e.target.value)} 
-                                        className="w-full pl-4 pr-10 py-2.5 bg-neutral-50 border rounded-xl font-bold text-xs outline-none focus:border-red-600" 
-                                        placeholder="Senha" 
-                                    />
-                                    <button 
-                                        type="button" 
-                                        onClick={() => setShowNewPass(!showNewPass)}
-                                        className="absolute right-3 top-2.5 text-neutral-400 hover:text-red-600"
-                                        title="Ver senha"
-                                    >
-                                        <Icon name={showNewPass ? "eye-off" : "eye"} size={14} />
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        <button onClick={handleAdd} className="w-full py-3 bg-red-600 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg hover:bg-red-700 transition-all">+ CRIAR CONTA</button>
+      {/* Modal de Gestão (Edição de Itens) */}
+      {editingRequest && (
+        <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-xl flex items-center justify-center p-8 overflow-y-auto">
+          <div className="bg-white w-full max-w-6xl rounded-[3rem] shadow-2xl flex flex-col my-auto border-b-[15px] border-red-600 overflow-hidden">
+            <header className="px-10 py-8 bg-black text-white flex justify-between items-center">
+              <div>
+                <h3 className="text-2xl font-black uppercase tracking-tighter leading-none">Cotação OS #{editingRequest.os}</h3>
+                <p className="text-red-600 text-[10px] font-black uppercase mt-1 tracking-[0.2em]">{editingRequest.vehicleData?.modelo}</p>
+              </div>
+              <button onClick={() => setEditingRequest(null)} className="p-4 bg-neutral-900 hover:bg-red-600 rounded-3xl transition-all">
+                <X size={28} />
+              </button>
+            </header>
+            <div className="p-10 overflow-y-auto max-h-[65vh] space-y-6 scrollbar-hide bg-neutral-50">
+              {editingRequest.items?.map((it, idx) => (
+                <div key={idx} className="bg-white p-8 rounded-[2.5rem] border-2 border-neutral-100 shadow-sm grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
+                  <div className="md:col-span-3 flex items-center gap-4">
+                    {it.photo && <img src={it.photo} className="w-16 h-16 rounded-2xl object-cover border-4 border-neutral-50 shadow-md" />}
+                    <div className="min-w-0">
+                      <p className="text-xs font-black uppercase leading-tight text-black">{it.description}</p>
+                      <div className="flex items-center gap-3 mt-1.5">
+                        <span className="text-[9px] text-neutral-400 font-black">QTD: {it.quantity}</span>
+                        <StatusBadge status={it.status || 'Pendente'} />
+                      </div>
                     </div>
-
-                    <div className="bg-white rounded-3xl border border-neutral-200 shadow-sm overflow-hidden">
-                        <table className="w-full text-left">
-                            <thead className="bg-neutral-50 border-b">
-                                <tr>
-                                    <th className="p-4 text-[9px] font-black uppercase text-neutral-400">Usuário do Sistema</th>
-                                    <th className="p-4 text-[9px] font-black uppercase text-neutral-400">Status</th>
-                                    <th className="p-4 text-[9px] font-black uppercase text-neutral-400 text-right">Ação</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-neutral-50">
-                                {users.map((u, i) => (
-                                    <tr key={i} className="hover:bg-neutral-50/50">
-                                        <td className="p-4 text-xs font-bold text-black uppercase">{u.user}</td>
-                                        <td className="p-4">
-                                            <button 
-                                                onClick={() => onToggleStatus(u)}
-                                                className={`text-[7px] font-black uppercase px-2 py-1 rounded-full transition-all border ${u.active !== false ? 'bg-emerald-100 text-emerald-600 border-emerald-200 hover:bg-red-100 hover:text-red-600 hover:border-red-200' : 'bg-red-100 text-red-600 border-red-200 hover:bg-emerald-100 hover:text-emerald-600 hover:border-emerald-200'}`}
-                                            >
-                                                {u.active !== false ? 'Ativo' : 'Desativado'}
-                                            </button>
-                                        </td>
-                                        <td className="p-4 text-right">
-                                            <button 
-                                                onClick={() => onDeleteUser(u.id || u.user)} 
-                                                className="text-white bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-colors flex items-center gap-1.5 ml-auto"
-                                            >
-                                                <Icon name="trash-2" size={12} />
-                                                EXCLUIR
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                  </div>
+                  <div className="md:col-span-9 grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[7px] font-black uppercase text-neutral-400 ml-2">Valor Total R$</label>
+                      <input 
+                        type="number" 
+                        value={it.price || ''} 
+                        onChange={(e) => updateRequestItem(editingRequest.id, idx, { price: e.target.value })} 
+                        className="w-full bg-neutral-50 border-2 border-neutral-100 rounded-2xl p-3 text-[11px] font-black outline-none focus:border-red-600 transition-all" 
+                        placeholder="0.00" 
+                      />
                     </div>
+                    <div className="space-y-1">
+                      <label className="text-[7px] font-black uppercase text-neutral-400 ml-2">Loja / Fornecedor</label>
+                      <input 
+                        type="text" 
+                        value={it.supplier || ''} 
+                        onChange={(e) => updateRequestItem(editingRequest.id, idx, { supplier: e.target.value })} 
+                        className="w-full bg-neutral-50 border-2 border-neutral-100 rounded-2xl p-3 text-[11px] font-black uppercase outline-none focus:border-red-600 transition-all" 
+                        placeholder="NOME DA LOJA" 
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[7px] font-black uppercase text-neutral-400 ml-2">Prazo Entrega</label>
+                      <input 
+                        type="date" 
+                        value={it.deliveryDate || ''} 
+                        onChange={(e) => updateRequestItem(editingRequest.id, idx, { deliveryDate: e.target.value })} 
+                        className="w-full bg-neutral-50 border-2 border-neutral-100 rounded-2xl p-3 text-[11px] font-black outline-none focus:border-red-600 transition-all" 
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[7px] font-black uppercase text-red-600 ml-2">Chegada Real</label>
+                      <input 
+                        type="date" 
+                        value={it.actualDeliveryDate || ''} 
+                        onChange={(e) => updateRequestItem(editingRequest.id, idx, { actualDeliveryDate: e.target.value })} 
+                        className="w-full bg-red-50 border-2 border-red-100 rounded-2xl p-3 text-[11px] font-black outline-none focus:border-red-600 transition-all" 
+                      />
+                    </div>
+                  </div>
                 </div>
-            );
-        }
-
-        function App() {
-            const [user, setUser] = useState(null);
-            const [loggedInUser, setLoggedInUser] = useState(null);
-            const [view, setView] = useState('request');
-            const [requests, setRequests] = useState([]);
-            const [vehiclesDB, setVehiclesDB] = useState([]);
-            const [usersDB, setUsersDB] = useState([]);
-            const [adminAuth, setAdminAuth] = useState(false);
-            const [adminPassError, setAdminPassError] = useState(false);
-            const [adminPassValue, setAdminPassValue] = useState('');
-            const [showAdminPass, setShowAdminPass] = useState(false);
-            const [editingRequest, setEditingRequest] = useState(null);
-            const [isSidebarOpen, setSidebarOpen] = useState(false);
-            const [adminSubView, setAdminSubView] = useState('pending');
-            const [importData, setImportData] = useState([]);
-            const [showImportModal, setShowImportModal] = useState(false);
-
-            useEffect(() => { 
-                const unsubAuth = auth.onAuthStateChanged((u) => { 
-                    if (u) setUser(u); 
-                    else auth.signInAnonymously(); 
-                }); 
-                return () => unsubAuth(); 
-            }, []);
-
-            useEffect(() => {
-                if (!user) return;
-                const unsubReq = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('requests').onSnapshot((s) => { setRequests(s.docs.map(d => ({id: d.id, ...d.data()}))); }, (e) => {});
-                const unsubVeh = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('vehicles').onSnapshot((s) => { setVehiclesDB(s.docs.map(d => d.data())); }, (e) => {});
-                const unsubUsers = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('users').onSnapshot((s) => {
-                    const dbUsers = s.docs.map(d => ({id: d.id, ...d.data()}));
-                    const combined = [...dbUsers];
-                    INITIAL_USERS.forEach(iu => {
-                        if (!dbUsers.find(du => du.user.toLowerCase() === iu.user.toLowerCase())) {
-                            combined.push(iu);
-                        }
-                    });
-                    setUsersDB(combined);
-                }, (e) => {});
-                return () => { unsubReq(); unsubVeh(); unsubUsers(); };
-            }, [user]);
-
-            const handleAddUser = async (u, p) => {
-                try {
-                    await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('users').add({ user: u, pass: p, active: true });
-                } catch(e) { alert("Erro ao salvar usuário no servidor."); }
-            };
-
-            const handleDeleteUser = async (id) => {
-                if(!window.confirm("Deseja remover permanentemente o acesso deste usuário?")) return;
-                try {
-                    if(id && id.length > 15) {
-                        await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('users').doc(id).delete();
-                    } else {
-                        setUsersDB(prev => prev.filter(u => u.user !== id));
-                    }
-                } catch(e) { setUsersDB(prev => prev.filter(u => u.id !== id && u.user !== id)); }
-            };
-
-            const handleToggleUserStatus = async (userObj) => {
-                const currentStatus = userObj.active !== false;
-                const newStatus = !currentStatus;
-                try {
-                    if(userObj.id) {
-                        await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('users').doc(userObj.id).update({ active: newStatus });
-                    } else {
-                        await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('users').add({ ...userObj, active: newStatus });
-                    }
-                } catch(e) { alert("Erro ao atualizar status do usuário."); }
-            };
-
-            const handleLoginSuccess = (userObj) => { setLoggedInUser(userObj); };
-            const handleLogout = () => { setLoggedInUser(null); setAdminAuth(false); setView('request'); setAdminPassValue(''); };
-
-            const handlePaste = (e) => {
-                const text = e.clipboardData.getData('text');
-                const lines = text.split(/\r?\n/).filter(l => l.trim() !== ''); if (lines.length === 0) return;
-                const firstLine = lines[0].split(/[,\t]/); const headers = firstLine.map(h => h.trim().toUpperCase());
-                const findIndex = (targets) => headers.findIndex(h => targets.some(t => h.includes(t)));
-                const idxOS = findIndex(['OS']); const idxMod = findIndex(['MODELO']); const idxFab = findIndex(['FABRICANTE', 'MARCA']);
-                const idxCor = findIndex(['COR']); const idxCha = findIndex(['CHASSI']); const idxEta = findIndex(['ETAPA']); const idxLoc = findIndex(['LOCALIZA']);
-                const rowsToParse = (idxOS !== -1) ? lines.slice(1) : lines;
-                const parsed = rowsToParse.map(l => {
-                    const v = l.split(/[,\t]/);
-                    return { os: (idxOS !== -1 ? v[idxOS] : v[0])?.trim() || '', modelo: (idxMod !== -1 ? v[idxMod] : v[1])?.trim() || '', fabricante: (idxFab !== -1 ? v[idxFab] : v[2])?.trim() || '', cor: (idxCor !== -1 ? v[idxCor] : v[3])?.trim() || '', chassi: (idxCha !== -1 ? v[idxCha] : v[4])?.trim() || '', etapa: (idxEta !== -1 ? v[idxEta] : v[5])?.trim() || '', localizacao: (idxLoc !== -1 ? v[idxLoc] : v[6])?.trim() || '' };
-                }).filter(r => r.os !== '');
-                setImportData(parsed);
-            };
-
-            const commitImport = async () => {
-                if (importData.length === 0) return;
-                const batch = db.batch();
-                importData.forEach(v => { const vRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('vehicles').doc(v.os); batch.set(vRef, v); });
-                await batch.commit(); alert(`Sucesso! ${importData.length} veiculos importados.`);
-                setImportData([]); setShowImportModal(false);
-            };
-
-            const updateItemInRequest = async (requestId, itemIndex, updatedItemFields) => {
-                const req = requests.find(r => r.id === requestId);
-                if (!req) return;
-                const newItems = [...req.items];
-                const item = { ...newItems[itemIndex], ...updatedItemFields };
-                if (item.price && item.supplier && item.deliveryDate && (!item.actualDeliveryDate)) item.status = 'Em Cotação';
-                if (item.actualDeliveryDate) item.status = 'Concluído';
-                newItems[itemIndex] = item;
-                let globalStatus = 'Concluído';
-                if (newItems.some(it => it.status === 'Pendente')) globalStatus = 'Pendente';
-                else if (newItems.some(it => it.status === 'Em Cotação')) globalStatus = 'Em Cotação';
-                setEditingRequest(prev => {
-                    if (!prev || prev.id !== requestId) return prev;
-                    return { ...prev, items: newItems };
-                });
-                try { await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('requests').doc(requestId).update({ items: newItems, status: globalStatus }); } catch (e) {}
-            };
-
-            if (!loggedInUser) return <LoginView usersList={usersDB} onLogin={handleLoginSuccess} />;
-
-            return (
-                <div className="h-screen flex flex-col md:flex-row bg-slate-100 overflow-hidden">
-                    <div className="md:hidden bg-black text-white p-3 flex justify-between items-center z-[100] border-b-2 border-red-600 shadow-xl shrink-0">
-                        <div className="flex items-center gap-2"><div className="p-1 bg-red-600 rounded-lg"><Icon name="shopping-cart" size={16} /></div><span className="font-black text-sm uppercase tracking-tighter">VRZ</span></div>
-                        <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="p-2 bg-neutral-900 rounded-xl"><Icon name={isSidebarOpen ? "x" : "menu"} size={20} /></button>
-                    </div>
-                    
-                    <nav className={`fixed md:relative inset-y-0 left-0 w-52 bg-black text-white p-6 flex flex-col gap-6 z-[90] sidebar-transition transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} shadow-2xl shrink-0`}>
-                        <div className="hidden md:flex items-center gap-4">
-                            <div className="p-2 bg-red-600 rounded-xl shadow-lg shadow-red-600/30"><Icon name="shopping-cart" size={20} /></div>
-                            <h1 className="text-sm font-black uppercase tracking-widest leading-none">VRZ COMPRAS</h1>
-                        </div>
-                        
-                        <div className="flex-1 space-y-1">
-                            <NavItem active={view === 'request'} onClick={() => { setView('request'); setSidebarOpen(false); }} iconName="plus" label="Nova Peça" />
-                            <NavItem active={view === 'status'} onClick={() => { setView('status'); setSidebarOpen(false); }} iconName="search" label="Histórico de OS" />
-                            <div className="pt-6 border-t border-white/5 space-y-1">
-                                <NavItem active={view === 'admin'} onClick={() => { setView('admin'); setSidebarOpen(false); }} iconName="shield" label="Gestão Admin" />
-                            </div>
-                        </div>
-
-                        <div className="space-y-4">
-                            <div className="bg-neutral-900/60 p-3 rounded-xl border border-white/5">
-                                <p className="text-[7px] font-black text-neutral-500 uppercase tracking-widest mb-1">Logado como:</p>
-                                <p className="text-[10px] font-black uppercase text-red-500 truncate">{loggedInUser.user}</p>
-                                <button onClick={handleLogout} className="mt-2 w-full py-1.5 bg-neutral-800 hover:bg-red-600 rounded-lg text-[8px] font-black uppercase transition-colors">Sair do Portal</button>
-                            </div>
-                            <div className="text-center">
-                                <div className={`text-[8px] font-black tracking-widest ${user ? 'text-red-600' : 'text-neutral-500'}`}>● {user ? 'SISTEMA ONLINE' : 'RECONECTANDO...'}</div>
-                            </div>
-                        </div>
-                    </nav>
-
-                    <main className="flex-1 p-4 md:p-6 overflow-y-auto scrollbar-hide h-full min-w-0">
-                        {!user ? (
-                            <div className="h-full flex flex-col items-center justify-center font-black animate-pulse text-neutral-400 gap-4"><Icon name="loader" size={32} className="animate-spin text-red-600" /><span className="text-[10px] uppercase tracking-[0.3em]">Sincronizando Sistema...</span></div>
-                        ) : (
-                            <div className="max-w-6xl mx-auto">
-                                {view === 'request' && <RequestForm user={user} loggedInUser={loggedInUser} vehiclesDB={vehiclesDB} />}
-                                {view === 'status' && <StatusView requests={requests} />}
-                                {view === 'admin' && (!adminAuth ? (
-                                    <div className="max-w-xs mx-auto py-12 fade-in">
-                                        <div className="bg-black p-8 rounded-3xl text-center text-white border-2 border-red-600 shadow-2xl">
-                                            <Icon name="lock" size={32} className="text-red-600 mx-auto mb-6" />
-                                            <h2 className="text-sm font-black uppercase mb-8 tracking-[0.2em]">Área de Gestão</h2>
-                                            <div className="relative mb-4">
-                                                <input 
-                                                    type={showAdminPass ? "text" : "password"} 
-                                                    value={adminPassValue}
-                                                    onChange={(e) => { setAdminPassValue(e.target.value); setAdminPassError(false); }}
-                                                    autoFocus 
-                                                    onKeyDown={(e) => { 
-                                                        if(e.key === 'Enter') {
-                                                            if(adminPassValue === 'VRZ2024') {
-                                                                setAdminAuth(true);
-                                                                setAdminPassError(false);
-                                                            } else {
-                                                                setAdminPassError(true);
-                                                                setAdminPassValue('');
-                                                            }
-                                                        }
-                                                    }} 
-                                                    className={`w-full p-4 bg-neutral-900 border border-white/10 rounded-xl outline-none text-center tracking-[1em] font-black transition-all ${adminPassError ? 'border-red-600 animate-shake' : 'focus:border-red-600 shadow-inner'}`} 
-                                                    placeholder="••••" 
-                                                />
-                                                <button 
-                                                    type="button" 
-                                                    onClick={() => setShowAdminPass(!showAdminPass)}
-                                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-white hover:text-red-600 transition-colors z-10"
-                                                    title="Conferir senha"
-                                                >
-                                                    <Icon name={showAdminPass ? "eye-off" : "eye"} size={20} />
-                                                </button>
-                                            </div>
-                                            {adminPassError && <p className="text-red-500 text-[10px] font-black uppercase mt-4 animate-pulse">Senha Admin Incorreta!</p>}
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-6 fade-in pb-10">
-                                        <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-neutral-200 pb-4 gap-4">
-                                            <div><h2 className="text-3xl font-black uppercase text-black tracking-tighter leading-none">Gestão de Compras</h2><p className="text-[9px] font-bold text-neutral-400 mt-1 uppercase tracking-widest">Protocolos e Base de Dados</p></div>
-                                            <button onClick={() => setShowImportModal(true)} className="bg-black text-white px-5 py-2.5 rounded-xl font-black uppercase text-[10px] border-b-4 border-red-600 flex items-center gap-2 hover:bg-neutral-900 shadow-xl shrink-0"><Icon name="file-up" size={14} /> Importar Planilha</button>
-                                        </div>
-                                        <div className="flex gap-2 bg-white p-1 rounded-xl border border-neutral-200 w-fit overflow-x-auto scrollbar-hide shrink-0">
-                                            <button onClick={() => setAdminSubView('pending')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase whitespace-nowrap transition-all ${adminSubView === 'pending' ? 'bg-orange-500 text-white shadow-md' : 'text-neutral-400'}`}>Pendentes ({requests.filter(r => r.items?.some(it => it.status === 'Pendente')).length})</button>
-                                            <button onClick={() => setAdminSubView('quoting')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase whitespace-nowrap transition-all ${adminSubView === 'quoting' ? 'bg-blue-600 text-white shadow-md' : 'text-neutral-400'}`}>Em Cotação ({requests.filter(r => r.items?.some(it => it.status === 'Em Cotação')).length})</button>
-                                            <button onClick={() => setAdminSubView('completed')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase whitespace-nowrap transition-all ${adminSubView === 'completed' ? 'bg-black text-white shadow-md' : 'text-neutral-400'}`}>Concluídos ({requests.filter(r => r.items?.every(it => it.status === 'Concluído')).length})</button>
-                                            <button onClick={() => setAdminSubView('vehicles')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase whitespace-nowrap transition-all ${adminSubView === 'vehicles' ? 'bg-neutral-800 text-white shadow-md' : 'text-neutral-400'}`}>Base Veículos ({vehiclesDB.length})</button>
-                                            <button onClick={() => setAdminSubView('users')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase whitespace-nowrap transition-all ${adminSubView === 'users' ? 'bg-red-600 text-white shadow-md' : 'text-neutral-400'}`}>Usuários</button>
-                                        </div>
-                                        <div>
-                                            {adminSubView === 'users' && <UserManagement users={usersDB} onAddUser={handleAddUser} onDeleteUser={handleDeleteUser} onToggleStatus={handleToggleUserStatus} />}
-                                            {adminSubView === 'vehicles' && (
-                                                <div className="bg-white rounded-2xl border border-neutral-200 shadow-sm overflow-hidden fade-in">
-                                                    <div className="overflow-x-auto max-h-[60vh] scrollbar-hide">
-                                                        <table className="w-full text-left border-collapse min-w-[1000px]">
-                                                            <thead className="bg-neutral-100 text-[10px] font-black uppercase text-neutral-500 sticky top-0"><tr><th className="p-3 border-b">OS</th><th className="p-3 border-b">Modelo</th><th className="p-3 border-b">Fabricante</th><th className="p-3 border-b">Cor</th><th className="p-3 border-b">Chassi</th><th className="p-3 border-b">Etapa</th><th className="p-3 border-b">Localização</th></tr></thead>
-                                                            <tbody className="text-[10px] font-medium text-neutral-700">
-                                                                {vehiclesDB.length === 0 ? (<tr><td colSpan="7" className="p-10 text-center text-neutral-300 font-black uppercase tracking-widest leading-none">Vazio</td></tr>) : vehiclesDB.map((v, i) => (
-                                                                    <tr key={i} className="border-b border-neutral-50 hover:bg-slate-50 transition-colors">
-                                                                        <td className="p-3 font-black text-black">#{v.os}</td>
-                                                                        <td className="p-3 uppercase font-bold text-neutral-800">{v.modelo}</td>
-                                                                        <td className="p-3 uppercase">{v.fabricante}</td>
-                                                                        <td className="p-3 uppercase">{v.cor}</td>
-                                                                        <td className="p-3 font-mono text-black text-[10px] font-black tracking-widest bg-neutral-50/50">{v.chassi}</td>
-                                                                        <td className="p-3"><span className="bg-red-50 text-red-600 px-2 py-0.5 rounded font-black uppercase text-[8px]">{v.etapa}</span></td>
-                                                                        <td className="p-3 uppercase">{v.localizacao}</td>
-                                                                    </tr>
-                                                                ))}
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
-                                                </div>
-                                            )}
-                                            {(adminSubView === 'pending' || adminSubView === 'quoting' || adminSubView === 'completed') && (
-                                                <div className="grid grid-cols-1 gap-3 fade-in">
-                                                    {requests.filter(r => { 
-                                                        if (adminSubView === 'pending') return r.items?.some(it => it.status === 'Pendente'); 
-                                                        if (adminSubView === 'quoting') return r.items?.some(it => it.status === 'Em Cotação'); 
-                                                        if (adminSubView === 'completed') return r.items?.every(it => it.status === 'Concluído'); 
-                                                        return true; 
-                                                    }).map(req => (
-                                                        <div key={req.id} className={`bg-white p-4 rounded-2xl border border-neutral-200 shadow-sm flex items-center justify-between gap-4 border-l-4 ${adminSubView === 'pending' ? 'border-l-orange-500' : adminSubView === 'quoting' ? 'border-l-blue-600' : 'border-l-black'}`}>
-                                                            <div className="flex flex-1 gap-8 items-center min-w-0">
-                                                                <div className="text-center shrink-0"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">OS</p><p className="text-base font-black uppercase tracking-tighter">#{req.os}</p></div>
-                                                                <div className="min-w-0 flex-1">
-                                                                    <p className="text-[7px] font-black text-neutral-400 uppercase leading-none mb-1">Itens a Gerenciar</p>
-                                                                    <div className="flex gap-2 flex-wrap">
-                                                                        {req.items?.map((it, idx) => (<span key={idx} className={`text-[8px] px-2 py-0.5 rounded-full font-black uppercase ${it.status === 'Concluído' ? 'bg-black text-white' : it.status === 'Em Cotação' ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>{it.description}</span>))}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                            <button onClick={() => setEditingRequest(req)} className="bg-black text-white px-5 py-2.5 rounded-lg font-black uppercase text-[9px] tracking-widest border-b-4 border-red-600 shadow-lg hover:bg-neutral-900 shrink-0">Gerenciar</button>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </main>
-
-                    {showImportModal && (
-                        <div className="fixed inset-0 z-[300] bg-black/95 flex items-center justify-center p-4">
-                            <div className="bg-white w-full max-w-6xl h-[85vh] rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden border-4 border-white/10">
-                                <header className="p-6 bg-black text-white flex justify-between items-center border-b-8 border-red-600">
-                                    <div><h3 className="text-2xl font-black uppercase tracking-tighter leading-none">Simulador VRZ</h3><p className="text-neutral-500 text-[10px] font-bold mt-1 uppercase italic">COLE OS DADOS DO EXCEL AQUI (CTRL+V)</p></div>
-                                    <button onClick={() => { setShowImportModal(false); setImportData([]); }} className="p-3 bg-neutral-900 rounded-2xl"><Icon name="x" size={24} /></button>
-                                </header>
-                                <div className="flex-1 overflow-hidden flex flex-col p-6 gap-6">
-                                    {importData.length === 0 ? (
-                                        <div className="flex-1 flex flex-col items-center justify-center border-4 border-dashed border-neutral-100 rounded-[2rem] bg-neutral-50 space-y-6 relative">
-                                            <Icon name="file-spreadsheet" size={60} className="text-neutral-200" />
-                                            <div className="text-center"><p className="text-sm font-black uppercase text-neutral-400">Pronto para importar</p><p className="text-[10px] font-bold uppercase text-neutral-300">Selecione dados no Excel e use CTRL+V aqui</p></div>
-                                            <textarea onPaste={handlePaste} className="absolute inset-0 opacity-0 cursor-pointer" autoFocus />
-                                        </div>
-                                    ) : (
-                                        <div className="flex-1 overflow-hidden flex flex-col">
-                                            <div className="overflow-auto border rounded-2xl bg-neutral-50 flex-1 scrollbar-hide">
-                                                <table className="w-full text-left border-collapse min-w-[1000px]">
-                                                    <thead className="bg-neutral-200 text-[9px] font-black uppercase sticky top-0 z-10">
-                                                        <tr><th className="p-3 border">OS</th><th className="p-3 border">Modelo</th><th className="p-3 border">Fabricante</th><th className="p-3 border">Cor</th><th className="p-3 border">Chassi</th><th className="p-3 border">Etapa</th><th className="p-3 border">Localização</th></tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {importData.map((row, rIdx) => (
-                                                            <tr key={rIdx} className="bg-white border-b hover:bg-red-50 transition-colors">
-                                                                {['os', 'modelo', 'fabricante', 'cor', 'chassi', 'etapa', 'localizacao'].map(key => (
-                                                                    <td key={key} className="border p-0"><input className="excel-input" value={row[key]} onChange={(e) => { const newData = [...importData]; newData[rIdx][key] = e.target.value; setImportData(newData); }} /></td>
-                                                                ))}
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                            <div className="pt-6 flex justify-between items-center">
-                                                <p className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">{importData.length} registros prontos</p>
-                                                <div className="flex gap-4"><button onClick={() => setImportData([])} className="px-8 py-3 bg-neutral-100 text-neutral-500 rounded-xl font-black text-[10px]">LIMPAR</button><button onClick={commitImport} className="px-10 py-3 bg-red-600 text-white rounded-xl font-black text-[10px] shadow-xl">SINCRONIZAR</button></div>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {editingRequest && (
-                        <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-                            <div className="bg-white w-full max-w-6xl rounded-[2.5rem] shadow-2xl flex flex-col my-auto border-b-[12px] border-red-600">
-                                <header className="px-8 py-6 bg-black text-white flex justify-between items-center shrink-0">
-                                    <div className="min-w-0"><h3 className="text-xl font-black uppercase truncate leading-none">Gerenciamento OS #{editingRequest.os}</h3><p className="text-red-500 text-[8px] font-black uppercase truncate mt-1">{editingRequest.vehicleData?.modelo}</p></div>
-                                    <button onClick={() => setEditingRequest(null)} className="p-3 bg-neutral-900 hover:bg-neutral-800 rounded-2xl shrink-0"><Icon name="x" size={24} /></button>
-                                </header>
-                                <div className="p-6 overflow-y-auto max-h-[70vh] space-y-6 scrollbar-hide">
-                                    <div className="grid grid-cols-1 gap-4">
-                                        {editingRequest.items?.map((it, idx) => (
-                                            <div key={idx} className="bg-neutral-50 p-5 rounded-2xl border-2 border-neutral-100 grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
-                                                <div className="md:col-span-3 flex items-center gap-3 min-w-0">{it.photo && <img src={it.photo} className="w-12 h-12 rounded-xl object-cover border" />}<div className="min-w-0 flex-1"><p className="text-[10px] font-black uppercase leading-tight truncate">{it.description}</p><div className="flex items-center gap-2 mt-1"><span className="text-[8px] text-neutral-400 font-bold uppercase">QTD: {it.quantity}</span><StatusBadge status={it.status || 'Pendente'} /></div></div></div>
-                                                <div className="md:col-span-9 grid grid-cols-2 lg:grid-cols-4 gap-3">
-                                                    <div className="space-y-1"><label className="text-[7px] font-black uppercase text-neutral-500 ml-1">Valor Total</label><input type="number" step="0.01" value={it.price || ''} onChange={(e) => updateItemInRequest(editingRequest.id, idx, { price: e.target.value })} className="w-full bg-white border border-neutral-200 rounded-lg p-2 text-[9px] font-black outline-none focus:border-red-600" placeholder="0.00" disabled={it.status === 'Concluído'} /></div>
-                                                    <div className="space-y-1"><label className="text-[7px] font-black uppercase text-neutral-500 ml-1">Loja (Fornecedor)</label><input type="text" value={it.supplier || ''} onChange={(e) => updateItemInRequest(editingRequest.id, idx, { supplier: e.target.value })} className="w-full bg-white border border-neutral-200 rounded-lg p-2 text-[9px] font-black uppercase outline-none focus:border-red-600" placeholder="LOJA" disabled={it.status === 'Concluído'} /></div>
-                                                    <div className="space-y-1"><label className="text-[7px] font-black uppercase text-neutral-500 ml-1">Prazo Fornecedor</label><input type="date" value={it.deliveryDate || ''} onChange={(e) => updateItemInRequest(editingRequest.id, idx, { deliveryDate: e.target.value })} className="w-full bg-white border border-neutral-200 rounded-lg p-2 text-[9px] font-black outline-none focus:border-red-600" disabled={it.status === 'Concluído'} /></div>
-                                                    <div className="space-y-1"><label className="text-[7px] font-black uppercase text-red-500 ml-1">Data Entrega Real</label><input type="date" value={it.actualDeliveryDate || ''} onChange={(e) => updateItemInRequest(editingRequest.id, idx, { actualDeliveryDate: e.target.value })} className="w-full bg-red-50 border-2 border-red-100 rounded-lg p-2 text-[9px] font-black outline-none focus:border-red-600" disabled={it.status === 'Pendente'} /></div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                                <div className="p-6 bg-neutral-50 flex justify-between items-center shrink-0"><p className="text-[8px] text-neutral-400 font-bold uppercase italic max-w-md">* Preencha Valor, Loja e Prazo para mover para 'Em Cotação'. Informe a 'Data Real' para 'Concluir'.</p><button onClick={() => setEditingRequest(null)} className="px-10 py-3 bg-red-600 text-white rounded-xl font-black uppercase text-xs shadow-xl tracking-widest hover:bg-red-700 active:scale-95 transition-all">Fechar e Sincronizar</button></div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            );
-        }
-
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
-</body>
-</html>
+              ))}
+            </div>
+            <div className="p-10 bg-white flex justify-between items-center border-t border-neutral-100">
+              <p className="text-[9px] text-neutral-400 font-bold uppercase italic max-w-sm">* Preencha os campos para atualizar automaticamente o status para 'Em Cotação' ou 'Concluído'.</p>
+              <button onClick={() => setEditingRequest(null)} className="px-16 py-5 bg-red-600 text-white rounded-[2rem] font-black uppercase text-xs shadow-2xl tracking-[0.2em] hover:bg-red-700 transition-all active:scale-95">Salvar e Sincronizar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
