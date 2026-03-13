@@ -4,923 +4,970 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Portal de Compras VRZ</title>
-    
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&family=JetBrains+Mono:wght@700&display=swap');
-        
-        body { 
-            font-family: 'Inter', sans-serif; 
-            margin: 0; 
-            background: #f1f5f9; 
-            overflow: hidden; 
-        }
-
+        body { font-family: 'Inter', sans-serif; margin: 0; background: #f1f5f9; overflow: hidden; }
         .fade-in { animation: fadeIn 0.3s ease-out forwards; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .text-wrap-anywhere { overflow-wrap: anywhere; word-break: break-word; }
-        
-        /* Efeito de planilha */
-        .excel-input { 
-            border: none; 
-            width: 100%; 
-            height: 100%; 
-            padding: 4px 8px; 
-            background: transparent; 
-            font-size: 11px;
-            outline: none;
-        }
+        .excel-input { border: none; width: 100%; height: 100%; padding: 4px 8px; background: transparent; font-size: 11px; outline: none; }
         .excel-input:focus { background: #fffbeb; box-shadow: inset 0 0 0 2px #ef4444; }
-        
-        /* Fonte para o Chassi */
         .font-chassi { font-family: 'JetBrains Mono', monospace; }
-        
-        .sidebar-transition {
-            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .login-bg {
-            background: linear-gradient(135deg, #000000 0%, #1a1a1a 100%);
-        }
-
-        @keyframes shake {
-            0%, 100% { transform: translateX(0); }
-            25% { transform: translateX(-5px); }
-            75% { transform: translateX(5px); }
-        }
+        .sidebar-transition { transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .login-bg { background: linear-gradient(135deg, #000000 0%, #1a1a1a 100%); }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
         .animate-shake { animation: shake 0.2s ease-in-out 0s 2; }
     </style>
-
-    <!-- Bibliotecas Externas -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    
-    <!-- Firebase Compat SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-    
-    <!-- Ícones -->
     <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
-    <div id="root"></div>
+<div id="root"></div>
+<script type="text/babel">
+    const firebaseConfig = {
+        apiKey: "AIzaSyBT1N43mp6hoxXOj6bmTlqouQWSmfn32-E",
+        authDomain: "portal-compras-vrz.firebaseapp.com",
+        projectId: "portal-compras-vrz",
+        storageBucket: "portal-compras-vrz.firebasestorage.app",
+        messagingSenderId: "713014398002",
+        appId: "1:713014398002:web:d89f485af020178b00002b"
+    };
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const auth = firebase.auth();
+    const appId = 'portal-compras-vrz';
+    const { useState, useEffect, useMemo, useRef } = React;
 
-    <script type="text/babel">
-        // --- CONFIGURAÇÃO FIREBASE ---
-        const firebaseConfig = {
-            apiKey: "AIzaSyBT1N43mp6hoxXOj6bmTlqouQWSmfn32-E",
-            authDomain: "portal-compras-vrz.firebaseapp.com",
-            projectId: "portal-compras-vrz",
-            storageBucket: "portal-compras-vrz.firebasestorage.app",
-            messagingSenderId: "713014398002",
-            appId: "1:713014398002:web:d89f485af020178b00002b"
+    const INITIAL_USERS = [
+        { user: "Lucas.Sabino", pass: "29623298", active: true },
+        { user: "Eduardo.Rocha", pass: "Helito@1313", active: true },
+        { user: "Gabriela.Bueno", pass: "Dani123", active: true },
+        { user: "Josmar.Valentini", pass: "Josa123", active: true },
+        { user: "Luciano.Souza", pass: "Luciano123", active: true },
+        { user: "Daniel.Svanci", pass: "Dani123", active: true }
+    ];
+
+    function Icon({ name, className = "", size = 18 }) {
+        const iconRef = useRef(null);
+        useEffect(() => {
+            if (iconRef.current && window.lucide) {
+                const iconData = window.lucide.icons[name];
+                if (iconData) {
+                    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+                    const [tag, attrs, children] = iconData;
+                    Object.entries({...attrs, width: size, height: size, class: `lucide lucide-${name} ${className}`, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round"}).forEach(([k, v]) => svg.setAttribute(k, v));
+                    children.forEach(([ct, ca]) => {
+                        const c = document.createElementNS("http://www.w3.org/2000/svg", ct);
+                        Object.entries(ca).forEach(([k, v]) => c.setAttribute(k, v));
+                        svg.appendChild(c);
+                    });
+                    iconRef.current.innerHTML = '';
+                    iconRef.current.appendChild(svg);
+                }
+            }
+        }, [name, className, size]);
+        return <span ref={iconRef} className="inline-flex shrink-0 items-center justify-center"></span>;
+    }
+
+    function NavItem({ iconName, label, active, onClick }) {
+        return (
+            <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-300 group ${active ? 'bg-red-600 text-white shadow-lg' : 'hover:bg-white/5 text-neutral-400 hover:text-white'}`}>
+                <Icon name={iconName} className={active ? 'text-white' : 'text-red-500'} size={16} />
+                <span className="text-[10px] font-black uppercase tracking-wider">{label}</span>
+            </button>
+        );
+    }
+
+    function StatusBadge({ status }) {
+        const configs = {
+            'Pendente': 'bg-orange-500 text-white border-orange-500',
+            'Em Cotacao': 'bg-blue-600 text-white border-blue-600',
+            'Concluido': 'bg-black text-white border-neutral-800'
+        };
+        const key = status === 'Em Cotação' ? 'Em Cotacao' : status === 'Concluído' ? 'Concluido' : status;
+        return <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-tighter border ${configs[key] || 'bg-neutral-400 text-white'}`}>{status}</span>;
+    }
+
+    function LoginView({ onLogin, usersList }) {
+        const [username, setUsername] = useState('');
+        const [password, setPassword] = useState('');
+        const [showPassword, setShowPassword] = useState(false);
+        const [rememberMe, setRememberMe] = useState(false);
+        const [error, setError] = useState('');
+
+        const handleLogin = (e) => {
+            e.preventDefault();
+            const cleanUser = username.trim();
+            const cleanPass = password.trim();
+            const found = usersList.find(u => u.user.toLowerCase() === cleanUser.toLowerCase() && u.pass === cleanPass);
+            if (found) {
+                if (found.active === false) {
+                    setError('Sua conta está desativada. Entre em contato com o Admin.');
+                } else {
+                    onLogin(found);
+                }
+            } else {
+                setError('Usuário ou senha incorretos.');
+            }
         };
 
-        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-        const db = firebase.firestore();
-        const auth = firebase.auth();
-        const appId = 'portal-compras-vrz';
-
-        const { useState, useEffect, useMemo, useRef } = React;
-
-        const INITIAL_USERS = [
-            { user: "Lucas.Sabino", pass: "29623298", active: true },
-            { user: "Eduardo.Rocha", pass: "Helito@1313", active: true },
-            { user: "Gabriela.Bueno", pass: "Dani123", active: true },
-            { user: "Josmar.Valentini", pass: "Josa123", active: true },
-            { user: "Luciano.Souza", pass: "Luciano123", active: true },
-            { user: "Daniel.Svanci", pass: "Dani123", active: true }
-        ];
-
-        function Icon({ name, className = "", size = 18 }) {
-            const iconRef = useRef(null);
-            useEffect(() => {
-                if (iconRef.current && window.lucide) {
-                    const iconData = window.lucide.icons[name];
-                    if (iconData) {
-                        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-                        const [tag, attrs, children] = iconData;
-                        Object.entries({...attrs, width: size, height: size, class: `lucide lucide-${name} ${className}`, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round"}).forEach(([k, v]) => svg.setAttribute(k, v));
-                        children.forEach(([ct, ca]) => {
-                            const c = document.createElementNS("http://www.w3.org/2000/svg", ct);
-                            Object.entries(ca).forEach(([k, v]) => c.setAttribute(k, v));
-                            svg.appendChild(c);
-                        });
-                        iconRef.current.innerHTML = '';
-                        iconRef.current.appendChild(svg);
-                    }
-                }
-            }, [name, className, size]);
-            return <span ref={iconRef} className="inline-flex shrink-0 items-center justify-center"></span>;
-        }
-
-        function NavItem({ iconName, label, active, onClick }) {
-            return (
-                <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-300 group ${active ? 'bg-red-600 text-white shadow-lg' : 'hover:bg-white/5 text-neutral-400 hover:text-white'}`}>
-                    <Icon name={iconName} className={active ? 'text-white' : 'text-red-500'} size={16} />
-                    <span className="text-[10px] font-black uppercase tracking-wider">{label}</span>
-                </button>
-            );
-        }
-
-        function StatusBadge({ status }) {
-            const configs = {
-                'Pendente': 'bg-orange-500 text-white border-orange-500',
-                'Em Cotação': 'bg-blue-600 text-white border-blue-600',
-                'Concluído': 'bg-black text-white border-neutral-800'
-            };
-            return <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-tighter border ${configs[status] || 'bg-neutral-400 text-white'}`}>{status}</span>;
-        }
-
-        function LoginView({ onLogin, usersList }) {
-            const [username, setUsername] = useState('');
-            const [password, setPassword] = useState('');
-            const [showPassword, setShowPassword] = useState(false);
-            const [rememberMe, setRememberMe] = useState(false);
-            const [error, setError] = useState('');
-
-            const handleLogin = (e) => {
-                e.preventDefault();
-                const cleanUser = username.trim();
-                const cleanPass = password.trim();
-                const found = usersList.find(u => u.user.toLowerCase() === cleanUser.toLowerCase() && u.pass === cleanPass);
-                if (found) {
-                    if (found.active === false) {
-                        setError('Sua conta está desativada. Entre em contato com o Admin.');
-                    } else {
-                        onLogin(found);
-                    }
-                } else {
-                    setError('Usuário ou senha incorretos.');
-                }
-            };
-
-            return (
-                <div className="h-screen w-full flex items-center justify-center login-bg p-4 fade-in">
-                    <div className="bg-white w-full max-w-sm rounded-[2.5rem] shadow-2xl overflow-hidden border-b-[10px] border-red-600">
-                        <div className="bg-black p-8 text-center text-white space-y-2">
-                            <div className="p-3 bg-red-600 rounded-2xl shadow-lg shadow-red-600/30 w-fit mx-auto mb-4">
-                                <Icon name="shopping-cart" size={32} />
-                            </div>
-                            <h1 className="text-xl font-black uppercase tracking-[0.2em] leading-none">VRZ COMPRAS</h1>
-                            <p className="text-[9px] font-bold text-neutral-500 uppercase tracking-widest italic">Acesso Restrito ao Sistema</p>
+        return (
+            <div className="h-screen w-full flex items-center justify-center login-bg p-4 fade-in">
+                <div className="bg-white w-full max-w-sm rounded-[2.5rem] shadow-2xl overflow-hidden border-b-[10px] border-red-600">
+                    <div className="bg-black p-8 text-center text-white space-y-2">
+                        <div className="p-3 bg-red-600 rounded-2xl shadow-lg shadow-red-600/30 w-fit mx-auto mb-4">
+                            <Icon name="shopping-cart" size={32} />
                         </div>
-                        
-                        <form onSubmit={handleLogin} className="p-8 space-y-6">
-                            {error && (
-                                <div className="bg-red-50 border border-red-100 p-3 rounded-xl flex items-center gap-2 text-red-600 animate-shake">
-                                    <Icon name="alert-circle" size={14} />
-                                    <span className="text-[10px] font-black uppercase tracking-tight">{error}</span>
-                                </div>
-                            )}
-
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1 ml-1">Usuário</label>
-                                    <div className="relative">
-                                        <div className="absolute left-4 top-3.5 text-neutral-300">
-                                            <Icon name="user" size={16} />
-                                        </div>
-                                        <input 
-                                            type="text" 
-                                            value={username} 
-                                            onChange={(e) => setUsername(e.target.value)} 
-                                            className="w-full pl-11 pr-4 py-3 bg-neutral-50 border-2 border-neutral-100 rounded-2xl focus:border-red-600 outline-none font-bold text-sm" 
-                                            placeholder="DIGITE O USUÁRIO"
-                                            required
-                                        />
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1 ml-1">Senha</label>
-                                    <div className="relative">
-                                        <div className="absolute left-4 top-3.5 text-neutral-300">
-                                            <Icon name="lock" size={16} />
-                                        </div>
-                                        <input 
-                                            type={showPassword ? "text" : "password"} 
-                                            value={password} 
-                                            onChange={(e) => setPassword(e.target.value)} 
-                                            className="w-full pl-11 pr-12 py-3 bg-neutral-50 border-2 border-neutral-100 rounded-2xl focus:border-red-600 outline-none font-bold text-sm tracking-widest" 
-                                            placeholder="••••••••"
-                                            required
-                                        />
-                                        <button 
-                                            type="button" 
-                                            onClick={() => setShowPassword(!showPassword)}
-                                            className="absolute right-4 top-3.5 text-neutral-400 hover:text-red-600 transition-colors"
-                                            title="Ver senha"
-                                        >
-                                            <Icon name={showPassword ? "eye-off" : "eye"} size={16} />
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center justify-between px-1">
-                                <label className="flex items-center gap-2 cursor-pointer group">
-                                    <input 
-                                        type="checkbox" 
-                                        checked={rememberMe} 
-                                        onChange={(e) => setRememberMe(e.target.checked)}
-                                        className="w-4 h-4 rounded border-2 border-neutral-200 text-red-600 focus:ring-0 cursor-pointer"
-                                    />
-                                    <span className="text-[10px] font-black text-neutral-500 uppercase tracking-tight group-hover:text-black">Lembrar</span>
-                                </label>
-                                
-                                <button 
-                                    type="button" 
-                                    onClick={() => setShowPassword(!showPassword)}
-                                    className="flex items-center gap-1.5 text-neutral-400 hover:text-red-600 transition-colors px-2 py-1 rounded-lg hover:bg-neutral-50"
-                                >
-                                    <Icon name={showPassword ? "eye-off" : "eye"} size={14} />
-                                    <span className="text-[9px] font-black uppercase tracking-tighter">{showPassword ? 'Ocultar' : 'Ver Senha'}</span>
-                                </button>
-                            </div>
-
-                            <button type="submit" className="w-full py-4 bg-red-600 text-white rounded-2xl font-black uppercase text-xs shadow-xl shadow-red-600/20 hover:bg-red-700 active:scale-95 transition-all tracking-[0.2em]">Entrar no Portal</button>
-                        </form>
+                        <h1 className="text-xl font-black uppercase tracking-[0.2em] leading-none">VRZ COMPRAS</h1>
+                        <p className="text-[9px] font-bold text-neutral-500 uppercase tracking-widest italic">Acesso Restrito ao Sistema</p>
                     </div>
-                </div>
-            );
-        }
-
-        function RequestForm({ user, loggedInUser, vehiclesDB }) {
-            const [os, setOs] = useState('');
-            const [vehicle, setVehicle] = useState(null);
-            const [items, setItems] = useState([{ id: Date.now(), description: '', quantity: 1, photo: null, status: 'Pendente' }]);
-            const [isSubmitting, setIsSubmitting] = useState(false);
-            const [submitted, setSubmitted] = useState(false);
-
-            const handleOSBlur = () => {
-                const found = vehiclesDB.find(v => String(v.os).trim() === String(os).trim());
-                if (found) setVehicle(found);
-                else { setVehicle(null); if(os.length > 0) alert('OS não cadastrada.'); }
-            };
-
-            const handleSubmit = async (e) => {
-                e.preventDefault();
-                if (!os.trim()) return alert('AVISO: O campo Ordem de Serviço (OS) é obrigatório.');
-                if (!vehicle) return alert('AVISO: Por favor, insira uma OS válida e cadastrada no sistema.');
-                const missingItemInfo = items.some(i => !i.description.trim());
-                if (missingItemInfo) return alert('AVISO: Todos os itens devem ter uma descrição preenchida.');
-                
-                const missingPhoto = items.some(i => !i.photo);
-                if (missingPhoto) return alert('AVISO: É obrigatório anexar uma foto para cada item da lista. A foto é essencial para prosseguir.');
-
-                setIsSubmitting(true);
-                try {
-                    await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('requests').add({
-                        os, responsavel: loggedInUser.user, localizacaoSolicitacao: "-", vehicleData: vehicle, items,
-                        timestamp: Date.now(), status: 'Pendente', userId: user.uid || 'anon'
-                    });
-                    setSubmitted(true);
-                } catch (err) { alert('Erro no servidor.'); } finally { setIsSubmitting(false); }
-            };
-
-            if (submitted) return (
-                <div className="flex flex-col items-center justify-center py-10 fade-in bg-white rounded-3xl border border-neutral-200 p-8 shadow-sm max-w-md mx-auto text-center">
-                    <Icon name="check-circle" size={48} className="text-emerald-500 mb-4" />
-                    <h2 className="text-xl font-black uppercase tracking-tight">Pedido Protocolado!</h2>
-                    <button onClick={() => setSubmitted(false)} className="mt-8 w-full py-4 bg-red-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-red-700">Nova Solicitação</button>
-                </div>
-            );
-
-            return (
-                <div className="space-y-4 fade-in text-wrap-anywhere">
-                    <div className="flex flex-col">
-                        <h2 className="text-2xl font-black text-black tracking-tighter uppercase leading-none">Nova Requisição</h2>
-                        <span className="text-[9px] font-bold text-neutral-400 uppercase mt-1 tracking-widest italic">Operacional VRZ</span>
-                    </div>
-
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                        <div className="bg-white p-4 rounded-2xl border border-neutral-200 shadow-sm grid grid-cols-1 md:grid-cols-5 gap-4">
-                            <div className="md:col-span-2 space-y-4">
-                                <div>
-                                    <label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1">Ordem de Serviço (OS)</label>
-                                    <input type="text" value={os} onChange={(e) => setOs(e.target.value)} onBlur={handleOSBlur} placeholder="Nº OS" className="w-full px-3 py-2 bg-neutral-50 border-2 rounded-xl focus:border-red-600 outline-none font-black text-base" required />
-                                </div>
-                                <div className="px-1 border-t border-neutral-100 pt-3">
-                                    <label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1.5">Solicitante Identificado</label>
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center text-red-600 border border-red-100">
-                                            <Icon name="user" size={14} />
-                                        </div>
-                                        <span className="text-xs font-black uppercase text-neutral-800">{loggedInUser.user}</span>
-                                    </div>
-                                </div>
+                    <form onSubmit={handleLogin} className="p-8 space-y-6">
+                        {error && (
+                            <div className="bg-red-50 border border-red-100 p-3 rounded-xl flex items-center gap-2 text-red-600 animate-shake">
+                                <Icon name="alert-circle" size={14} />
+                                <span className="text-[10px] font-black uppercase tracking-tight">{error}</span>
                             </div>
-                            <div className="md:col-span-3 bg-neutral-950 rounded-xl p-5 text-white border-l-[10px] border-red-600 shadow-2xl flex flex-col justify-center min-h-[140px]">
-                                {vehicle ? (
-                                    <div className="flex flex-col gap-4 w-full">
-                                        <div className="grid grid-cols-2 gap-4 border-b border-white/5 pb-3">
-                                            <div className="min-w-0"><span className="text-neutral-500 text-[8px] font-black uppercase block mb-0.5 tracking-widest">Modelo</span><span className="text-white text-sm font-black uppercase truncate block leading-none">{vehicle.modelo}</span></div>
-                                            <div className="min-w-0"><span className="text-neutral-500 text-[8px] font-black uppercase block mb-0.5 tracking-widest">Fabricante</span><span className="text-white text-xs font-bold uppercase truncate block leading-none">{vehicle.fabricante || 'N/A'}</span></div>
-                                        </div>
-                                        <div className="grid grid-cols-3 gap-2 pb-3">
-                                            <div><span className="text-neutral-500 text-[8px] font-black uppercase block mb-0.5 tracking-widest">Etapa</span><span className="text-red-500 text-[10px] font-black uppercase block leading-none">{vehicle.etapa}</span></div>
-                                            <div><span className="text-neutral-500 text-[8px] font-black uppercase block mb-0.5 tracking-widest">Cor</span><span className="text-white text-[10px] font-bold uppercase block leading-none">{vehicle.cor}</span></div>
-                                            <div><span className="text-neutral-500 text-[8px] font-black uppercase block mb-0.5 tracking-widest">Local</span><span className="text-white text-[10px] font-bold uppercase block leading-none">{vehicle.localizacao}</span></div>
-                                        </div>
-                                        <div className="bg-white/5 p-3 rounded-xl border border-white/10">
-                                            <span className="text-neutral-500 text-[8px] font-black uppercase block mb-1.5 tracking-[0.2em] text-center">Número do Chassi</span>
-                                            <span className="text-white font-chassi text-base font-black tracking-[0.15em] block text-center leading-none select-all">{vehicle.chassi}</span>
-                                        </div>
-                                    </div>
-                                ) : <div className="w-full text-center space-y-2"><div className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-2"><Icon name="search" size={20} className="text-neutral-700" /></div><p className="text-neutral-600 text-[9px] font-black uppercase tracking-[0.3em] italic leading-none">Aguardando OS...</p></div>}
-                            </div>
-                        </div>
-
-                        <div className="space-y-3">
-                            <div className="flex justify-between items-center px-1">
-                                <h3 className="font-black text-black uppercase text-[10px] flex items-center gap-2"><Icon name="package" size={14} /> Peças Necessárias</h3>
-                                <button type="button" onClick={() => setItems([...items, {id: Date.now(), description: '', quantity: 1, photo: null, status: 'Pendente'}])} className="bg-red-600 text-white px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm hover:bg-red-700">+ ITEM</button>
-                            </div>
-                            <div className="grid grid-cols-1 gap-2">
-                                {items.map((it, idx) => (
-                                    <div key={it.id} className="bg-white p-3 rounded-xl border border-neutral-200 shadow-sm relative grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-                                        <div className="md:col-span-2">
-                                            <label className="text-[8px] font-black text-neutral-400 uppercase block mb-1">Qtd</label>
-                                            <input type="number" min="1" value={it.quantity} onChange={(e) => setItems(prev => prev.map(i => i.id === it.id ? {...i, quantity: e.target.value} : i))} className="w-full p-2 bg-neutral-50 border rounded-lg font-black text-center text-sm" />
-                                        </div>
-                                        <div className="md:col-span-7">
-                                            <label className="text-[8px] font-black text-neutral-400 uppercase block mb-1">Descrição da Peça</label>
-                                            <input type="text" value={it.description} onChange={(e) => setItems(prev => prev.map(i => i.id === it.id ? {...i, description: e.target.value} : i))} placeholder="NOME DA PEÇA" className="w-full p-2 bg-neutral-50 border rounded-lg font-black text-[10px] uppercase focus:border-red-600 outline-none" required />
-                                        </div>
-                                        <div className="md:col-span-3 text-center">
-                                            <label className="text-[8px] font-black text-neutral-400 uppercase block mb-1 text-red-600 font-bold">Foto (Obrigatória)</label>
-                                            {it.photo ? (
-                                                <div className="relative h-12 rounded-lg overflow-hidden border group shadow-inner"><img src={it.photo} className="h-full w-full object-cover" /><button type="button" onClick={() => setItems(prev => prev.map(i => i.id === it.id ? {...i, photo: null} : i))} className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100"><Icon name="x" className="text-white" size={14} /></button></div>
-                                            ) : (
-                                                <label className="h-12 flex flex-col items-center justify-center border-2 border-dashed border-neutral-200 rounded-lg cursor-pointer hover:bg-red-50 transition-all bg-neutral-50"><Icon name="camera" className="text-neutral-400" size={24} /><input type="file" accept="image/*" onChange={(e) => { const r = new FileReader(); r.onload = () => setItems(prev => prev.map(i => i.id === it.id ? {...i, photo: r.result} : i)); if(e.target.files[0]) r.readAsDataURL(e.target.files[0]); }} className="hidden" required /></label>
-                                            )}
-                                        </div>
-                                        {items.length > 1 && <button type="button" onClick={() => setItems(items.filter(i => i.id !== it.id))} className="absolute top-1 right-1 text-neutral-300 hover:text-red-600"><Icon name="trash-2" size={14} /></button>}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                        <button disabled={isSubmitting || !vehicle} className={`w-full py-4 rounded-xl font-black text-base uppercase flex items-center justify-center gap-3 shadow-lg ${isSubmitting || !vehicle ? 'bg-neutral-200 text-neutral-400' : 'bg-red-600 text-white border-b-4 border-red-800 hover:bg-red-700 active:translate-y-1 active:border-b-0'}`}>{isSubmitting ? <Icon name="refresh-cw" className="animate-spin" size={18} /> : 'Finalizar Pedido'}</button>
-                    </form>
-                </div>
-            );
-        }
-
-        function StatusView({ requests }) {
-            const [search, setSearch] = useState('');
-            const [requestToDelete, setRequestToDelete] = useState(null);
-            const [deletePass, setDeletePass] = useState('');
-            const [showDeletePass, setShowDeletePass] = useState(false);
-            const [deleteError, setDeleteError] = useState(false);
-
-            const filtered = useMemo(() => requests.filter(r => {
-                const t = search.toLowerCase();
-                return (String(r.os || '').toLowerCase().includes(t)) || (String(r.responsavel || '').toLowerCase().includes(t)) || (String(r.vehicleData?.modelo || '').toLowerCase().includes(t));
-            }), [requests, search]);
-
-            const confirmDeletion = async () => {
-                if (deletePass !== 'VRZ2024') {
-                    setDeleteError(true);
-                    return;
-                }
-                try {
-                    await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('requests').doc(requestToDelete).delete();
-                    closeDeleteModal();
-                } catch(e) { alert("Erro ao excluir."); }
-            };
-
-            const closeDeleteModal = () => {
-                setRequestToDelete(null);
-                setDeletePass('');
-                setShowDeletePass(false);
-                setDeleteError(false);
-            };
-
-            const exportGeneralReport = () => {
-                const csvRows = [["Data", "OS", "Chassi", "Veiculo", "Peca", "Qtd", "Status Peca", "Valor", "Loja", "Prazo", "Data Real Entrega"].join(";")];
-                requests.forEach(r => {
-                    r.items?.forEach(item => {
-                        csvRows.push([new Date(r.timestamp).toLocaleDateString(), r.os, r.vehicleData?.chassi || "-", r.vehicleData?.modelo || "-", item.description || "-", item.quantity || "1", item.status || "Pendente", item.price || "0", item.supplier || "-", item.deliveryDate ? new Date(item.deliveryDate).toLocaleDateString() : "-", item.actualDeliveryDate ? new Date(item.actualDeliveryDate).toLocaleDateString() : "-"].join(";"));
-                    });
-                });
-                const blob = new Blob([csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
-                const link = document.createElement("a"); link.href = URL.createObjectURL(blob);
-                link.download = `Relatorio_VRZ_${new Date().toLocaleDateString()}.csv`;
-                link.click();
-            };
-
-            const exportPDF = async (request) => {
-                const { jsPDF } = window.jspdf; const doc = new jsPDF();
-                doc.setFontSize(18); doc.text("Solicitacao de Pecas - VRZ", 10, 15);
-                doc.setFontSize(10);
-                doc.text(`OS: #${request.os}`, 10, 25); doc.text(`Data: ${new Date(request.timestamp).toLocaleString()}`, 10, 30);
-                doc.text(`Veiculo: ${request.vehicleData?.modelo}`, 10, 35); doc.text(`Chassi: ${request.vehicleData?.chassi}`, 10, 40);
-                doc.text(`Solicitante: ${request.responsavel} (${request.localizacaoSolicitacao})`, 10, 45);
-                let y = 55; doc.setFontSize(12); doc.text("ITENS:", 10, y); y += 10;
-                request.items.forEach((item, index) => {
-                    if (y > 250) { doc.addPage(); y = 20; }
-                    doc.setFontSize(10); doc.text(`${index + 1}. Qtd: ${item.quantity} - ${item.description} [${item.status || 'Pendente'}]`, 15, y);
-                    y += 10; if (item.photo) { try { doc.addImage(item.photo, 'JPEG', 15, y, 50, 30); y += 35; } catch(e) {} }
-                });
-                doc.save(`OS_${request.os}_VRZ.pdf`);
-            };
-
-            return (
-                <div className="space-y-4 fade-in">
-                    {requestToDelete && (
-                        <div className="fixed inset-0 z-[500] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-                            <div className="bg-white w-full max-w-sm rounded-[2rem] shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
-                                <div className="bg-red-600 p-6 text-center text-white">
-                                    <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3">
-                                        <Icon name="trash-2" size={24} />
-                                    </div>
-                                    <h3 className="text-lg font-black uppercase tracking-tight">Excluir Registro</h3>
-                                    <p className="text-[10px] font-bold opacity-80 uppercase mt-1 tracking-wider">Esta ação não pode ser desfeita</p>
-                                </div>
-                                <div className="p-6 space-y-4">
-                                    <div className="space-y-1">
-                                        <label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest ml-1">Senha Admin Requerida</label>
-                                        <div className="relative">
-                                            <input 
-                                                type={showDeletePass ? "text" : "password"} 
-                                                value={deletePass} 
-                                                onChange={(e) => { setDeletePass(e.target.value); setDeleteError(false); }}
-                                                className={`w-full p-3 bg-neutral-50 border-2 rounded-xl outline-none text-center font-black tracking-[0.5em] transition-colors ${deleteError ? 'border-red-600 animate-shake' : 'border-neutral-100 focus:border-red-600'}`}
-                                                placeholder="••••"
-                                                autoFocus
-                                            />
-                                            <button 
-                                                onClick={() => setShowDeletePass(!showDeletePass)}
-                                                className="absolute right-3 top-3 text-neutral-300 hover:text-red-600"
-                                            >
-                                                <Icon name={showDeletePass ? "eye-off" : "eye"} size={16} />
-                                            </button>
-                                        </div>
-                                        {deleteError && <p className="text-red-600 text-[8px] font-black uppercase text-center mt-1 animate-pulse">Senha Incorreta!</p>}
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-3 pt-2">
-                                        <button onClick={closeDeleteModal} className="py-3 bg-neutral-100 text-neutral-500 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-neutral-200 transition-colors">Cancelar</button>
-                                        <button onClick={confirmDeletion} className="py-3 bg-red-600 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg shadow-red-600/20 hover:bg-red-700 transition-colors">Confirmar</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="flex flex-col md:flex-row md:items-end justify-between gap-3">
-                        <div><h2 className="text-2xl font-black uppercase text-black leading-none tracking-tighter">Histórico de OS</h2><p className="text-[9px] font-bold text-neutral-400 uppercase tracking-widest mt-1 italic">Gestão e Exportação Detalhada</p></div>
-                        <div className="flex gap-2"><button onClick={exportGeneralReport} className="bg-emerald-600 text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase flex items-center gap-2 shadow-lg hover:bg-emerald-700 transition-all"><Icon name="file-text" size={12}/> EXTRATIFICAR TUDO (EXCEL)</button>
-                            <div className="relative"><input type="text" placeholder="BUSCAR OS / NOME..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full md:w-56 pl-9 pr-4 py-2 bg-white border border-neutral-200 rounded-xl text-[9px] font-black uppercase outline-none focus:border-red-600 shadow-sm" /><div className="absolute left-3 top-2.5 text-neutral-300"><Icon name="search" size={12} /></div></div>
-                        </div>
-                    </div>
-                    <div className="grid grid-cols-1 gap-3 max-h-[75vh] overflow-y-auto pr-2 scrollbar-hide">
-                        {filtered.length === 0 ? (<div className="py-20 text-center bg-white rounded-2xl border border-neutral-100 border-dashed"><Icon name="inbox" size={32} className="text-neutral-200 mx-auto mb-2" /><p className="text-[9px] font-black uppercase text-neutral-300 tracking-widest leading-none">Vazio</p></div>) : filtered.map(r => (
-                            <div key={r.id} className="bg-white rounded-2xl border border-neutral-200 p-4 shadow-sm flex flex-col lg:flex-row gap-4 hover:border-red-200 transition-all border-l-4 border-l-red-600 relative group">
-                                <div className="flex-1 space-y-3 min-w-0">
-                                    <div className="flex items-center justify-between"><div className="flex items-center gap-3"><span className="text-sm font-black uppercase">OS #{r.os}</span></div><div className="flex gap-2"><button onClick={() => exportPDF(r)} className="px-3 py-1.5 bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-2 text-[9px] font-black uppercase shadow-sm"><Icon name="file-down" size={12}/> <span>Exportar PDF</span></button><button onClick={() => setRequestToDelete(r.id)} className="px-3 py-1.5 bg-red-600 text-white hover:bg-red-700 rounded-lg transition-colors flex items-center gap-2 text-[9px] font-black uppercase shadow-sm"><Icon name="trash-2" size={12}/> <span>Excluir</span></button></div></div>
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[8px] font-black uppercase tracking-wider text-neutral-400"><div className="min-w-0"><span className="text-red-600 block mb-0.5">Solicitante</span><span className="text-black">{r.responsavel}</span></div><div className="min-w-0"><span>Veículo</span><span className="text-black">{r.vehicleData?.modelo}</span></div><div className="min-w-0"><span>Setor</span><span className="text-black">{r.localizacaoSolicitacao}</span></div><div className="min-w-0"><span>Data</span><span className="text-black">{new Date(r.timestamp).toLocaleDateString()}</span></div></div>
-                                    <div className="flex gap-2 overflow-x-auto scrollbar-hide py-1">
-                                        {r.items?.map((it, idx) => (
-                                            <div key={idx} className="flex-shrink-0 flex items-center gap-2 bg-neutral-50 p-1.5 rounded-lg border border-neutral-100 min-w-[140px] shadow-inner">
-                                                {it.photo && <img src={it.photo} className="w-8 h-8 rounded-md object-cover border" />}
-                                                <div className="min-w-0 flex-1"><p className="text-[8px] font-black uppercase leading-tight truncate text-neutral-800">{it.description}</p><div className="flex justify-between items-center mt-1"><span className="text-[7px] text-red-600 font-bold">QTD: {it.quantity}</span><StatusBadge status={it.status || 'Pendente'} /></div></div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            );
-        }
-
-        function UserManagement({ users, onAddUser, onDeleteUser, onToggleStatus }) {
-            const [newUser, setNewUser] = useState('');
-            const [newPass, setNewPass] = useState('');
-            const [showNewPass, setShowNewPass] = useState(false);
-
-            const handleAdd = () => {
-                if (!newUser || !newPass) return alert("Preencha todos os campos para criar o usuário.");
-                onAddUser(newUser, newPass);
-                setNewUser('');
-                setNewPass('');
-            };
-
-            return (
-                <div className="space-y-6 fade-in max-w-2xl mx-auto">
-                    <div className="bg-white p-6 rounded-3xl border border-neutral-200 shadow-sm space-y-4">
-                        <h3 className="text-xs font-black uppercase tracking-widest text-red-600">Cadastrar Novo Acesso</h3>
-                        <div className="grid grid-cols-2 gap-4">
+                        )}
+                        <div className="space-y-4">
                             <div>
-                                <label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1">Nome de Usuário</label>
-                                <input type="text" value={newUser} onChange={(e) => setNewUser(e.target.value)} className="w-full px-4 py-2.5 bg-neutral-50 border rounded-xl font-bold text-xs outline-none focus:border-red-600" placeholder="Nome.Sobrenome" />
-                            </div>
-                            <div>
-                                <label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1">Senha de Acesso</label>
+                                <label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1 ml-1">Usuário</label>
                                 <div className="relative">
-                                    <input 
-                                        type={showNewPass ? "text" : "password"} 
-                                        value={newPass} 
-                                        onChange={(e) => setNewPass(e.target.value)} 
-                                        className="w-full pl-4 pr-10 py-2.5 bg-neutral-50 border rounded-xl font-bold text-xs outline-none focus:border-red-600" 
-                                        placeholder="Senha" 
-                                    />
-                                    <button 
-                                        type="button" 
-                                        onClick={() => setShowNewPass(!showNewPass)}
-                                        className="absolute right-3 top-2.5 text-neutral-400 hover:text-red-600"
-                                        title="Ver senha"
-                                    >
-                                        <Icon name={showNewPass ? "eye-off" : "eye"} size={14} />
+                                    <div className="absolute left-4 top-3.5 text-neutral-300"><Icon name="user" size={16} /></div>
+                                    <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-neutral-50 border-2 border-neutral-100 rounded-2xl focus:border-red-600 outline-none font-bold text-sm" placeholder="DIGITE O USUÁRIO" required />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1 ml-1">Senha</label>
+                                <div className="relative">
+                                    <div className="absolute left-4 top-3.5 text-neutral-300"><Icon name="lock" size={16} /></div>
+                                    <input type={showPassword ? "text" : "password"} value={password} onChange={(e) => setPassword(e.target.value)} className="w-full pl-11 pr-12 py-3 bg-neutral-50 border-2 border-neutral-100 rounded-2xl focus:border-red-600 outline-none font-bold text-sm tracking-widest" placeholder="••••••••" required />
+                                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-3 text-neutral-400 hover:text-red-600 transition-colors">
+                                        {showPassword
+                                            ? <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                                            : <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                        }
                                     </button>
                                 </div>
                             </div>
                         </div>
-                        <button onClick={handleAdd} className="w-full py-3 bg-red-600 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg hover:bg-red-700 transition-all">+ CRIAR CONTA</button>
-                    </div>
-
-                    <div className="bg-white rounded-3xl border border-neutral-200 shadow-sm overflow-hidden">
-                        <table className="w-full text-left">
-                            <thead className="bg-neutral-50 border-b">
-                                <tr>
-                                    <th className="p-4 text-[9px] font-black uppercase text-neutral-400">Usuário do Sistema</th>
-                                    <th className="p-4 text-[9px] font-black uppercase text-neutral-400">Status</th>
-                                    <th className="p-4 text-[9px] font-black uppercase text-neutral-400 text-right">Ação</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-neutral-50">
-                                {users.map((u, i) => (
-                                    <tr key={i} className="hover:bg-neutral-50/50">
-                                        <td className="p-4 text-xs font-bold text-black uppercase">{u.user}</td>
-                                        <td className="p-4">
-                                            <button 
-                                                onClick={() => onToggleStatus(u)}
-                                                className={`text-[7px] font-black uppercase px-2 py-1 rounded-full transition-all border ${u.active !== false ? 'bg-emerald-100 text-emerald-600 border-emerald-200 hover:bg-red-100 hover:text-red-600 hover:border-red-200' : 'bg-red-100 text-red-600 border-red-200 hover:bg-emerald-100 hover:text-emerald-600 hover:border-emerald-200'}`}
-                                            >
-                                                {u.active !== false ? 'Ativo' : 'Desativado'}
-                                            </button>
-                                        </td>
-                                        <td className="p-4 text-right">
-                                            <button 
-                                                onClick={() => onDeleteUser(u.id || u.user)} 
-                                                className="text-white bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-colors flex items-center gap-1.5 ml-auto"
-                                            >
-                                                <Icon name="trash-2" size={12} />
-                                                EXCLUIR
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                        <div className="flex items-center justify-between px-1">
+                            <label className="flex items-center gap-2 cursor-pointer group">
+                                <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} className="w-4 h-4 rounded border-2 border-neutral-200 text-red-600 focus:ring-0 cursor-pointer" />
+                                <span className="text-[10px] font-black text-neutral-500 uppercase tracking-tight group-hover:text-black">Lembrar</span>
+                            </label>
+                        </div>
+                        <button type="submit" className="w-full py-4 bg-red-600 text-white rounded-2xl font-black uppercase text-xs shadow-xl shadow-red-600/20 hover:bg-red-700 active:scale-95 transition-all tracking-[0.2em]">Entrar no Portal</button>
+                    </form>
                 </div>
-            );
-        }
+            </div>
+        );
+    }
 
-        function App() {
-            const [user, setUser] = useState(null);
-            const [loggedInUser, setLoggedInUser] = useState(null);
-            const [view, setView] = useState('request');
-            const [requests, setRequests] = useState([]);
-            const [vehiclesDB, setVehiclesDB] = useState([]);
-            const [usersDB, setUsersDB] = useState([]);
-            const [adminAuth, setAdminAuth] = useState(false);
-            const [adminPassError, setAdminPassError] = useState(false);
-            const [adminPassValue, setAdminPassValue] = useState('');
-            const [showAdminPass, setShowAdminPass] = useState(false);
-            const [editingRequest, setEditingRequest] = useState(null);
-            const [isSidebarOpen, setSidebarOpen] = useState(false);
-            const [adminSubView, setAdminSubView] = useState('pending');
-            const [importData, setImportData] = useState([]);
-            const [showImportModal, setShowImportModal] = useState(false);
+    function RequestForm({ user, loggedInUser, vehiclesDB, requests }) {
+        const [os, setOs] = useState('');
+        const [vehicle, setVehicle] = useState(null);
+        const [items, setItems] = useState([{ id: Date.now(), description: '', quantity: 1, photo: null, status: 'Pendente' }]);
+        const [isSubmitting, setIsSubmitting] = useState(false);
+        const [submitted, setSubmitted] = useState(false);
+        const [showFotoModal, setShowFotoModal] = useState(false);
+        const [itemsSemFoto, setItemsSemFoto] = useState([]);
+        const [showDuplicadaModal, setShowDuplicadaModal] = useState(false);
+        const [pedidosDuplicados, setPedidosDuplicados] = useState([]);
 
-            useEffect(() => { 
-                const unsubAuth = auth.onAuthStateChanged((u) => { 
-                    if (u) setUser(u); 
-                    else auth.signInAnonymously(); 
-                }); 
-                return () => unsubAuth(); 
-            }, []);
+        const handleOSBlur = () => {
+            const trimmed = String(os).trim();
+            if (!trimmed) return;
+            const found = vehiclesDB.find(v => String(v.os).trim() === trimmed);
+            if (found) {
+                setVehicle(found);
+            } else {
+                setVehicle(null);
+                alert('OS não cadastrada.');
+            }
+        };
 
-            useEffect(() => {
-                if (!user) return;
-                const unsubReq = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('requests').onSnapshot((s) => { setRequests(s.docs.map(d => ({id: d.id, ...d.data()}))); }, (e) => {});
-                const unsubVeh = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('vehicles').onSnapshot((s) => { setVehiclesDB(s.docs.map(d => d.data())); }, (e) => {});
-                const unsubUsers = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('users').onSnapshot((s) => {
-                    const dbUsers = s.docs.map(d => ({id: d.id, ...d.data()}));
-                    const combined = [...dbUsers];
-                    INITIAL_USERS.forEach(iu => {
-                        if (!dbUsers.find(du => du.user.toLowerCase() === iu.user.toLowerCase())) {
-                            combined.push(iu);
-                        }
-                    });
-                    setUsersDB(combined);
-                }, (e) => {});
-                return () => { unsubReq(); unsubVeh(); unsubUsers(); };
-            }, [user]);
-
-            const handleAddUser = async (u, p) => {
-                try {
-                    await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('users').add({ user: u, pass: p, active: true });
-                } catch(e) { alert("Erro ao salvar usuário no servidor."); }
-            };
-
-            const handleDeleteUser = async (id) => {
-                if(!window.confirm("Deseja remover permanentemente o acesso deste usuário?")) return;
-                try {
-                    if(id && id.length > 15) {
-                        await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('users').doc(id).delete();
-                    } else {
-                        setUsersDB(prev => prev.filter(u => u.user !== id));
-                    }
-                } catch(e) { setUsersDB(prev => prev.filter(u => u.id !== id && u.user !== id)); }
-            };
-
-            const handleToggleUserStatus = async (userObj) => {
-                const currentStatus = userObj.active !== false;
-                const newStatus = !currentStatus;
-                try {
-                    if(userObj.id) {
-                        await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('users').doc(userObj.id).update({ active: newStatus });
-                    } else {
-                        await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('users').add({ ...userObj, active: newStatus });
-                    }
-                } catch(e) { alert("Erro ao atualizar status do usuário."); }
-            };
-
-            const handleLoginSuccess = (userObj) => { setLoggedInUser(userObj); };
-            const handleLogout = () => { setLoggedInUser(null); setAdminAuth(false); setView('request'); setAdminPassValue(''); };
-
-            const handlePaste = (e) => {
-                const text = e.clipboardData.getData('text');
-                const lines = text.split(/\r?\n/).filter(l => l.trim() !== ''); if (lines.length === 0) return;
-                const firstLine = lines[0].split(/[,\t]/); const headers = firstLine.map(h => h.trim().toUpperCase());
-                const findIndex = (targets) => headers.findIndex(h => targets.some(t => h.includes(t)));
-                const idxOS = findIndex(['OS']); const idxMod = findIndex(['MODELO']); const idxFab = findIndex(['FABRICANTE', 'MARCA']);
-                const idxCor = findIndex(['COR']); const idxCha = findIndex(['CHASSI']); const idxEta = findIndex(['ETAPA']); const idxLoc = findIndex(['LOCALIZA']);
-                const rowsToParse = (idxOS !== -1) ? lines.slice(1) : lines;
-                const parsed = rowsToParse.map(l => {
-                    const v = l.split(/[,\t]/);
-                    return { os: (idxOS !== -1 ? v[idxOS] : v[0])?.trim() || '', modelo: (idxMod !== -1 ? v[idxMod] : v[1])?.trim() || '', fabricante: (idxFab !== -1 ? v[idxFab] : v[2])?.trim() || '', cor: (idxCor !== -1 ? v[idxCor] : v[3])?.trim() || '', chassi: (idxCha !== -1 ? v[idxCha] : v[4])?.trim() || '', etapa: (idxEta !== -1 ? v[idxEta] : v[5])?.trim() || '', localizacao: (idxLoc !== -1 ? v[idxLoc] : v[6])?.trim() || '' };
-                }).filter(r => r.os !== '');
-                setImportData(parsed);
-            };
-
-            const commitImport = async () => {
-                if (importData.length === 0) return;
-                const batch = db.batch();
-                importData.forEach(v => { const vRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('vehicles').doc(v.os); batch.set(vRef, v); });
-                await batch.commit(); alert(`Sucesso! ${importData.length} veiculos importados.`);
-                setImportData([]); setShowImportModal(false);
-            };
-
-            const updateItemInRequest = async (requestId, itemIndex, updatedItemFields) => {
-                const req = requests.find(r => r.id === requestId);
-                if (!req) return;
-                const newItems = [...req.items];
-                const item = { ...newItems[itemIndex], ...updatedItemFields };
-                if (item.price && item.supplier && item.deliveryDate && (!item.actualDeliveryDate)) item.status = 'Em Cotação';
-                if (item.actualDeliveryDate) item.status = 'Concluído';
-                newItems[itemIndex] = item;
-                let globalStatus = 'Concluído';
-                if (newItems.some(it => it.status === 'Pendente')) globalStatus = 'Pendente';
-                else if (newItems.some(it => it.status === 'Em Cotação')) globalStatus = 'Em Cotação';
-                setEditingRequest(prev => {
-                    if (!prev || prev.id !== requestId) return prev;
-                    return { ...prev, items: newItems };
+        const salvarPedido = async () => {
+            setIsSubmitting(true);
+            try {
+                await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('requests').add({
+                    os, responsavel: loggedInUser.user, localizacaoSolicitacao: "-", vehicleData: vehicle, items,
+                    timestamp: Date.now(), status: 'Pendente', userId: user.uid || 'anon'
                 });
-                try { await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('requests').doc(requestId).update({ items: newItems, status: globalStatus }); } catch (e) {}
-            };
+                setSubmitted(true);
+                setShowDuplicadaModal(false);
+            } catch (err) {
+                alert('Erro no servidor.');
+            } finally {
+                setIsSubmitting(false);
+            }
+        };
 
-            if (!loggedInUser) return <LoginView usersList={usersDB} onLogin={handleLoginSuccess} />;
+        const handleSubmit = async (e) => {
+            e.preventDefault();
+            if (!os.trim()) return alert('AVISO: O campo Ordem de Serviço (OS) é obrigatório.');
+            if (!vehicle) return alert('AVISO: Por favor, insira uma OS válida e cadastrada no sistema.');
+            if (items.some(i => !i.description.trim())) return alert('AVISO: Todos os itens devem ter uma descrição preenchida.');
 
-            return (
-                <div className="h-screen flex flex-col md:flex-row bg-slate-100 overflow-hidden">
-                    <div className="md:hidden bg-black text-white p-3 flex justify-between items-center z-[100] border-b-2 border-red-600 shadow-xl shrink-0">
-                        <div className="flex items-center gap-2"><div className="p-1 bg-red-600 rounded-lg"><Icon name="shopping-cart" size={16} /></div><span className="font-black text-sm uppercase tracking-tighter">VRZ</span></div>
-                        <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="p-2 bg-neutral-900 rounded-xl"><Icon name={isSidebarOpen ? "x" : "menu"} size={20} /></button>
+            const semFoto = items.filter(i => !i.photo).map(i => i.id);
+            if (semFoto.length > 0) {
+                setItemsSemFoto(semFoto);
+                setShowFotoModal(true);
+                return;
+            }
+
+            const existentes = requests.filter(r => String(r.os).trim() === String(os).trim());
+            if (existentes.length > 0) {
+                setPedidosDuplicados(existentes);
+                setShowDuplicadaModal(true);
+                return;
+            }
+
+            await salvarPedido();
+        };
+
+        if (submitted) return (
+            <div className="flex flex-col items-center justify-center py-10 fade-in bg-white rounded-3xl border border-neutral-200 p-8 shadow-sm max-w-md mx-auto text-center">
+                <Icon name="check-circle" size={48} className="text-emerald-500 mb-4" />
+                <h2 className="text-xl font-black uppercase tracking-tight">Pedido Protocolado!</h2>
+                <button onClick={() => { setSubmitted(false); setOs(''); setVehicle(null); setItems([{ id: Date.now(), description: '', quantity: 1, photo: null, status: 'Pendente' }]); }} className="mt-8 w-full py-4 bg-red-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-red-700">Nova Solicitação</button>
+            </div>
+        );
+
+        return (
+            <div className="space-y-4 fade-in text-wrap-anywhere">
+
+                {showFotoModal && (
+                    <div className="fixed inset-0 z-[600] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                        <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden">
+                            <div className="bg-red-600 p-6 text-center text-white">
+                                <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                                    <Icon name="camera" size={28} />
+                                </div>
+                                <h3 className="text-lg font-black uppercase tracking-tight">Foto Obrigatória!</h3>
+                                <p className="text-[10px] font-bold opacity-80 uppercase mt-1 tracking-wider">Todos os itens precisam de foto</p>
+                            </div>
+                            <div className="p-6 space-y-4">
+                                <p className="text-xs font-bold text-neutral-600 text-center leading-relaxed">
+                                    {itemsSemFoto.length === 1 ? '1 item está sem foto anexada.' : itemsSemFoto.length + ' itens estão sem foto anexada.'} Por favor, adicione a foto antes de finalizar o pedido.
+                                </p>
+                                <button onClick={() => { setShowFotoModal(false); }} className="w-full py-3.5 bg-red-600 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg hover:bg-red-700 transition-colors">
+                                    Entendido — vou adicionar a foto
+                                </button>
+                            </div>
+                        </div>
                     </div>
-                    
-                    <nav className={`fixed md:relative inset-y-0 left-0 w-52 bg-black text-white p-6 flex flex-col gap-6 z-[90] sidebar-transition transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} shadow-2xl shrink-0`}>
-                        <div className="hidden md:flex items-center gap-4">
-                            <div className="p-2 bg-red-600 rounded-xl shadow-lg shadow-red-600/30"><Icon name="shopping-cart" size={20} /></div>
-                            <h1 className="text-sm font-black uppercase tracking-widest leading-none">VRZ COMPRAS</h1>
-                        </div>
-                        
-                        <div className="flex-1 space-y-1">
-                            <NavItem active={view === 'request'} onClick={() => { setView('request'); setSidebarOpen(false); }} iconName="plus" label="Nova Peça" />
-                            <NavItem active={view === 'status'} onClick={() => { setView('status'); setSidebarOpen(false); }} iconName="search" label="Histórico de OS" />
-                            <div className="pt-6 border-t border-white/5 space-y-1">
-                                <NavItem active={view === 'admin'} onClick={() => { setView('admin'); setSidebarOpen(false); }} iconName="shield" label="Gestão Admin" />
-                            </div>
-                        </div>
+                )}
 
-                        <div className="space-y-4">
-                            <div className="bg-neutral-900/60 p-3 rounded-xl border border-white/5">
-                                <p className="text-[7px] font-black text-neutral-500 uppercase tracking-widest mb-1">Logado como:</p>
-                                <p className="text-[10px] font-black uppercase text-red-500 truncate">{loggedInUser.user}</p>
-                                <button onClick={handleLogout} className="mt-2 w-full py-1.5 bg-neutral-800 hover:bg-red-600 rounded-lg text-[8px] font-black uppercase transition-colors">Sair do Portal</button>
-                            </div>
-                            <div className="text-center">
-                                <div className={`text-[8px] font-black tracking-widest ${user ? 'text-red-600' : 'text-neutral-500'}`}>● {user ? 'SISTEMA ONLINE' : 'RECONECTANDO...'}</div>
-                            </div>
-                        </div>
-                    </nav>
-
-                    <main className="flex-1 p-4 md:p-6 overflow-y-auto scrollbar-hide h-full min-w-0">
-                        {!user ? (
-                            <div className="h-full flex flex-col items-center justify-center font-black animate-pulse text-neutral-400 gap-4"><Icon name="loader" size={32} className="animate-spin text-red-600" /><span className="text-[10px] uppercase tracking-[0.3em]">Sincronizando Sistema...</span></div>
-                        ) : (
-                            <div className="max-w-6xl mx-auto">
-                                {view === 'request' && <RequestForm user={user} loggedInUser={loggedInUser} vehiclesDB={vehiclesDB} />}
-                                {view === 'status' && <StatusView requests={requests} />}
-                                {view === 'admin' && (!adminAuth ? (
-                                    <div className="max-w-xs mx-auto py-12 fade-in">
-                                        <div className="bg-black p-8 rounded-3xl text-center text-white border-2 border-red-600 shadow-2xl">
-                                            <Icon name="lock" size={32} className="text-red-600 mx-auto mb-6" />
-                                            <h2 className="text-sm font-black uppercase mb-8 tracking-[0.2em]">Área de Gestão</h2>
-                                            <div className="relative mb-4">
-                                                <input 
-                                                    type={showAdminPass ? "text" : "password"} 
-                                                    value={adminPassValue}
-                                                    onChange={(e) => { setAdminPassValue(e.target.value); setAdminPassError(false); }}
-                                                    autoFocus 
-                                                    onKeyDown={(e) => { 
-                                                        if(e.key === 'Enter') {
-                                                            if(adminPassValue === 'VRZ2024') {
-                                                                setAdminAuth(true);
-                                                                setAdminPassError(false);
-                                                            } else {
-                                                                setAdminPassError(true);
-                                                                setAdminPassValue('');
-                                                            }
-                                                        }
-                                                    }} 
-                                                    className={`w-full p-4 bg-neutral-900 border border-white/10 rounded-xl outline-none text-center tracking-[1em] font-black transition-all ${adminPassError ? 'border-red-600 animate-shake' : 'focus:border-red-600 shadow-inner'}`} 
-                                                    placeholder="••••" 
-                                                />
-                                                <button 
-                                                    type="button" 
-                                                    onClick={() => setShowAdminPass(!showAdminPass)}
-                                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-white hover:text-red-600 transition-colors z-10"
-                                                    title="Conferir senha"
-                                                >
-                                                    <Icon name={showAdminPass ? "eye-off" : "eye"} size={20} />
-                                                </button>
-                                            </div>
-                                            {adminPassError && <p className="text-red-500 text-[10px] font-black uppercase mt-4 animate-pulse">Senha Admin Incorreta!</p>}
-                                        </div>
+                {showDuplicadaModal && (
+                    <div className="fixed inset-0 z-[600] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
+                        <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden">
+                            <div className="bg-black p-6 text-white border-b-4 border-red-600">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 bg-red-600 rounded-2xl flex items-center justify-center shrink-0">
+                                        <Icon name="alert-triangle" size={22} />
                                     </div>
-                                ) : (
-                                    <div className="space-y-6 fade-in pb-10">
-                                        <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-neutral-200 pb-4 gap-4">
-                                            <div><h2 className="text-3xl font-black uppercase text-black tracking-tighter leading-none">Gestão de Compras</h2><p className="text-[9px] font-bold text-neutral-400 mt-1 uppercase tracking-widest">Protocolos e Base de Dados</p></div>
-                                            <button onClick={() => setShowImportModal(true)} className="bg-black text-white px-5 py-2.5 rounded-xl font-black uppercase text-[10px] border-b-4 border-red-600 flex items-center gap-2 hover:bg-neutral-900 shadow-xl shrink-0"><Icon name="file-up" size={14} /> Importar Planilha</button>
+                                    <div>
+                                        <h3 className="text-base font-black uppercase tracking-tight leading-none">OS já possui pedido de compra!</h3>
+                                        <p className="text-neutral-400 text-[9px] font-bold uppercase mt-1.5 tracking-wider">OS #{os} — Confira os pedidos existentes antes de continuar</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="p-5 space-y-3 max-h-[45vh] overflow-y-auto scrollbar-hide">
+                                {pedidosDuplicados.map((req, rIdx) => (
+                                    <div key={rIdx} className="bg-neutral-50 rounded-2xl border border-neutral-200 p-4 space-y-3">
+                                        <div className="flex items-center gap-2 border-b border-neutral-100 pb-2">
+                                            <Icon name="calendar" size={12} className="text-neutral-400" />
+                                            <span className="text-[9px] font-black uppercase text-neutral-500 tracking-wider">
+                                                {new Date(req.timestamp).toLocaleDateString()} — Solicitante: <span className="text-red-600">{req.responsavel}</span>
+                                            </span>
                                         </div>
-                                        <div className="flex gap-2 bg-white p-1 rounded-xl border border-neutral-200 w-fit overflow-x-auto scrollbar-hide shrink-0">
-                                            <button onClick={() => setAdminSubView('pending')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase whitespace-nowrap transition-all ${adminSubView === 'pending' ? 'bg-orange-500 text-white shadow-md' : 'text-neutral-400'}`}>Pendentes ({requests.filter(r => r.items?.some(it => it.status === 'Pendente')).length})</button>
-                                            <button onClick={() => setAdminSubView('quoting')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase whitespace-nowrap transition-all ${adminSubView === 'quoting' ? 'bg-blue-600 text-white shadow-md' : 'text-neutral-400'}`}>Em Cotação ({requests.filter(r => r.items?.some(it => it.status === 'Em Cotação')).length})</button>
-                                            <button onClick={() => setAdminSubView('completed')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase whitespace-nowrap transition-all ${adminSubView === 'completed' ? 'bg-black text-white shadow-md' : 'text-neutral-400'}`}>Concluídos ({requests.filter(r => r.items?.every(it => it.status === 'Concluído')).length})</button>
-                                            <button onClick={() => setAdminSubView('vehicles')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase whitespace-nowrap transition-all ${adminSubView === 'vehicles' ? 'bg-neutral-800 text-white shadow-md' : 'text-neutral-400'}`}>Base Veículos ({vehiclesDB.length})</button>
-                                            <button onClick={() => setAdminSubView('users')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase whitespace-nowrap transition-all ${adminSubView === 'users' ? 'bg-red-600 text-white shadow-md' : 'text-neutral-400'}`}>Usuários</button>
-                                        </div>
-                                        <div>
-                                            {adminSubView === 'users' && <UserManagement users={usersDB} onAddUser={handleAddUser} onDeleteUser={handleDeleteUser} onToggleStatus={handleToggleUserStatus} />}
-                                            {adminSubView === 'vehicles' && (
-                                                <div className="bg-white rounded-2xl border border-neutral-200 shadow-sm overflow-hidden fade-in">
-                                                    <div className="overflow-x-auto max-h-[60vh] scrollbar-hide">
-                                                        <table className="w-full text-left border-collapse min-w-[1000px]">
-                                                            <thead className="bg-neutral-100 text-[10px] font-black uppercase text-neutral-500 sticky top-0"><tr><th className="p-3 border-b">OS</th><th className="p-3 border-b">Modelo</th><th className="p-3 border-b">Fabricante</th><th className="p-3 border-b">Cor</th><th className="p-3 border-b">Chassi</th><th className="p-3 border-b">Etapa</th><th className="p-3 border-b">Localização</th></tr></thead>
-                                                            <tbody className="text-[10px] font-medium text-neutral-700">
-                                                                {vehiclesDB.length === 0 ? (<tr><td colSpan="7" className="p-10 text-center text-neutral-300 font-black uppercase tracking-widest leading-none">Vazio</td></tr>) : vehiclesDB.map((v, i) => (
-                                                                    <tr key={i} className="border-b border-neutral-50 hover:bg-slate-50 transition-colors">
-                                                                        <td className="p-3 font-black text-black">#{v.os}</td>
-                                                                        <td className="p-3 uppercase font-bold text-neutral-800">{v.modelo}</td>
-                                                                        <td className="p-3 uppercase">{v.fabricante}</td>
-                                                                        <td className="p-3 uppercase">{v.cor}</td>
-                                                                        <td className="p-3 font-mono text-black text-[10px] font-black tracking-widest bg-neutral-50/50">{v.chassi}</td>
-                                                                        <td className="p-3"><span className="bg-red-50 text-red-600 px-2 py-0.5 rounded font-black uppercase text-[8px]">{v.etapa}</span></td>
-                                                                        <td className="p-3 uppercase">{v.localizacao}</td>
-                                                                    </tr>
-                                                                ))}
-                                                            </tbody>
-                                                        </table>
+                                        <div className="flex flex-wrap gap-2">
+                                            {req.items && req.items.map((it, idx) => (
+                                                <div key={idx} className="flex items-center gap-2 bg-white border border-neutral-100 rounded-xl px-3 py-2 shadow-sm">
+                                                    {it.photo && <img src={it.photo} className="w-8 h-8 rounded-lg object-cover border" />}
+                                                    <div>
+                                                        <p className="text-[9px] font-black uppercase text-neutral-800 leading-none">{it.description}</p>
+                                                        <div className="flex items-center gap-1.5 mt-1">
+                                                            <span className="text-[7px] text-neutral-400 font-bold">QTD: {it.quantity}</span>
+                                                            <StatusBadge status={it.status || 'Pendente'} />
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            )}
-                                            {(adminSubView === 'pending' || adminSubView === 'quoting' || adminSubView === 'completed') && (
-                                                <div className="grid grid-cols-1 gap-3 fade-in">
-                                                    {requests.filter(r => { 
-                                                        if (adminSubView === 'pending') return r.items?.some(it => it.status === 'Pendente'); 
-                                                        if (adminSubView === 'quoting') return r.items?.some(it => it.status === 'Em Cotação'); 
-                                                        if (adminSubView === 'completed') return r.items?.every(it => it.status === 'Concluído'); 
-                                                        return true; 
-                                                    }).map(req => (
-                                                        <div key={req.id} className={`bg-white p-4 rounded-2xl border border-neutral-200 shadow-sm flex items-center justify-between gap-4 border-l-4 ${adminSubView === 'pending' ? 'border-l-orange-500' : adminSubView === 'quoting' ? 'border-l-blue-600' : 'border-l-black'}`}>
-                                                            <div className="flex flex-1 gap-8 items-center min-w-0">
-                                                                <div className="text-center shrink-0"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">OS</p><p className="text-base font-black uppercase tracking-tighter">#{req.os}</p></div>
-                                                                <div className="min-w-0 flex-1">
-                                                                    <p className="text-[7px] font-black text-neutral-400 uppercase leading-none mb-1">Itens a Gerenciar</p>
-                                                                    <div className="flex gap-2 flex-wrap">
-                                                                        {req.items?.map((it, idx) => (<span key={idx} className={`text-[8px] px-2 py-0.5 rounded-full font-black uppercase ${it.status === 'Concluído' ? 'bg-black text-white' : it.status === 'Em Cotação' ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>{it.description}</span>))}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                            <button onClick={() => setEditingRequest(req)} className="bg-black text-white px-5 py-2.5 rounded-lg font-black uppercase text-[9px] tracking-widest border-b-4 border-red-600 shadow-lg hover:bg-neutral-900 shrink-0">Gerenciar</button>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
+                                            ))}
                                         </div>
                                     </div>
                                 ))}
                             </div>
-                        )}
-                    </main>
+                            <div className="p-5 bg-neutral-50 border-t border-neutral-100 flex gap-3">
+                                <button onClick={() => { setShowDuplicadaModal(false); setPedidosDuplicados([]); }} className="flex-1 py-3 bg-neutral-200 text-neutral-600 rounded-xl font-black uppercase text-[9px] tracking-widest hover:bg-neutral-300 transition-colors">
+                                    Cancelar
+                                </button>
+                                <button onClick={salvarPedido} disabled={isSubmitting} className="flex-1 py-3 bg-red-600 text-white rounded-xl font-black uppercase text-[9px] tracking-widest shadow-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2">
+                                    {isSubmitting ? <Icon name="refresh-cw" className="animate-spin" size={14} /> : <Icon name="check" size={14} />}
+                                    Continuar mesmo assim
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
-                    {showImportModal && (
-                        <div className="fixed inset-0 z-[300] bg-black/95 flex items-center justify-center p-4">
-                            <div className="bg-white w-full max-w-6xl h-[85vh] rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden border-4 border-white/10">
-                                <header className="p-6 bg-black text-white flex justify-between items-center border-b-8 border-red-600">
-                                    <div><h3 className="text-2xl font-black uppercase tracking-tighter leading-none">Simulador VRZ</h3><p className="text-neutral-500 text-[10px] font-bold mt-1 uppercase italic">COLE OS DADOS DO EXCEL AQUI (CTRL+V)</p></div>
-                                    <button onClick={() => { setShowImportModal(false); setImportData([]); }} className="p-3 bg-neutral-900 rounded-2xl"><Icon name="x" size={24} /></button>
-                                </header>
-                                <div className="flex-1 overflow-hidden flex flex-col p-6 gap-6">
-                                    {importData.length === 0 ? (
-                                        <div className="flex-1 flex flex-col items-center justify-center border-4 border-dashed border-neutral-100 rounded-[2rem] bg-neutral-50 space-y-6 relative">
-                                            <Icon name="file-spreadsheet" size={60} className="text-neutral-200" />
-                                            <div className="text-center"><p className="text-sm font-black uppercase text-neutral-400">Pronto para importar</p><p className="text-[10px] font-bold uppercase text-neutral-300">Selecione dados no Excel e use CTRL+V aqui</p></div>
-                                            <textarea onPaste={handlePaste} className="absolute inset-0 opacity-0 cursor-pointer" autoFocus />
-                                        </div>
-                                    ) : (
-                                        <div className="flex-1 overflow-hidden flex flex-col">
-                                            <div className="overflow-auto border rounded-2xl bg-neutral-50 flex-1 scrollbar-hide">
-                                                <table className="w-full text-left border-collapse min-w-[1000px]">
-                                                    <thead className="bg-neutral-200 text-[9px] font-black uppercase sticky top-0 z-10">
-                                                        <tr><th className="p-3 border">OS</th><th className="p-3 border">Modelo</th><th className="p-3 border">Fabricante</th><th className="p-3 border">Cor</th><th className="p-3 border">Chassi</th><th className="p-3 border">Etapa</th><th className="p-3 border">Localização</th></tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {importData.map((row, rIdx) => (
-                                                            <tr key={rIdx} className="bg-white border-b hover:bg-red-50 transition-colors">
-                                                                {['os', 'modelo', 'fabricante', 'cor', 'chassi', 'etapa', 'localizacao'].map(key => (
-                                                                    <td key={key} className="border p-0"><input className="excel-input" value={row[key]} onChange={(e) => { const newData = [...importData]; newData[rIdx][key] = e.target.value; setImportData(newData); }} /></td>
-                                                                ))}
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                            <div className="pt-6 flex justify-between items-center">
-                                                <p className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">{importData.length} registros prontos</p>
-                                                <div className="flex gap-4"><button onClick={() => setImportData([])} className="px-8 py-3 bg-neutral-100 text-neutral-500 rounded-xl font-black text-[10px]">LIMPAR</button><button onClick={commitImport} className="px-10 py-3 bg-red-600 text-white rounded-xl font-black text-[10px] shadow-xl">SINCRONIZAR</button></div>
-                                            </div>
-                                        </div>
-                                    )}
+                <div className="flex flex-col">
+                    <h2 className="text-2xl font-black text-black tracking-tighter uppercase leading-none">Nova Requisição</h2>
+                    <span className="text-[9px] font-bold text-neutral-400 uppercase mt-1 tracking-widest italic">Operacional VRZ</span>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div className="bg-white p-4 rounded-2xl border border-neutral-200 shadow-sm grid grid-cols-1 md:grid-cols-5 gap-4">
+                        <div className="md:col-span-2 space-y-4">
+                            <div>
+                                <label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1">Ordem de Serviço (OS)</label>
+                                <input type="text" value={os} onChange={(e) => setOs(e.target.value)} onBlur={handleOSBlur} placeholder="Nº OS" className="w-full px-3 py-2 bg-neutral-50 border-2 rounded-xl focus:border-red-600 outline-none font-black text-base" required />
+                            </div>
+                            <div className="px-1 border-t border-neutral-100 pt-3">
+                                <label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1.5">Solicitante Identificado</label>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center text-red-600 border border-red-100">
+                                        <Icon name="user" size={14} />
+                                    </div>
+                                    <span className="text-xs font-black uppercase text-neutral-800">{loggedInUser.user}</span>
                                 </div>
                             </div>
                         </div>
-                    )}
-
-                    {editingRequest && (
-                        <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-                            <div className="bg-white w-full max-w-6xl rounded-[2.5rem] shadow-2xl flex flex-col my-auto border-b-[12px] border-red-600">
-                                <header className="px-8 py-6 bg-black text-white flex justify-between items-center shrink-0">
-                                    <div className="min-w-0"><h3 className="text-xl font-black uppercase truncate leading-none">Gerenciamento OS #{editingRequest.os}</h3><p className="text-red-500 text-[8px] font-black uppercase truncate mt-1">{editingRequest.vehicleData?.modelo}</p></div>
-                                    <button onClick={() => setEditingRequest(null)} className="p-3 bg-neutral-900 hover:bg-neutral-800 rounded-2xl shrink-0"><Icon name="x" size={24} /></button>
-                                </header>
-                                <div className="p-6 overflow-y-auto max-h-[70vh] space-y-6 scrollbar-hide">
-                                    <div className="grid grid-cols-1 gap-4">
-                                        {editingRequest.items?.map((it, idx) => (
-                                            <div key={idx} className="bg-neutral-50 p-5 rounded-2xl border-2 border-neutral-100 grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
-                                                <div className="md:col-span-3 flex items-center gap-3 min-w-0">{it.photo && <img src={it.photo} className="w-12 h-12 rounded-xl object-cover border" />}<div className="min-w-0 flex-1"><p className="text-[10px] font-black uppercase leading-tight truncate">{it.description}</p><div className="flex items-center gap-2 mt-1"><span className="text-[8px] text-neutral-400 font-bold uppercase">QTD: {it.quantity}</span><StatusBadge status={it.status || 'Pendente'} /></div></div></div>
-                                                <div className="md:col-span-9 grid grid-cols-2 lg:grid-cols-4 gap-3">
-                                                    <div className="space-y-1"><label className="text-[7px] font-black uppercase text-neutral-500 ml-1">Valor Total</label><input type="number" step="0.01" value={it.price || ''} onChange={(e) => updateItemInRequest(editingRequest.id, idx, { price: e.target.value })} className="w-full bg-white border border-neutral-200 rounded-lg p-2 text-[9px] font-black outline-none focus:border-red-600" placeholder="0.00" disabled={it.status === 'Concluído'} /></div>
-                                                    <div className="space-y-1"><label className="text-[7px] font-black uppercase text-neutral-500 ml-1">Loja (Fornecedor)</label><input type="text" value={it.supplier || ''} onChange={(e) => updateItemInRequest(editingRequest.id, idx, { supplier: e.target.value })} className="w-full bg-white border border-neutral-200 rounded-lg p-2 text-[9px] font-black uppercase outline-none focus:border-red-600" placeholder="LOJA" disabled={it.status === 'Concluído'} /></div>
-                                                    <div className="space-y-1"><label className="text-[7px] font-black uppercase text-neutral-500 ml-1">Prazo Fornecedor</label><input type="date" value={it.deliveryDate || ''} onChange={(e) => updateItemInRequest(editingRequest.id, idx, { deliveryDate: e.target.value })} className="w-full bg-white border border-neutral-200 rounded-lg p-2 text-[9px] font-black outline-none focus:border-red-600" disabled={it.status === 'Concluído'} /></div>
-                                                    <div className="space-y-1"><label className="text-[7px] font-black uppercase text-red-500 ml-1">Data Entrega Real</label><input type="date" value={it.actualDeliveryDate || ''} onChange={(e) => updateItemInRequest(editingRequest.id, idx, { actualDeliveryDate: e.target.value })} className="w-full bg-red-50 border-2 border-red-100 rounded-lg p-2 text-[9px] font-black outline-none focus:border-red-600" disabled={it.status === 'Pendente'} /></div>
-                                                </div>
-                                            </div>
-                                        ))}
+                        <div className="md:col-span-3 bg-neutral-950 rounded-xl p-5 text-white border-l-[10px] border-red-600 shadow-2xl flex flex-col justify-center min-h-[140px]">
+                            {vehicle ? (
+                                <div className="flex flex-col gap-4 w-full">
+                                    <div className="grid grid-cols-2 gap-4 border-b border-white/5 pb-3">
+                                        <div className="min-w-0"><span className="text-neutral-500 text-[8px] font-black uppercase block mb-0.5 tracking-widest">Modelo</span><span className="text-white text-sm font-black uppercase truncate block leading-none">{vehicle.modelo}</span></div>
+                                        <div className="min-w-0"><span className="text-neutral-500 text-[8px] font-black uppercase block mb-0.5 tracking-widest">Fabricante</span><span className="text-white text-xs font-bold uppercase truncate block leading-none">{vehicle.fabricante || 'N/A'}</span></div>
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-2 pb-3">
+                                        <div><span className="text-neutral-500 text-[8px] font-black uppercase block mb-0.5 tracking-widest">Etapa</span><span className="text-red-500 text-[10px] font-black uppercase block leading-none">{vehicle.etapa}</span></div>
+                                        <div><span className="text-neutral-500 text-[8px] font-black uppercase block mb-0.5 tracking-widest">Cor</span><span className="text-white text-[10px] font-bold uppercase block leading-none">{vehicle.cor}</span></div>
+                                        <div><span className="text-neutral-500 text-[8px] font-black uppercase block mb-0.5 tracking-widest">Local</span><span className="text-white text-[10px] font-bold uppercase block leading-none">{vehicle.localizacao}</span></div>
+                                    </div>
+                                    <div className="bg-white/5 p-3 rounded-xl border border-white/10">
+                                        <span className="text-neutral-500 text-[8px] font-black uppercase block mb-1.5 tracking-[0.2em] text-center">Número do Chassi</span>
+                                        <span className="text-white font-chassi text-base font-black tracking-[0.15em] block text-center leading-none select-all">{vehicle.chassi}</span>
                                     </div>
                                 </div>
-                                <div className="p-6 bg-neutral-50 flex justify-between items-center shrink-0"><p className="text-[8px] text-neutral-400 font-bold uppercase italic max-w-md">* Preencha Valor, Loja e Prazo para mover para 'Em Cotação'. Informe a 'Data Real' para 'Concluir'.</p><button onClick={() => setEditingRequest(null)} className="px-10 py-3 bg-red-600 text-white rounded-xl font-black uppercase text-xs shadow-xl tracking-widest hover:bg-red-700 active:scale-95 transition-all">Fechar e Sincronizar</button></div>
+                            ) : (
+                                <div className="w-full text-center space-y-2">
+                                    <div className="w-10 h-10 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-2"><Icon name="search" size={20} className="text-neutral-700" /></div>
+                                    <p className="text-neutral-600 text-[9px] font-black uppercase tracking-[0.3em] italic leading-none">Aguardando OS...</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="space-y-3">
+                        <div className="flex justify-between items-center px-1">
+                            <h3 className="font-black text-black uppercase text-[10px] flex items-center gap-2"><Icon name="package" size={14} /> Peças Necessárias</h3>
+                            <button type="button" onClick={() => setItems([...items, { id: Date.now(), description: '', quantity: 1, photo: null, status: 'Pendente' }])} className="bg-red-600 text-white px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm hover:bg-red-700">+ ITEM</button>
+                        </div>
+                        <div className="grid grid-cols-1 gap-2">
+                            {items.map((it) => (
+                                <div key={it.id} className={`bg-white rounded-xl shadow-sm transition-all ${itemsSemFoto.includes(it.id) ? 'border-2 border-red-500' : 'border border-neutral-200'}`}>
+                                    <div className="flex items-center justify-between px-3 pt-2 pb-1 border-b border-neutral-50">
+                                        <span className="text-[8px] font-black text-neutral-400 uppercase tracking-widest">Item {items.indexOf(it) + 1}</span>
+                                        <button type="button" onClick={() => {
+                                            if (items.length > 1) {
+                                                setItems(items.filter(i => i.id !== it.id));
+                                                setItemsSemFoto(prev => prev.filter(id => id !== it.id));
+                                            } else {
+                                                setItems([{ id: Date.now(), description: '', quantity: 1, photo: null, status: 'Pendente' }]);
+                                                setItemsSemFoto([]);
+                                            }
+                                        }} className="flex items-center gap-1 bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded-lg transition-all text-[8px] font-black uppercase tracking-wide shadow-sm">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                            Remover
+                                        </button>
+                                    </div>
+                                    <div className="p-3 grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                                        <div className="md:col-span-2">
+                                            <label className="text-[8px] font-black text-neutral-400 uppercase block mb-1">Qtd</label>
+                                            <input type="number" min="1" value={it.quantity} onChange={(e) => setItems(prev => prev.map(i => i.id === it.id ? { ...i, quantity: e.target.value } : i))} className="w-full p-2 bg-neutral-50 border rounded-lg font-black text-center text-sm" />
+                                        </div>
+                                        <div className="md:col-span-7">
+                                            <label className="text-[8px] font-black text-neutral-400 uppercase block mb-1">Descrição da Peça</label>
+                                            <input type="text" value={it.description} onChange={(e) => setItems(prev => prev.map(i => i.id === it.id ? { ...i, description: e.target.value } : i))} placeholder="NOME DA PEÇA" className="w-full p-2 bg-neutral-50 border rounded-lg font-black text-[10px] uppercase focus:border-red-600 outline-none" required />
+                                        </div>
+                                        <div className="md:col-span-3 text-center">
+                                            <label className="text-[8px] font-black text-red-600 uppercase block mb-1">Foto (Obrigatória)</label>
+                                            {it.photo ? (
+                                                <div className="relative h-12 rounded-lg overflow-hidden border group shadow-inner">
+                                                    <img src={it.photo} className="h-full w-full object-cover" />
+                                                    <button type="button" onClick={() => setItems(prev => prev.map(i => i.id === it.id ? { ...i, photo: null } : i))} className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <label className={`h-12 flex flex-col items-center justify-center border-2 border-dashed rounded-lg cursor-pointer transition-all ${itemsSemFoto.includes(it.id) ? 'border-red-500 bg-red-50 hover:bg-red-100' : 'border-neutral-200 bg-neutral-50 hover:bg-red-50'}`}>
+                                                    <Icon name="camera" className={itemsSemFoto.includes(it.id) ? 'text-red-500' : 'text-neutral-400'} size={24} />
+                                                    <input type="file" accept="image/*" onChange={(e) => { const r = new FileReader(); r.onload = () => { setItems(prev => prev.map(i => i.id === it.id ? { ...i, photo: r.result } : i)); setItemsSemFoto(prev => prev.filter(id => id !== it.id)); }; if (e.target.files[0]) r.readAsDataURL(e.target.files[0]); }} className="hidden" />
+                                                </label>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    <button disabled={isSubmitting || !vehicle} className={`w-full py-4 rounded-xl font-black text-base uppercase flex items-center justify-center gap-3 shadow-lg ${isSubmitting || !vehicle ? 'bg-neutral-200 text-neutral-400' : 'bg-red-600 text-white border-b-4 border-red-800 hover:bg-red-700 active:translate-y-1 active:border-b-0'}`}>
+                        {isSubmitting ? <Icon name="refresh-cw" className="animate-spin" size={18} /> : 'Finalizar Pedido'}
+                    </button>
+                </form>
+            </div>
+        );
+    }
+
+    function StatusView({ requests }) {
+        const [search, setSearch] = useState('');
+        const [requestToDelete, setRequestToDelete] = useState(null);
+        const [deletePass, setDeletePass] = useState('');
+        const [showDeletePass, setShowDeletePass] = useState(false);
+        const [deleteError, setDeleteError] = useState(false);
+
+        const filtered = useMemo(() => requests.filter(r => {
+            const t = search.toLowerCase();
+            return (String(r.os || '').toLowerCase().includes(t)) || (String(r.responsavel || '').toLowerCase().includes(t)) || (String(r.vehicleData?.modelo || '').toLowerCase().includes(t));
+        }), [requests, search]);
+
+        const confirmDeletion = async () => {
+            if (deletePass !== 'VRZ2024') { setDeleteError(true); return; }
+            try {
+                await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('requests').doc(requestToDelete).delete();
+                closeDeleteModal();
+            } catch (e) { alert("Erro ao excluir."); }
+        };
+
+        const closeDeleteModal = () => { setRequestToDelete(null); setDeletePass(''); setShowDeletePass(false); setDeleteError(false); };
+
+        const exportGeneralReport = () => {
+            const csvRows = [["Data", "OS", "Chassi", "Veiculo", "Peca", "Qtd", "Status Peca", "Valor", "Loja", "Prazo", "Data Real Entrega"].join(";")];
+            requests.forEach(r => {
+                r.items && r.items.forEach(item => {
+                    csvRows.push([new Date(r.timestamp).toLocaleDateString(), r.os, r.vehicleData ? r.vehicleData.chassi || "-" : "-", r.vehicleData ? r.vehicleData.modelo || "-" : "-", item.description || "-", item.quantity || "1", item.status || "Pendente", item.price || "0", item.supplier || "-", item.deliveryDate ? new Date(item.deliveryDate).toLocaleDateString() : "-", item.actualDeliveryDate ? new Date(item.actualDeliveryDate).toLocaleDateString() : "-"].join(";"));
+                });
+            });
+            const blob = new Blob([csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a"); link.href = URL.createObjectURL(blob);
+            link.download = 'Relatorio_VRZ_' + new Date().toLocaleDateString() + '.csv';
+            link.click();
+        };
+
+        const exportPDF = async (request) => {
+            const { jsPDF } = window.jspdf; const doc = new jsPDF();
+            doc.setFontSize(18); doc.text("Solicitacao de Pecas - VRZ", 10, 15);
+            doc.setFontSize(10);
+            doc.text('OS: #' + request.os, 10, 25);
+            doc.text('Data: ' + new Date(request.timestamp).toLocaleString(), 10, 30);
+            doc.text('Veiculo: ' + (request.vehicleData ? request.vehicleData.modelo : ''), 10, 35);
+            doc.text('Chassi: ' + (request.vehicleData ? request.vehicleData.chassi : ''), 10, 40);
+            doc.text('Solicitante: ' + request.responsavel + ' (' + request.localizacaoSolicitacao + ')', 10, 45);
+            let y = 55; doc.setFontSize(12); doc.text("ITENS:", 10, y); y += 10;
+            request.items.forEach((item, index) => {
+                if (y > 250) { doc.addPage(); y = 20; }
+                doc.setFontSize(10); doc.text((index + 1) + '. Qtd: ' + item.quantity + ' - ' + item.description + ' [' + (item.status || 'Pendente') + ']', 15, y);
+                y += 10; if (item.photo) { try { doc.addImage(item.photo, 'JPEG', 15, y, 50, 30); y += 35; } catch (e) {} }
+            });
+            doc.save('OS_' + request.os + '_VRZ.pdf');
+        };
+
+        return (
+            <div className="space-y-4 fade-in">
+                {requestToDelete && (
+                    <div className="fixed inset-0 z-[500] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+                        <div className="bg-white w-full max-w-sm rounded-[2rem] shadow-2xl overflow-hidden">
+                            <div className="bg-red-600 p-6 text-center text-white">
+                                <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3"><Icon name="trash-2" size={24} /></div>
+                                <h3 className="text-lg font-black uppercase tracking-tight">Excluir Registro</h3>
+                                <p className="text-[10px] font-bold opacity-80 uppercase mt-1 tracking-wider">Esta ação não pode ser desfeita</p>
+                            </div>
+                            <div className="p-6 space-y-4">
+                                <div className="space-y-1">
+                                    <label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest ml-1">Senha Admin Requerida</label>
+                                    <div className="relative">
+                                        <input type={showDeletePass ? "text" : "password"} value={deletePass} onChange={(e) => { setDeletePass(e.target.value); setDeleteError(false); }} className={`w-full p-3 pr-12 bg-neutral-50 border-2 rounded-xl outline-none text-center font-black tracking-[0.5em] transition-colors ${deleteError ? 'border-red-600 animate-shake' : 'border-neutral-100 focus:border-red-600'}`} placeholder="••••" autoFocus />
+                                        <button type="button" onClick={() => setShowDeletePass(!showDeletePass)} className="absolute right-3 top-3 text-neutral-400 hover:text-red-600 transition-colors">
+                                            {showDeletePass
+                                                ? <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                                                : <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                            }
+                                        </button>
+                                    </div>
+                                    {deleteError && <p className="text-red-600 text-[8px] font-black uppercase text-center mt-1 animate-pulse">Senha Incorreta!</p>}
+                                </div>
+                                <div className="grid grid-cols-2 gap-3 pt-2">
+                                    <button onClick={closeDeleteModal} className="py-3 bg-neutral-100 text-neutral-500 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-neutral-200 transition-colors">Cancelar</button>
+                                    <button onClick={confirmDeletion} className="py-3 bg-red-600 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg shadow-red-600/20 hover:bg-red-700 transition-colors">Confirmar</button>
+                                </div>
                             </div>
                         </div>
-                    )}
+                    </div>
+                )}
+                <div className="flex flex-col md:flex-row md:items-end justify-between gap-3">
+                    <div><h2 className="text-2xl font-black uppercase text-black leading-none tracking-tighter">Histórico de OS</h2><p className="text-[9px] font-bold text-neutral-400 uppercase tracking-widest mt-1 italic">Gestão e Exportação Detalhada</p></div>
+                    <div className="flex gap-2">
+                        <button onClick={exportGeneralReport} className="bg-emerald-600 text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase flex items-center gap-2 shadow-lg hover:bg-emerald-700 transition-all"><Icon name="file-text" size={12} /> EXTRATIFICAR TUDO (EXCEL)</button>
+                        <div className="relative"><input type="text" placeholder="BUSCAR OS / NOME..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full md:w-56 pl-9 pr-4 py-2 bg-white border border-neutral-200 rounded-xl text-[9px] font-black uppercase outline-none focus:border-red-600 shadow-sm" /><div className="absolute left-3 top-2.5 text-neutral-300"><Icon name="search" size={12} /></div></div>
+                    </div>
                 </div>
-            );
-        }
+                <div className="grid grid-cols-1 gap-3 max-h-[75vh] overflow-y-auto pr-2 scrollbar-hide">
+                    {filtered.length === 0 ? (
+                        <div className="py-20 text-center bg-white rounded-2xl border border-neutral-100 border-dashed"><Icon name="inbox" size={32} className="text-neutral-200 mx-auto mb-2" /><p className="text-[9px] font-black uppercase text-neutral-300 tracking-widest leading-none">Vazio</p></div>
+                    ) : filtered.map(r => (
+                        <div key={r.id} className="bg-white rounded-2xl border border-neutral-200 p-4 shadow-sm flex flex-col lg:flex-row gap-4 hover:border-red-200 transition-all border-l-4 border-l-red-600 relative group">
+                            <div className="flex-1 space-y-3 min-w-0">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3"><span className="text-sm font-black uppercase">OS #{r.os}</span></div>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => exportPDF(r)} className="px-3 py-1.5 bg-blue-600 text-white hover:bg-blue-700 rounded-lg transition-colors flex items-center gap-2 text-[9px] font-black uppercase shadow-sm"><Icon name="file-down" size={12} /><span>Exportar PDF</span></button>
+                                        <button onClick={() => setRequestToDelete(r.id)} className="px-3 py-1.5 bg-red-600 text-white hover:bg-red-700 rounded-lg transition-colors flex items-center gap-2 text-[9px] font-black uppercase shadow-sm"><Icon name="trash-2" size={12} /><span>Excluir</span></button>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[8px] font-black uppercase tracking-wider text-neutral-400">
+                                    <div className="min-w-0"><span className="text-red-600 block mb-0.5">Solicitante</span><span className="text-black">{r.responsavel}</span></div>
+                                    <div className="min-w-0"><span>Veículo</span><span className="text-black">{r.vehicleData ? r.vehicleData.modelo : ''}</span></div>
+                                    <div className="min-w-0"><span>Setor</span><span className="text-black">{r.localizacaoSolicitacao}</span></div>
+                                    <div className="min-w-0"><span>Data</span><span className="text-black">{new Date(r.timestamp).toLocaleDateString()}</span></div>
+                                </div>
+                                <div className="flex gap-2 overflow-x-auto scrollbar-hide py-1">
+                                    {r.items && r.items.map((it, idx) => (
+                                        <div key={idx} className="flex-shrink-0 flex items-center gap-2 bg-neutral-50 p-1.5 rounded-lg border border-neutral-100 min-w-[140px] shadow-inner">
+                                            {it.photo && <img src={it.photo} className="w-8 h-8 rounded-md object-cover border" />}
+                                            <div className="min-w-0 flex-1"><p className="text-[8px] font-black uppercase leading-tight truncate text-neutral-800">{it.description}</p><div className="flex justify-between items-center mt-1"><span className="text-[7px] text-red-600 font-bold">QTD: {it.quantity}</span><StatusBadge status={it.status || 'Pendente'} /></div></div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    }
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
+    function UserManagement({ users, onAddUser, onDeleteUser, onToggleStatus }) {
+        const [newUser, setNewUser] = useState('');
+        const [newPass, setNewPass] = useState('');
+        const [showNewPass, setShowNewPass] = useState(false);
+
+        const handleAdd = () => {
+            if (!newUser || !newPass) return alert("Preencha todos os campos para criar o usuário.");
+            onAddUser(newUser, newPass);
+            setNewUser(''); setNewPass('');
+        };
+
+        return (
+            <div className="space-y-6 fade-in max-w-2xl mx-auto">
+                <div className="bg-white p-6 rounded-3xl border border-neutral-200 shadow-sm space-y-4">
+                    <h3 className="text-xs font-black uppercase tracking-widest text-red-600">Cadastrar Novo Acesso</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1">Nome de Usuário</label>
+                            <input type="text" value={newUser} onChange={(e) => setNewUser(e.target.value)} className="w-full px-4 py-2.5 bg-neutral-50 border rounded-xl font-bold text-xs outline-none focus:border-red-600" placeholder="Nome.Sobrenome" />
+                        </div>
+                        <div>
+                            <label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1">Senha de Acesso</label>
+                            <div className="relative">
+                                <input type={showNewPass ? "text" : "password"} value={newPass} onChange={(e) => setNewPass(e.target.value)} className="w-full pl-4 pr-10 py-2.5 bg-neutral-50 border rounded-xl font-bold text-xs outline-none focus:border-red-600" placeholder="Senha" />
+                                <button type="button" onClick={() => setShowNewPass(!showNewPass)} className="absolute right-3 top-2 text-neutral-400 hover:text-red-600 transition-colors">
+                                    {showNewPass
+                                        ? <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                                        : <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                    }
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <button onClick={handleAdd} className="w-full py-3 bg-red-600 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg hover:bg-red-700 transition-all">+ CRIAR CONTA</button>
+                </div>
+                <div className="bg-white rounded-3xl border border-neutral-200 shadow-sm overflow-hidden">
+                    <table className="w-full text-left">
+                        <thead className="bg-neutral-50 border-b">
+                            <tr>
+                                <th className="p-4 text-[9px] font-black uppercase text-neutral-400">Usuário do Sistema</th>
+                                <th className="p-4 text-[9px] font-black uppercase text-neutral-400">Status</th>
+                                <th className="p-4 text-[9px] font-black uppercase text-neutral-400 text-right">Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-neutral-50">
+                            {users.map((u, i) => (
+                                <tr key={i} className="hover:bg-neutral-50/50">
+                                    <td className="p-4 text-xs font-bold text-black uppercase">{u.user}</td>
+                                    <td className="p-4">
+                                        <button onClick={() => onToggleStatus(u)} className={`text-[7px] font-black uppercase px-2 py-1 rounded-full transition-all border ${u.active !== false ? 'bg-emerald-100 text-emerald-600 border-emerald-200 hover:bg-red-100 hover:text-red-600 hover:border-red-200' : 'bg-red-100 text-red-600 border-red-200 hover:bg-emerald-100 hover:text-emerald-600 hover:border-emerald-200'}`}>
+                                            {u.active !== false ? 'Ativo' : 'Desativado'}
+                                        </button>
+                                    </td>
+                                    <td className="p-4 text-right">
+                                        <button onClick={() => onDeleteUser(u.id || u.user)} className="text-white bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase transition-colors flex items-center gap-1.5 ml-auto">
+                                            <Icon name="trash-2" size={12} />EXCLUIR
+                                        </button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        );
+    }
+
+    function App() {
+        const [user, setUser] = useState(null);
+        const [loggedInUser, setLoggedInUser] = useState(null);
+        const [view, setView] = useState('request');
+        const [requests, setRequests] = useState([]);
+        const [vehiclesDB, setVehiclesDB] = useState([]);
+        const [usersDB, setUsersDB] = useState([]);
+        const [adminAuth, setAdminAuth] = useState(false);
+        const [adminPassError, setAdminPassError] = useState(false);
+        const [adminPassValue, setAdminPassValue] = useState('');
+        const [showAdminPass, setShowAdminPass] = useState(false);
+        const [editingRequest, setEditingRequest] = useState(null);
+        const [isSidebarOpen, setSidebarOpen] = useState(false);
+        const [adminSubView, setAdminSubView] = useState('pending');
+        const [importData, setImportData] = useState([]);
+        const [showImportModal, setShowImportModal] = useState(false);
+
+        useEffect(() => {
+            const unsubAuth = auth.onAuthStateChanged((u) => {
+                if (u) setUser(u);
+                else auth.signInAnonymously();
+            });
+            return () => unsubAuth();
+        }, []);
+
+        useEffect(() => {
+            if (!user) return;
+            const unsubReq = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('requests').onSnapshot((s) => { setRequests(s.docs.map(d => ({ id: d.id, ...d.data() }))); }, () => {});
+            const unsubVeh = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('vehicles').onSnapshot((s) => { setVehiclesDB(s.docs.map(d => d.data())); }, () => {});
+            const unsubUsers = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('users').onSnapshot((s) => {
+                const dbUsers = s.docs.map(d => ({ id: d.id, ...d.data() }));
+                const combined = [...dbUsers];
+                INITIAL_USERS.forEach(iu => { if (!dbUsers.find(du => du.user.toLowerCase() === iu.user.toLowerCase())) combined.push(iu); });
+                setUsersDB(combined);
+            }, () => {});
+            return () => { unsubReq(); unsubVeh(); unsubUsers(); };
+        }, [user]);
+
+        const handleAddUser = async (u, p) => {
+            try { await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('users').add({ user: u, pass: p, active: true }); }
+            catch (e) { alert("Erro ao salvar usuário no servidor."); }
+        };
+
+        const handleDeleteUser = async (id) => {
+            if (!window.confirm("Deseja remover permanentemente o acesso deste usuário?")) return;
+            try {
+                if (id && id.length > 15) { await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('users').doc(id).delete(); }
+                else { setUsersDB(prev => prev.filter(u => u.user !== id)); }
+            } catch (e) { setUsersDB(prev => prev.filter(u => u.id !== id && u.user !== id)); }
+        };
+
+        const handleToggleUserStatus = async (userObj) => {
+            const newStatus = !(userObj.active !== false);
+            try {
+                if (userObj.id) { await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('users').doc(userObj.id).update({ active: newStatus }); }
+                else { await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('users').add({ ...userObj, active: newStatus }); }
+            } catch (e) { alert("Erro ao atualizar status do usuário."); }
+        };
+
+        const handleLoginSuccess = (userObj) => { setLoggedInUser(userObj); };
+        const handleLogout = () => { setLoggedInUser(null); setAdminAuth(false); setView('request'); setAdminPassValue(''); };
+
+        const verificarSenhaAdmin = () => {
+            if (adminPassValue === 'VRZ2024') {
+                setAdminAuth(true);
+                setAdminPassError(false);
+            } else {
+                setAdminPassError(true);
+                setAdminPassValue('');
+            }
+        };
+
+        const handlePaste = (e) => {
+            const text = e.clipboardData.getData('text');
+            const lines = text.split(/\r?\n/).filter(l => l.trim() !== ''); if (lines.length === 0) return;
+            const firstLine = lines[0].split(/[,\t]/); const headers = firstLine.map(h => h.trim().toUpperCase());
+            const findIndex = (targets) => headers.findIndex(h => targets.some(t => h.includes(t)));
+            const idxOS = findIndex(['OS']); const idxMod = findIndex(['MODELO']); const idxFab = findIndex(['FABRICANTE', 'MARCA']);
+            const idxCor = findIndex(['COR']); const idxCha = findIndex(['CHASSI']); const idxEta = findIndex(['ETAPA']); const idxLoc = findIndex(['LOCALIZA']);
+            const rowsToParse = (idxOS !== -1) ? lines.slice(1) : lines;
+            const parsed = rowsToParse.map(l => {
+                const v = l.split(/[,\t]/);
+                return { os: (idxOS !== -1 ? v[idxOS] : v[0]) ? (idxOS !== -1 ? v[idxOS] : v[0]).trim() : '', modelo: (idxMod !== -1 ? v[idxMod] : v[1]) ? (idxMod !== -1 ? v[idxMod] : v[1]).trim() : '', fabricante: (idxFab !== -1 ? v[idxFab] : v[2]) ? (idxFab !== -1 ? v[idxFab] : v[2]).trim() : '', cor: (idxCor !== -1 ? v[idxCor] : v[3]) ? (idxCor !== -1 ? v[idxCor] : v[3]).trim() : '', chassi: (idxCha !== -1 ? v[idxCha] : v[4]) ? (idxCha !== -1 ? v[idxCha] : v[4]).trim() : '', etapa: (idxEta !== -1 ? v[idxEta] : v[5]) ? (idxEta !== -1 ? v[idxEta] : v[5]).trim() : '', localizacao: (idxLoc !== -1 ? v[idxLoc] : v[6]) ? (idxLoc !== -1 ? v[idxLoc] : v[6]).trim() : '' };
+            }).filter(r => r.os !== '');
+            setImportData(parsed);
+        };
+
+        const commitImport = async () => {
+            if (importData.length === 0) return;
+            const batch = db.batch();
+            importData.forEach(v => { const vRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('vehicles').doc(v.os); batch.set(vRef, v); });
+            await batch.commit(); alert('Sucesso! ' + importData.length + ' veiculos importados.');
+            setImportData([]); setShowImportModal(false);
+        };
+
+        const updateItemInRequest = async (requestId, itemIndex, updatedItemFields) => {
+            const req = requests.find(r => r.id === requestId); if (!req) return;
+            const newItems = [...req.items];
+            const item = { ...newItems[itemIndex], ...updatedItemFields };
+            if (item.price && item.supplier && item.deliveryDate && (!item.actualDeliveryDate)) item.status = 'Em Cotação';
+            if (item.actualDeliveryDate) item.status = 'Concluído';
+            newItems[itemIndex] = item;
+            let globalStatus = 'Concluído';
+            if (newItems.some(it => it.status === 'Pendente')) globalStatus = 'Pendente';
+            else if (newItems.some(it => it.status === 'Em Cotação')) globalStatus = 'Em Cotação';
+            setEditingRequest(prev => { if (!prev || prev.id !== requestId) return prev; return { ...prev, items: newItems }; });
+            try { await db.collection('artifacts').doc(appId).collection('public').doc('data').collection('requests').doc(requestId).update({ items: newItems, status: globalStatus }); } catch (e) {}
+        };
+
+        if (!loggedInUser) return <LoginView usersList={usersDB} onLogin={handleLoginSuccess} />;
+
+        return (
+            <div className="h-screen flex flex-col md:flex-row bg-slate-100 overflow-hidden">
+                <div className="md:hidden bg-black text-white p-3 flex justify-between items-center z-[100] border-b-2 border-red-600 shadow-xl shrink-0">
+                    <div className="flex items-center gap-2"><div className="p-1 bg-red-600 rounded-lg"><Icon name="shopping-cart" size={16} /></div><span className="font-black text-sm uppercase tracking-tighter">VRZ</span></div>
+                    <button onClick={() => setSidebarOpen(!isSidebarOpen)} className="p-2 bg-neutral-900 rounded-xl"><Icon name={isSidebarOpen ? "x" : "menu"} size={20} /></button>
+                </div>
+
+                <nav className={`fixed md:relative inset-y-0 left-0 w-52 bg-black text-white p-6 flex flex-col gap-6 z-[90] sidebar-transition transform ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} shadow-2xl shrink-0`}>
+                    <div className="hidden md:flex items-center gap-4">
+                        <div className="p-2 bg-red-600 rounded-xl shadow-lg shadow-red-600/30"><Icon name="shopping-cart" size={20} /></div>
+                        <h1 className="text-sm font-black uppercase tracking-widest leading-none">VRZ COMPRAS</h1>
+                    </div>
+                    <div className="flex-1 space-y-1">
+                        <NavItem active={view === 'request'} onClick={() => { setView('request'); setSidebarOpen(false); }} iconName="plus" label="Nova Peça" />
+                        <NavItem active={view === 'status'} onClick={() => { setView('status'); setSidebarOpen(false); }} iconName="search" label="Histórico de OS" />
+                        <div className="pt-6 border-t border-white/5 space-y-1">
+                            <NavItem active={view === 'admin'} onClick={() => { setView('admin'); setSidebarOpen(false); }} iconName="shield" label="Gestão Admin" />
+                        </div>
+                    </div>
+                    <div className="space-y-4">
+                        <div className="bg-neutral-900/60 p-3 rounded-xl border border-white/5">
+                            <p className="text-[7px] font-black text-neutral-500 uppercase tracking-widest mb-1">Logado como:</p>
+                            <p className="text-[10px] font-black uppercase text-red-500 truncate">{loggedInUser.user}</p>
+                            <button onClick={handleLogout} className="mt-2 w-full py-1.5 bg-neutral-800 hover:bg-red-600 rounded-lg text-[8px] font-black uppercase transition-colors">Sair do Portal</button>
+                        </div>
+                        <div className="text-center">
+                            <div className={`text-[8px] font-black tracking-widest ${user ? 'text-red-600' : 'text-neutral-500'}`}>● {user ? 'SISTEMA ONLINE' : 'RECONECTANDO...'}</div>
+                        </div>
+                    </div>
+                </nav>
+
+                <main className="flex-1 p-4 md:p-6 overflow-y-auto scrollbar-hide h-full min-w-0">
+                    {!user ? (
+                        <div className="h-full flex flex-col items-center justify-center font-black animate-pulse text-neutral-400 gap-4"><Icon name="loader" size={32} className="animate-spin text-red-600" /><span className="text-[10px] uppercase tracking-[0.3em]">Sincronizando Sistema...</span></div>
+                    ) : (
+                        <div className="max-w-6xl mx-auto">
+                            {view === 'request' && <RequestForm user={user} loggedInUser={loggedInUser} vehiclesDB={vehiclesDB} requests={requests} />}
+                            {view === 'status' && <StatusView requests={requests} />}
+                            {view === 'admin' && (!adminAuth ? (
+                                <div className="max-w-sm mx-auto py-12 fade-in">
+                                    <div className="bg-black rounded-[2rem] shadow-2xl overflow-hidden border-b-[6px] border-red-600">
+                                        <div className="p-8 text-center text-white border-b border-white/5">
+                                            <div className="w-16 h-16 bg-red-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-red-600/30">
+                                                <Icon name="shield" size={30} />
+                                            </div>
+                                            <h2 className="text-base font-black uppercase tracking-[0.2em] leading-none">Área Restrita</h2>
+                                            <p className="text-[9px] font-bold text-neutral-500 uppercase tracking-widest italic mt-2">Acesso somente para administradores</p>
+                                        </div>
+                                        <div className="p-8 space-y-4">
+                                            <div>
+                                                <label className="text-[8px] font-black text-neutral-500 uppercase tracking-widest block mb-2 ml-1">Senha de Administrador</label>
+                                                <div className="relative">
+                                                    <div className="absolute left-4 top-4 text-neutral-600 pointer-events-none">
+                                                        <Icon name="lock" size={16} />
+                                                    </div>
+                                                    <input
+                                                        type={showAdminPass ? "text" : "password"}
+                                                        value={adminPassValue}
+                                                        onChange={(e) => { setAdminPassValue(e.target.value); setAdminPassError(false); }}
+                                                        autoFocus
+                                                        onKeyDown={(e) => { if (e.key === 'Enter') verificarSenhaAdmin(); }}
+                                                        className={`w-full pl-11 pr-12 py-3.5 bg-neutral-900 border rounded-xl outline-none text-center tracking-[0.5em] font-black text-white transition-all ${adminPassError ? 'border-red-600 animate-shake' : 'border-white/10 focus:border-red-600'}`}
+                                                        placeholder="••••••"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setShowAdminPass(!showAdminPass)}
+                                                        className="absolute right-4 top-4 text-neutral-400 hover:text-red-400 transition-colors z-10"
+                                                    >
+                                                        {showAdminPass
+                                                            ? <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                                                            : <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                                        }
+                                                    </button>
+                                                </div>
+                                                {adminPassError && (
+                                                    <div className="mt-2 flex items-center gap-2 bg-red-600/10 border border-red-600/30 rounded-lg px-3 py-2">
+                                                        <Icon name="alert-circle" size={13} className="text-red-500 shrink-0" />
+                                                        <p className="text-red-400 text-[9px] font-black uppercase tracking-wider">Senha incorreta! Tente novamente.</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={verificarSenhaAdmin}
+                                                className="w-full py-3.5 bg-red-600 text-white rounded-xl font-black uppercase text-[10px] tracking-[0.15em] shadow-lg shadow-red-600/20 hover:bg-red-700 active:scale-95 transition-all flex items-center justify-center gap-2"
+                                            >
+                                                <Icon name="unlock" size={14} />
+                                                Acessar Painel Admin
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="space-y-6 fade-in pb-10">
+                                    <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-neutral-200 pb-4 gap-4">
+                                        <div><h2 className="text-3xl font-black uppercase text-black tracking-tighter leading-none">Gestão de Compras</h2><p className="text-[9px] font-bold text-neutral-400 mt-1 uppercase tracking-widest">Protocolos e Base de Dados</p></div>
+                                        <button onClick={() => setShowImportModal(true)} className="bg-black text-white px-5 py-2.5 rounded-xl font-black uppercase text-[10px] border-b-4 border-red-600 flex items-center gap-2 hover:bg-neutral-900 shadow-xl shrink-0"><Icon name="file-up" size={14} /> Importar Planilha</button>
+                                    </div>
+                                    <div className="flex gap-2 bg-white p-1 rounded-xl border border-neutral-200 w-fit overflow-x-auto scrollbar-hide shrink-0">
+                                        <button onClick={() => setAdminSubView('pending')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase whitespace-nowrap transition-all ${adminSubView === 'pending' ? 'bg-orange-500 text-white shadow-md' : 'text-neutral-400'}`}>Pendentes ({requests.filter(r => r.items && r.items.some(it => it.status === 'Pendente')).length})</button>
+                                        <button onClick={() => setAdminSubView('quoting')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase whitespace-nowrap transition-all ${adminSubView === 'quoting' ? 'bg-blue-600 text-white shadow-md' : 'text-neutral-400'}`}>Em Cotação ({requests.filter(r => r.items && r.items.some(it => it.status === 'Em Cotação')).length})</button>
+                                        <button onClick={() => setAdminSubView('completed')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase whitespace-nowrap transition-all ${adminSubView === 'completed' ? 'bg-black text-white shadow-md' : 'text-neutral-400'}`}>Concluídos ({requests.filter(r => r.items && r.items.every(it => it.status === 'Concluído')).length})</button>
+                                        <button onClick={() => setAdminSubView('vehicles')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase whitespace-nowrap transition-all ${adminSubView === 'vehicles' ? 'bg-neutral-800 text-white shadow-md' : 'text-neutral-400'}`}>Base Veículos ({vehiclesDB.length})</button>
+                                        <button onClick={() => setAdminSubView('users')} className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase whitespace-nowrap transition-all ${adminSubView === 'users' ? 'bg-red-600 text-white shadow-md' : 'text-neutral-400'}`}>Usuários</button>
+                                    </div>
+                                    <div>
+                                        {adminSubView === 'users' && <UserManagement users={usersDB} onAddUser={handleAddUser} onDeleteUser={handleDeleteUser} onToggleStatus={handleToggleUserStatus} />}
+                                        {adminSubView === 'vehicles' && (
+                                            <div className="bg-white rounded-2xl border border-neutral-200 shadow-sm overflow-hidden fade-in">
+                                                <div className="overflow-x-auto max-h-[60vh] scrollbar-hide">
+                                                    <table className="w-full text-left border-collapse min-w-[1000px]">
+                                                        <thead className="bg-neutral-100 text-[10px] font-black uppercase text-neutral-500 sticky top-0"><tr><th className="p-3 border-b">OS</th><th className="p-3 border-b">Modelo</th><th className="p-3 border-b">Fabricante</th><th className="p-3 border-b">Cor</th><th className="p-3 border-b">Chassi</th><th className="p-3 border-b">Etapa</th><th className="p-3 border-b">Localização</th></tr></thead>
+                                                        <tbody className="text-[10px] font-medium text-neutral-700">
+                                                            {vehiclesDB.length === 0 ? (<tr><td colSpan="7" className="p-10 text-center text-neutral-300 font-black uppercase tracking-widest">Vazio</td></tr>) : vehiclesDB.map((v, i) => (
+                                                                <tr key={i} className="border-b border-neutral-50 hover:bg-slate-50 transition-colors">
+                                                                    <td className="p-3 font-black text-black">#{v.os}</td>
+                                                                    <td className="p-3 uppercase font-bold text-neutral-800">{v.modelo}</td>
+                                                                    <td className="p-3 uppercase">{v.fabricante}</td>
+                                                                    <td className="p-3 uppercase">{v.cor}</td>
+                                                                    <td className="p-3 font-mono text-black text-[10px] font-black tracking-widest bg-neutral-50/50">{v.chassi}</td>
+                                                                    <td className="p-3"><span className="bg-red-50 text-red-600 px-2 py-0.5 rounded font-black uppercase text-[8px]">{v.etapa}</span></td>
+                                                                    <td className="p-3 uppercase">{v.localizacao}</td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        )}
+                                        {(adminSubView === 'pending' || adminSubView === 'quoting' || adminSubView === 'completed') && (
+                                            <div className="grid grid-cols-1 gap-3 fade-in">
+                                                {requests.filter(r => {
+                                                    if (adminSubView === 'pending') return r.items && r.items.some(it => it.status === 'Pendente');
+                                                    if (adminSubView === 'quoting') return r.items && r.items.some(it => it.status === 'Em Cotação');
+                                                    if (adminSubView === 'completed') return r.items && r.items.every(it => it.status === 'Concluído');
+                                                    return true;
+                                                }).map(req => (
+                                                    <div key={req.id} className={`bg-white p-4 rounded-2xl border border-neutral-200 shadow-sm flex items-center justify-between gap-4 border-l-4 ${adminSubView === 'pending' ? 'border-l-orange-500' : adminSubView === 'quoting' ? 'border-l-blue-600' : 'border-l-black'}`}>
+                                                        <div className="flex flex-1 gap-8 items-center min-w-0">
+                                                            <div className="text-center shrink-0"><p className="text-[7px] font-black text-neutral-400 uppercase leading-none">OS</p><p className="text-base font-black uppercase tracking-tighter">#{req.os}</p></div>
+                                                            <div className="min-w-0 flex-1">
+                                                                <p className="text-[7px] font-black text-neutral-400 uppercase leading-none mb-1">Itens a Gerenciar</p>
+                                                                <div className="flex gap-2 flex-wrap">
+                                                                    {req.items && req.items.map((it, idx) => (<span key={idx} className={`text-[8px] px-2 py-0.5 rounded-full font-black uppercase ${it.status === 'Concluído' ? 'bg-black text-white' : it.status === 'Em Cotação' ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600'}`}>{it.description}</span>))}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <button onClick={() => setEditingRequest(req)} className="bg-black text-white px-5 py-2.5 rounded-lg font-black uppercase text-[9px] tracking-widest border-b-4 border-red-600 shadow-lg hover:bg-neutral-900 shrink-0">Gerenciar</button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </main>
+
+                {showImportModal && (
+                    <div className="fixed inset-0 z-[300] bg-black/95 flex items-center justify-center p-4">
+                        <div className="bg-white w-full max-w-6xl h-[85vh] rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden border-4 border-white/10">
+                            <header className="p-6 bg-black text-white flex justify-between items-center border-b-8 border-red-600">
+                                <div><h3 className="text-2xl font-black uppercase tracking-tighter leading-none">Simulador VRZ</h3><p className="text-neutral-500 text-[10px] font-bold mt-1 uppercase italic">COLE OS DADOS DO EXCEL AQUI (CTRL+V)</p></div>
+                                <button onClick={() => { setShowImportModal(false); setImportData([]); }} className="p-3 bg-neutral-900 rounded-2xl"><Icon name="x" size={24} /></button>
+                            </header>
+                            <div className="flex-1 overflow-hidden flex flex-col p-6 gap-6">
+                                {importData.length === 0 ? (
+                                    <div className="flex-1 flex flex-col items-center justify-center border-4 border-dashed border-neutral-100 rounded-[2rem] bg-neutral-50 space-y-6 relative">
+                                        <Icon name="file-spreadsheet" size={60} className="text-neutral-200" />
+                                        <div className="text-center"><p className="text-sm font-black uppercase text-neutral-400">Pronto para importar</p><p className="text-[10px] font-bold uppercase text-neutral-300">Selecione dados no Excel e use CTRL+V aqui</p></div>
+                                        <textarea onPaste={handlePaste} className="absolute inset-0 opacity-0 cursor-pointer" autoFocus />
+                                    </div>
+                                ) : (
+                                    <div className="flex-1 overflow-hidden flex flex-col">
+                                        <div className="overflow-auto border rounded-2xl bg-neutral-50 flex-1 scrollbar-hide">
+                                            <table className="w-full text-left border-collapse min-w-[1000px]">
+                                                <thead className="bg-neutral-200 text-[9px] font-black uppercase sticky top-0 z-10">
+                                                    <tr><th className="p-3 border">OS</th><th className="p-3 border">Modelo</th><th className="p-3 border">Fabricante</th><th className="p-3 border">Cor</th><th className="p-3 border">Chassi</th><th className="p-3 border">Etapa</th><th className="p-3 border">Localização</th></tr>
+                                                </thead>
+                                                <tbody>
+                                                    {importData.map((row, rIdx) => (
+                                                        <tr key={rIdx} className="bg-white border-b hover:bg-red-50 transition-colors">
+                                                            {['os', 'modelo', 'fabricante', 'cor', 'chassi', 'etapa', 'localizacao'].map(key => (
+                                                                <td key={key} className="border p-0"><input className="excel-input" value={row[key]} onChange={(e) => { const newData = [...importData]; newData[rIdx][key] = e.target.value; setImportData(newData); }} /></td>
+                                                            ))}
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        <div className="pt-6 flex justify-between items-center">
+                                            <p className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">{importData.length} registros prontos</p>
+                                            <div className="flex gap-4"><button onClick={() => setImportData([])} className="px-8 py-3 bg-neutral-100 text-neutral-500 rounded-xl font-black text-[10px]">LIMPAR</button><button onClick={commitImport} className="px-10 py-3 bg-red-600 text-white rounded-xl font-black text-[10px] shadow-xl">SINCRONIZAR</button></div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {editingRequest && (
+                    <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+                        <div className="bg-white w-full max-w-6xl rounded-[2.5rem] shadow-2xl flex flex-col my-auto border-b-[12px] border-red-600">
+                            <header className="px-8 py-6 bg-black text-white flex justify-between items-center shrink-0">
+                                <div className="min-w-0"><h3 className="text-xl font-black uppercase truncate leading-none">Gerenciamento OS #{editingRequest.os}</h3><p className="text-red-500 text-[8px] font-black uppercase truncate mt-1">{editingRequest.vehicleData ? editingRequest.vehicleData.modelo : ''}</p></div>
+                                <button onClick={() => setEditingRequest(null)} className="p-3 bg-neutral-900 hover:bg-neutral-800 rounded-2xl shrink-0"><Icon name="x" size={24} /></button>
+                            </header>
+                            <div className="p-6 overflow-y-auto max-h-[70vh] space-y-6 scrollbar-hide">
+                                <div className="grid grid-cols-1 gap-4">
+                                    {editingRequest.items && editingRequest.items.map((it, idx) => (
+                                        <div key={idx} className="bg-neutral-50 p-5 rounded-2xl border-2 border-neutral-100 grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+                                            <div className="md:col-span-3 flex items-center gap-3 min-w-0">{it.photo && <img src={it.photo} className="w-12 h-12 rounded-xl object-cover border" />}<div className="min-w-0 flex-1"><p className="text-[10px] font-black uppercase leading-tight truncate">{it.description}</p><div className="flex items-center gap-2 mt-1"><span className="text-[8px] text-neutral-400 font-bold uppercase">QTD: {it.quantity}</span><StatusBadge status={it.status || 'Pendente'} /></div></div></div>
+                                            <div className="md:col-span-9 grid grid-cols-2 lg:grid-cols-4 gap-3">
+                                                <div className="space-y-1"><label className="text-[7px] font-black uppercase text-neutral-500 ml-1">Valor Total</label><input type="number" step="0.01" value={it.price || ''} onChange={(e) => updateItemInRequest(editingRequest.id, idx, { price: e.target.value })} className="w-full bg-white border border-neutral-200 rounded-lg p-2 text-[9px] font-black outline-none focus:border-red-600" placeholder="0.00" disabled={it.status === 'Concluído'} /></div>
+                                                <div className="space-y-1"><label className="text-[7px] font-black uppercase text-neutral-500 ml-1">Loja (Fornecedor)</label><input type="text" value={it.supplier || ''} onChange={(e) => updateItemInRequest(editingRequest.id, idx, { supplier: e.target.value })} className="w-full bg-white border border-neutral-200 rounded-lg p-2 text-[9px] font-black uppercase outline-none focus:border-red-600" placeholder="LOJA" disabled={it.status === 'Concluído'} /></div>
+                                                <div className="space-y-1"><label className="text-[7px] font-black uppercase text-neutral-500 ml-1">Prazo Fornecedor</label><input type="date" value={it.deliveryDate || ''} onChange={(e) => updateItemInRequest(editingRequest.id, idx, { deliveryDate: e.target.value })} className="w-full bg-white border border-neutral-200 rounded-lg p-2 text-[9px] font-black outline-none focus:border-red-600" disabled={it.status === 'Concluído'} /></div>
+                                                <div className="space-y-1"><label className="text-[7px] font-black uppercase text-red-500 ml-1">Data Entrega Real</label><input type="date" value={it.actualDeliveryDate || ''} onChange={(e) => updateItemInRequest(editingRequest.id, idx, { actualDeliveryDate: e.target.value })} className="w-full bg-red-50 border-2 border-red-100 rounded-lg p-2 text-[9px] font-black outline-none focus:border-red-600" disabled={it.status === 'Pendente'} /></div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            <div className="p-6 bg-neutral-50 flex justify-between items-center shrink-0"><p className="text-[8px] text-neutral-400 font-bold uppercase italic max-w-md">* Preencha Valor, Loja e Prazo para mover para 'Em Cotação'. Informe a 'Data Real' para 'Concluir'.</p><button onClick={() => setEditingRequest(null)} className="px-10 py-3 bg-red-600 text-white rounded-xl font-black uppercase text-xs shadow-xl tracking-widest hover:bg-red-700 active:scale-95 transition-all">Fechar e Sincronizar</button></div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+</script>
 </body>
 </html>
