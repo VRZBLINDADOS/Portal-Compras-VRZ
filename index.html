@@ -754,6 +754,46 @@ function StatusView({requests,isAdmin}){
     const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`Relatorio_VRZ_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.csv`;a.click();
   };
 
+  // Exportação para PROCV — uma linha por OS, todas as peças na mesma célula
+  const exportControle=()=>{
+    const STATUS_ORDER=['Pendente','Em Cotação','Concluído'];
+    // Agrupar pedidos por OS — múltiplos pedidos da mesma OS viram uma única linha
+    const byOS={};
+    requests.forEach(r=>{
+      const k=String(r.os||'').trim();
+      if(!k)return;
+      if(!byOS[k]){byOS[k]={os:k,modelo:r.vehicleData?.modelo||'-',chassi:r.vehicleData?.chassi||'-',fabricante:r.vehicleData?.fabricante||'-',itens:[],ts:r.timestamp||0};}
+      (r.items||[]).forEach(it=>byOS[k].itens.push({
+        desc:it.description||'-',qty:it.quantity||1,status:it.status||'Pendente',orig:it.statusOriginal||''
+      }));
+      if((r.timestamp||0)>byOS[k].ts)byOS[k].ts=r.timestamp;
+    });
+
+    const header=['OS','Modelo','Fabricante','Chassi','Peças Solicitadas','Status Geral','Última Atualização'].join(';');
+    const rows=[header];
+
+    // Ordenar por OS numérica
+    Object.values(byOS).sort((a,b)=>{
+      const na=parseInt(a.os)||0, nb=parseInt(b.os)||0;
+      return na-nb||a.os.localeCompare(b.os);
+    }).forEach(r=>{
+      // Peças na mesma célula: "2x PARABRISA | 1x RETROVISOR LE | 3x PARAFUSO"
+      const pecas=r.itens.map(it=>`${it.qty}x ${it.desc}`).join(' | ');
+
+      // Status geral: se alguma Pendente → Pendente; se alguma Em Cotação → Em Cotação; senão Concluído
+      let sg='Concluído';
+      if(r.itens.some(it=>it.status==='Pendente'))sg='Pendente';
+      else if(r.itens.some(it=>it.status==='Em Cotação'))sg='Em Cotação';
+
+      const dt=r.ts?new Date(r.ts).toLocaleDateString('pt-BR'):'';
+      rows.push([r.os,r.modelo,r.fabricante,r.chassi,`"${pecas}"`,sg,dt].join(';'));
+    });
+
+    const blob=new Blob(['\uFEFF'+rows.join('\n')],{type:'text/csv;charset=utf-8;'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+    a.download=`VRZ_Controle_PROCV_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.csv`;a.click();
+  };
+
   const exportPDF=async req=>{
     const {jsPDF}=window.jspdf;const doc=new jsPDF();
     doc.setFontSize(16);doc.text('Solicitacao de Pecas - VRZ',10,15);doc.setFontSize(9);
@@ -784,6 +824,7 @@ function StatusView({requests,isAdmin}){
             ))}
           </div>
           {isAdmin&&<button onClick={exportCSV} className="bg-emerald-600 text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase flex items-center gap-2 shadow-lg hover:bg-emerald-700"><Icon name="file-text" size={12}/>EXCEL</button>}
+          {isAdmin&&<button onClick={exportControle} className="bg-black text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase flex items-center gap-2 shadow-lg hover:bg-neutral-800 border-b-2 border-red-600" title="Uma linha por OS, peças juntas numa célula — pronto para PROCV"><Icon name="table-2" size={12}/>PROCV</button>}
           <div className="relative"><input type="text" placeholder="BUSCAR OS / CHASSI / NOME..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full md:w-64 pl-9 pr-4 py-2 bg-white border border-neutral-200 rounded-xl text-[9px] font-black uppercase outline-none focus:border-red-600 shadow-sm"/><div className="absolute left-3 top-2.5 text-neutral-300"><Icon name="search" size={12}/></div></div>
         </div>
       </div>
