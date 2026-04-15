@@ -1540,4 +1540,203 @@ function LoginView({ onLogin, usersList }) {
         <div className="bg-gradient-to-r from-red-500 to-red-600 p-8 text-center text-white">
           <div className="p-3 bg-white/20 rounded-2xl w-fit mx-auto mb-4"><Icon name="shopping-cart" size={32} /></div>
           <h1 className="text-4xl font-black uppercase tracking-tight">VRZ COMPRAS</h1>
-          <p className="text-[9px] font-medium opacity-80 mt-
+          <p className="text-[9px] font-medium opacity-80 mt-2">Sistema de Gestão de Compras</p>
+        </div>
+        <form onSubmit={submit} className="p-8 space-y-6">
+          {err && (<div className="bg-red-50 border border-red-100 p-3 rounded-xl flex items-center gap-2 text-red-600 animate-shake"><Icon name="alert-circle" size={14} /><span className="text-[10px] font-bold uppercase">{err}</span></div>)}
+          <div className="space-y-4">
+            <div><label className="text-[8px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Usuário</label><div className="relative"><Icon name="user" size={16} className="absolute left-4 top-3.5 text-gray-400" /><input type="text" value={u} onChange={e => setU(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-gray-50 border-2 border-gray-100 rounded-xl focus:border-red-500 outline-none font-medium text-sm" placeholder="USUÁRIO" required /></div></div>
+            <div><label className="text-[8px] font-bold text-gray-400 uppercase tracking-wider block mb-1">Senha</label><div className="relative"><Icon name="lock" size={16} className="absolute left-4 top-3.5 text-gray-400" /><input type={showP ? "text" : "password"} value={p} onChange={e => setP(e.target.value)} className="w-full pl-11 pr-12 py-3 bg-gray-50 border-2 border-gray-100 rounded-xl focus:border-red-500 outline-none font-medium text-sm tracking-wider" placeholder="••••••••" required /><button type="button" onClick={() => setShowP(!showP)} className="absolute right-4 top-3 text-gray-400 hover:text-red-500">{showP ? <Icon name="eye-off" size={16} /> : <Icon name="eye" size={16} />}</button></div></div>
+          </div>
+          <button type="submit" className="w-full py-4 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl font-bold uppercase text-xs shadow-lg hover:shadow-xl transition-all tracking-wider">Entrar no Portal</button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// MAIN APP COMPONENT
+// ============================================
+function App() {
+  const [user, setUser] = useState(null);
+  const [loggedIn, setLoggedIn] = useState(null);
+  const [view, setView] = useState('request');
+  const [subView, setSubView] = useState('pending');
+  const [importData, setImportData] = useState([]);
+  const [showImport, setShowImport] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [showDonor, setShowDonor] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const { data: requests, loading: requestsLoading } = useFirestore('requests');
+  const { data: vehicles, loading: vehiclesLoading } = useFirestore('vehicles');
+  const { data: usersData, loading: usersLoading } = useFirestore('users');
+  const [users, setUsers] = useState([]);
+
+  useEffect(() => {
+    const combined = [...usersData];
+    INIT_USERS.forEach(u => { if (!combined.find(d => d.user.toLowerCase() === u.user.toLowerCase())) combined.push(u); });
+    setUsers(combined);
+  }, [usersData]);
+
+  const isAdmin = loggedIn?.role === 'admin';
+  const isSol = loggedIn?.role === 'solicitante' || isAdmin;
+
+  useEffect(() => { const u = auth.onAuthStateChanged(u => { if (u) setUser(u); else auth.signInAnonymously(); }); return u; }, []);
+
+  const addUser = async (u, p, role = 'solicitante') => { try { const hashedPass = await hashPassword(p); await col('users').add({ user: u, pass: hashedPass, active: true, role }); } catch (error) { alert('Erro ao criar usuário.'); } };
+  const deleteUser = async id => { if (!window.confirm('Remover usuário?')) return; try { if (id && id.length > 15) await col('users').doc(id).delete(); else setUsers(p => p.filter(u => u.user !== id)); } catch (error) { setUsers(p => p.filter(u => u.id !== id && u.user !== id)); } };
+  const toggleUser = async u => { const s = !(u.active !== false); try { if (u.id) await col('users').doc(u.id).update({ active: s }); else await col('users').add({ ...u, active: s }); } catch (error) { alert('Erro ao atualizar status.'); } };
+  const changeRole = async (u, role) => { try { if (u.id) await col('users').doc(u.id).update({ role }); else await col('users').add({ ...u, role }); } catch (error) { alert('Erro ao atualizar categoria.'); } };
+  const login = async u => { const found = users.find(x => x.user.toLowerCase() === u.user.toLowerCase() && x.pass === u.pass); if (found) { setLoggedIn(found); setView(found.role === 'leitor' ? 'status' : found.role === 'admin' ? 'dashboard' : 'request'); } };
+  const logout = () => { setLoggedIn(null); setView('request'); };
+
+  const handlePaste = e => {
+    const text = e.clipboardData.getData('text');
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    if (!lines.length) return;
+    const headers = lines[0].split(/[,\t]/).map(h => h.trim().toUpperCase());
+    const fi = t => headers.findIndex(h => t.some(x => h.includes(x)));
+    const [iO, iM, iF, iC, iCh, iE, iL] = [fi(['OS']), fi(['MODELO']), fi(['FABRICANTE', 'MARCA']), fi(['COR']), fi(['CHASSI']), fi(['ETAPA']), fi(['LOCALIZA'])];
+    const rows = (iO !== -1 ? lines.slice(1) : lines).map(l => { const v = l.split(/[,\t]/); return { os: (iO !== -1 ? v[iO] : v[0])?.trim() || '', modelo: (iM !== -1 ? v[iM] : v[1])?.trim() || '', fabricante: (iF !== -1 ? v[iF] : v[2])?.trim() || '', cor: (iC !== -1 ? v[iC] : v[3])?.trim() || '', chassi: (iCh !== -1 ? v[iCh] : v[4])?.trim() || '', etapa: (iE !== -1 ? v[iE] : v[5])?.trim() || '', localizacao: (iL !== -1 ? v[iL] : v[6])?.trim() || '' }; }).filter(r => r.os);
+    setImportData(rows);
+  };
+
+  const commitImport = async () => {
+    if (!importData.length) return;
+    const batch = db.batch();
+    importData.forEach(v => batch.set(col('vehicles').doc(v.os), v));
+    await batch.commit();
+    alert('Sucesso! ' + importData.length + ' veículos importados.');
+    setImportData([]);
+    setShowImport(false);
+  };
+
+  const updateItem = async (reqId, idx, fields) => {
+    const req = requests.find(r => r.id === reqId);
+    if (!req) return;
+    const newItems = [...req.items];
+    const item = { ...newItems[idx], ...fields };
+    if (item.price && item.supplier && item.deliveryDate && !item.actualDeliveryDate) item.status = 'Em Cotação';
+    if (item.actualDeliveryDate) item.status = 'Concluído';
+    newItems[idx] = item;
+    let gs = 'Concluído';
+    if (newItems.some(it => it.status === 'Pendente')) gs = 'Pendente';
+    else if (newItems.some(it => it.status === 'Em Cotação')) gs = 'Em Cotação';
+    else if (newItems.some(it => it.status === 'Doado')) gs = 'Doado';
+    setEditing(p => p?.id === reqId ? { ...p, items: newItems } : p);
+    try { await col('requests').doc(reqId).update({ items: newItems, status: gs }); } catch (error) { console.error(error); }
+  };
+
+  if (!loggedIn) return <LoginView onLogin={login} usersList={users} />;
+
+  const tabCounts = { pending: requests.filter(r => r.items?.some(it => it.status === 'Pendente')).length, quoting: requests.filter(r => r.items?.some(it => it.status === 'Em Cotação')).length, completed: requests.filter(r => r.items?.every(it => it.status === 'Concluído')).length, donated: requests.filter(r => r.items?.some(it => it.status === 'Doado')).length };
+  const navItems = [isSol && { key: 'request', icon: 'plus', label: 'Nova Peça' }, { key: 'status', icon: 'search', label: 'Histórico' }, isAdmin && { key: 'donor', icon: 'git-merge', label: 'Doações' }, isAdmin && { key: 'admin', icon: 'shield', label: 'Gestão' }, isAdmin && { key: 'dashboard', icon: 'bar-chart-2', label: 'Analytics' }].filter(Boolean);
+  const loading = requestsLoading || vehiclesLoading || usersLoading;
+
+  return (
+    <div className="h-screen flex flex-col md:flex-row bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden">
+      <NetworkStatus />
+
+      {/* Desktop Sidebar */}
+      <nav className="hidden md:flex flex-col w-64 bg-gradient-to-b from-gray-900 to-gray-800 text-white p-6 gap-5 shrink-0 shadow-2xl">
+        <div className="flex items-center gap-3 pb-4 border-b border-white/10">
+          <div className="p-2 bg-gradient-to-r from-red-500 to-red-600 rounded-xl shadow-lg"><Icon name="shopping-cart" size={20} /></div>
+          <div><p className="text-[8px] font-bold text-gray-400 uppercase tracking-wider">Portal Compras</p><h1 className="text-3xl font-black tracking-tight">VRZ</h1></div>
+        </div>
+        <div className="flex-1 space-y-1">
+          {navItems.map(n => (<button key={n.key} onClick={() => setView(n.key)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${view === n.key ? 'bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg' : 'hover:bg-white/10 text-gray-400 hover:text-white'}`}><Icon name={n.icon} size={18} /><span className="text-[11px] font-bold uppercase tracking-wider">{n.label}</span></button>))}
+        </div>
+        <div className="bg-white/5 p-4 rounded-xl space-y-2"><p className="text-[7px] font-bold text-gray-500 uppercase tracking-wider">Logado como:</p><p className="text-xs font-bold text-red-400 truncate">{loggedIn.user}</p><RoleBadge role={loggedIn.role} /><button onClick={logout} className="mt-2 w-full py-2 bg-white/10 hover:bg-red-600 rounded-lg text-[8px] font-bold uppercase transition">Sair</button></div>
+        <div className="text-center"><span className={`text-[8px] font-bold tracking-wider ${user ? 'text-emerald-400 animate-pulse' : 'text-gray-500'}`}>● {user ? 'ONLINE' : 'RECONECTANDO...'}</span></div>
+      </nav>
+
+      {/* Mobile Header */}
+      <div className="md:hidden bg-gradient-to-r from-gray-900 to-gray-800 text-white flex items-center justify-between px-4 py-3 shadow-lg shrink-0">
+        <div className="flex items-center gap-2"><div className="p-1.5 bg-red-600 rounded-lg"><Icon name="shopping-cart" size={15} /></div><div><p className="text-[7px] font-bold text-gray-400 uppercase tracking-wider">Portal Compras</p><h1 className="text-xl font-black">VRZ</h1></div></div>
+        <div className="flex items-center gap-2"><div className="text-right"><p className="text-[8px] font-bold text-red-400 truncate max-w-[100px]">{loggedIn.user}</p><RoleBadge role={loggedIn.role} /></div><button onClick={logout} className="p-2 bg-white/10 rounded-xl"><Icon name="log-out" size={16} /></button></div>
+      </div>
+
+      {/* Main Content */}
+      <main className="flex-1 overflow-y-auto h-full min-w-0">
+        <div className="p-4 md:p-6 pb-24 md:pb-6 max-w-7xl mx-auto">
+          {loading ? (<div className="space-y-4"><SkeletonLoader type="card" /><SkeletonLoader type="card" /><SkeletonLoader type="card" /></div>) : (
+            <>
+              {view === 'dashboard' && isAdmin && <DashboardView requests={requests} />}
+              {view === 'request' && isSol && <RequestForm user={user} loggedInUser={loggedIn} vehiclesDB={vehicles} requests={requests} />}
+              {view === 'status' && <StatusView requests={requests} isAdmin={isAdmin} />}
+              {view === 'donor' && isAdmin && <DonorSystem requests={requests} vehicles={vehicles} onDonate={() => setShowDonor(false)} />}
+              {view === 'admin' && isAdmin && (
+                <div className="space-y-6 fade-in-up">
+                  <div className="flex flex-wrap justify-between items-center gap-4">
+                    <div><h1 className="text-3xl font-black tracking-tighter bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent">Gestão de Compras</h1><p className="text-xs font-medium text-gray-500 mt-1">Protocolos e Base de Dados</p></div>
+                    <button onClick={() => setShowImport(true)} className="bg-gradient-to-r from-gray-900 to-gray-800 text-white px-5 py-2.5 rounded-xl font-bold uppercase text-[10px] flex items-center gap-2 shadow-md hover:shadow-lg transition"><Icon name="file-up" size={14} />Importar Planilha</button>
+                  </div>
+                  <div className="flex flex-wrap gap-2 bg-white p-2 rounded-xl shadow-md">
+                    {[{ key: 'pending', label: `Pendentes (${tabCounts.pending})`, color: 'from-orange-500 to-orange-600' }, { key: 'quoting', label: `Em Cotação (${tabCounts.quoting})`, color: 'from-blue-500 to-blue-600' }, { key: 'completed', label: `Concluídos (${tabCounts.completed})`, color: 'from-emerald-500 to-emerald-600' }, { key: 'donated', label: `Doados (${tabCounts.donated})`, color: 'from-purple-500 to-purple-600' }, { key: 'vehicles', label: `Veículos (${vehicles.length})`, color: 'from-gray-500 to-gray-600' }, { key: 'users', label: 'Usuários', color: 'from-red-500 to-red-600' }, { key: 'storage', label: 'Capacidade', color: 'from-violet-500 to-violet-600' }].map(t => (<button key={t.key} onClick={() => setSubView(t.key)} className={`px-4 py-2 rounded-lg text-[9px] font-bold uppercase whitespace-nowrap transition-all ${subView === t.key ? `bg-gradient-to-r ${t.color} text-white shadow-md` : 'text-gray-500 hover:text-gray-700'}`}>{t.label}</button>))}
+                  </div>
+                  <div>{subView === 'users' && <UserManagement users={users} onAdd={addUser} onDelete={deleteUser} onToggle={toggleUser} onRole={changeRole} />}{subView === 'storage' && <StorageView requests={requests} />}{subView === 'vehicles' && <VehiclesView vehicles={vehicles} />}{['pending', 'quoting', 'completed', 'donated'].includes(subView) && <div className="grid grid-cols-1 gap-3">{requests.filter(r => { if (subView === 'pending') return r.items?.some(it => it.status === 'Pendente'); if (subView === 'quoting') return r.items?.some(it => it.status === 'Em Cotação'); if (subView === 'donated') return r.items?.some(it => it.status === 'Doado'); return r.items?.every(it => it.status === 'Concluído'); }).map(req => (<div key={req.id} className="bg-white p-4 rounded-xl shadow-md border-l-4 flex items-center justify-between gap-4" style={{ borderLeftColor: subView === 'pending' ? '#f97316' : subView === 'quoting' ? '#3b82f6' : subView === 'donated' ? '#9333ea' : '#10b981' }}><div className="flex-1"><div className="flex items-center gap-3 mb-2"><span className="text-base font-black">OS #{req.os}</span><span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-[8px] font-bold">{req.unidade || 'Unidade 1'}</span></div><div className="flex flex-wrap gap-2">{req.items?.map((it, i) => (<span key={i} className="text-[8px] px-2 py-1 rounded-full font-bold uppercase bg-gray-100 text-gray-600">{it.description}</span>))}</div></div><button onClick={() => setEditing(req)} className="bg-gradient-to-r from-gray-900 to-gray-800 text-white px-4 py-2 rounded-lg font-bold uppercase text-[9px] shadow-md hover:shadow-lg transition">Gerenciar</button></div>))}</div>}</div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </main>
+
+      {/* Mobile Bottom Navigation */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 flex py-2 px-4 pb-6 shadow-lg z-50">
+        {navItems.map(n => (<button key={n.key} onClick={() => setView(n.key)} className={`flex-1 flex flex-col items-center gap-1 py-2 rounded-xl transition-all ${view === n.key ? 'text-red-500 bg-red-50' : 'text-gray-400'}`}><Icon name={n.icon} size={20} /><span className="text-[9px] font-bold uppercase">{n.label}</span></button>))}
+      </div>
+
+      {/* Import Modal */}
+      {showImport && isAdmin && (
+        <div className="fixed inset-0 z-[300] bg-black/95 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-6xl h-[85vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+            <header className="p-6 bg-gradient-to-r from-gray-900 to-gray-800 text-white flex justify-between items-center">
+              <div><h3 className="text-2xl font-black uppercase">Importar Planilha</h3><p className="text-gray-400 text-[10px] font-medium mt-1 uppercase">Cole os dados do Excel (Ctrl+V)</p></div>
+              <button onClick={() => { setShowImport(false); setImportData([]); }} className="p-2 bg-white/10 rounded-xl hover:bg-white/20 transition"><Icon name="x" size={24} /></button>
+            </header>
+            <div className="flex-1 overflow-hidden flex flex-col p-6 gap-6">
+              {importData.length === 0 ? (<div className="flex-1 flex flex-col items-center justify-center border-4 border-dashed border-gray-200 rounded-2xl bg-gray-50 space-y-4"><Icon name="file-spreadsheet" size={60} className="text-gray-300" /><div className="text-center"><p className="text-sm font-bold uppercase text-gray-400">Pronto para importar</p><p className="text-[10px] font-medium uppercase text-gray-300">Selecione no Excel e Ctrl+V</p></div><textarea onPaste={handlePaste} className="absolute inset-0 opacity-0 cursor-pointer" autoFocus /></div>) : (<div className="flex-1 overflow-hidden flex flex-col"><div className="overflow-auto border rounded-2xl bg-gray-50 flex-1"><table className="w-full text-left border-collapse min-w-[1000px]"><thead className="bg-gray-200 text-[9px] font-bold uppercase sticky top-0 z-10"><tr>{['OS', 'Modelo', 'Fabricante', 'Cor', 'Chassi', 'Etapa', 'Localização'].map(h => <th key={h} className="p-3 border">{h}</th>)}</thead><tbody>{importData.map((row, rIdx) => (<tr key={rIdx} className="bg-white border-b hover:bg-red-50 transition">{['os', 'modelo', 'fabricante', 'cor', 'chassi', 'etapa', 'localizacao'].map(key => (<td key={key} className="border p-0"><input className="w-full h-full px-3 py-2 text-xs outline-none focus:bg-yellow-50" value={row[key]} onChange={e => { const d = [...importData]; d[rIdx][key] = sanitizeInput(e.target.value); setImportData(d); }} /></td>))}</tr>))}</tbody></table></div><div className="pt-4 flex justify-between items-center"><p className="text-[10px] font-bold text-gray-400 uppercase">{importData.length} registros</p><div className="flex gap-4"><button onClick={() => setImportData([])} className="px-8 py-3 bg-gray-200 text-gray-600 rounded-xl font-bold text-[10px] hover:bg-gray-300 transition">LIMPAR</button><button onClick={commitImport} className="px-10 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl font-bold text-[10px] shadow-md hover:shadow-lg transition">SINCRONIZAR</button></div></div></div>)}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Editing Modal */}
+      {editing && isAdmin && (
+        <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-6xl rounded-2xl shadow-2xl flex flex-col my-auto">
+            <header className="px-8 py-6 bg-gradient-to-r from-gray-900 to-gray-800 text-white flex justify-between items-center shrink-0">
+              <div><div className="flex items-center gap-3"><h3 className="text-xl font-black">OS #{editing.os}</h3><span className="px-3 py-1 bg-purple-600 rounded-full text-[10px]">{editing.unidade || 'Unidade 1'}</span>{editing.importado && <span className="px-2 py-1 bg-amber-500 text-white rounded text-[8px] font-bold uppercase">Planilha</span>}</div><p className="text-red-400 text-[8px] font-bold uppercase mt-1">{editing.vehicleData?.modelo || ''}{editing.vehicleData?.chassi ? ' · ' + editing.vehicleData.chassi : ''}</p></div>
+              <button onClick={() => setEditing(null)} className="p-2 bg-white/10 rounded-xl hover:bg-white/20 transition"><Icon name="x" size={24} /></button>
+            </header>
+            <div className="p-6 overflow-y-auto max-h-[70vh] space-y-4">
+              {editing.items?.map((it, idx) => (
+                <div key={idx} className={`bg-gray-50 p-5 rounded-xl border-2 ${it.status === 'Doado' ? 'border-purple-200 bg-purple-50' : 'border-gray-100'} grid grid-cols-1 md:grid-cols-12 gap-6 items-center`}>
+                  <div className="md:col-span-3 flex items-center gap-3 min-w-0">
+                    {it.photo ? (<img src={it.photo} className="w-12 h-12 rounded-xl object-cover border shrink-0" alt="Peça" />) : (<div className="w-12 h-12 rounded-xl bg-gray-200 flex items-center justify-center shrink-0"><Icon name="package" size={18} className="text-gray-400" /></div>)}
+                    <div className="min-w-0 flex-1"><p className="text-[10px] font-bold uppercase truncate">{it.description}</p><div className="flex items-center gap-2 mt-1"><span className="text-[8px] text-gray-400 font-bold">QTD:{it.quantity}</span><StatusBadge status={it.status || 'Pendente'} orig={it.statusOriginal} /></div>{it.status === 'Doado' && it.donatedTo && <p className="text-[7px] text-purple-600 font-bold mt-1">→ Doado para OS {it.donatedTo}</p>}</div>
+                  </div>
+                  <div className="md:col-span-9 grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div><label className="text-[7px] font-bold uppercase text-gray-500 block mb-1">Valor Total</label><input type="number" step="0.01" value={it.price || ''} onChange={e => updateItem(editing.id, idx, { price: e.target.value })} className="w-full bg-white border rounded-lg p-2 text-[9px] font-bold outline-none focus:border-red-500" placeholder="0.00" disabled={it.status === 'Concluído' || it.status === 'Doado'} /></div>
+                    <div><label className="text-[7px] font-bold uppercase text-gray-500 block mb-1">Fornecedor</label><input type="text" value={it.supplier || ''} onChange={e => updateItem(editing.id, idx, { supplier: sanitizeInput(e.target.value) })} className="w-full bg-white border rounded-lg p-2 text-[9px] font-bold uppercase outline-none focus:border-red-500" placeholder="LOJA" disabled={it.status === 'Concluído' || it.status === 'Doado'} /></div>
+                    <div><label className="text-[7px] font-bold uppercase text-gray-500 block mb-1">Prazo</label><input type="date" value={it.deliveryDate || ''} onChange={e => updateItem(editing.id, idx, { deliveryDate: e.target.value })} className="w-full bg-white border rounded-lg p-2 text-[9px] font-bold outline-none focus:border-red-500" disabled={it.status === 'Concluído' || it.status === 'Doado'} /></div>
+                    <div><label className="text-[7px] font-bold uppercase text-red-500 block mb-1">Entrega Real</label><input type="date" value={it.actualDeliveryDate || ''} onChange={e => updateItem(editing.id, idx, { actualDeliveryDate: e.target.value })} className="w-full bg-red-50 border-2 border-red-100 rounded-lg p-2 text-[9px] font-bold outline-none focus:border-red-500" disabled={it.status === 'Pendente' || it.status === 'Doado'} /></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="p-6 bg-gray-50 flex justify-between items-center shrink-0"><p className="text-[8px] text-gray-400 font-bold uppercase italic">* Valor + Loja + Prazo → Em Cotação · Data Real → Concluído</p><button onClick={() => setEditing(null)} className="px-10 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl font-bold uppercase text-xs shadow-md hover:shadow-lg transition">Fechar e Sincronizar</button></div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
