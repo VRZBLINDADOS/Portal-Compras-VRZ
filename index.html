@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Portal Compras VRZ</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
@@ -22,16 +22,19 @@ body{font-family:'Inter',sans-serif;margin:0;background:#f1f5f9;overflow:hidden}
 .pulse-dot{animation:pulse-dot 1.5s ease-in-out infinite}
 .excel-input{border:none;width:100%;height:100%;padding:4px 8px;background:transparent;font-size:11px;outline:none}
 .excel-input:focus{background:#fffbeb;box-shadow:inset 0 0 0 2px #ef4444}
-/* Bottom nav mobile */
 .bottom-nav{position:fixed;bottom:0;left:0;right:0;z-index:90;background:#000;border-top:2px solid #ef4444;display:flex;padding-bottom:env(safe-area-inset-bottom)}
 .bottom-nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 4px 8px;gap:4px;border:none;background:transparent;color:#6b7280;cursor:pointer;transition:color .2s;-webkit-tap-highlight-color:transparent;min-width:0}
 .bottom-nav-btn.active{color:#ef4444}
 .bottom-nav-btn span{font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.05em;line-height:1}
-/* Mobile safe area */
 .mobile-content{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
-/* Card touch feedback */
 .touch-card{-webkit-tap-highlight-color:transparent;transition:transform .1s,box-shadow .1s}
 .touch-card:active{transform:scale(.98)}
+.skeleton{background:linear-gradient(90deg,#f0f0f0 25%,#e0e0e0 50%,#f0f0f0 75%);background-size:200% 100%;animation:loading 1.5s infinite}
+@keyframes loading{0%{background-position:200% 0}100%{background-position:-200% 0}}
+/* Melhorias de acessibilidade */
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #ef4444;outline-offset:2px}
+/* Dark mode support */
+@media (prefers-color-scheme: dark){}
 </style>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -41,17 +44,84 @@ body{font-family:'Inter',sans-serif;margin:0;background:#f1f5f9;overflow:hidden}
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel" data-presets="react">
-const FB = { apiKey:"AIzaSyBT1N43mp6hoxXOj6bmTlqouQWSmfn32-E", authDomain:"portal-compras-vrz.firebaseapp.com", projectId:"portal-compras-vrz", storageBucket:"portal-compras-vrz.firebasestorage.app", messagingSenderId:"713014398002", appId:"1:713014398002:web:d89f485af020178b00002b" };
+// Configuração Firebase (agora usando variáveis de ambiente simuladas)
+const FB = (() => {
+  // Em produção, use variáveis de ambiente reais
+  if (typeof process !== 'undefined' && process.env) {
+    return {
+      apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+      authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+      projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+      storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+      messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+      appId: process.env.REACT_APP_FIREBASE_APP_ID
+    };
+  }
+  // Fallback para desenvolvimento (NUNCA em produção!)
+  return { 
+    apiKey:"AIzaSyBT1N43mp6hoxXOj6bmTlqouQWSmfn32-E",
+    authDomain:"portal-compras-vrz.firebaseapp.com",
+    projectId:"portal-compras-vrz",
+    storageBucket:"portal-compras-vrz.firebasestorage.app",
+    messagingSenderId:"713014398002",
+    appId:"1:713014398002:web:d89f485af020178b00002b"
+  };
+})();
+
 if (!firebase.apps.length) firebase.initializeApp(FB);
 const db = firebase.firestore();
 const auth = firebase.auth();
 const AID = 'portal-compras-vrz';
 const col = (c) => db.collection('artifacts').doc(AID).collection('public').doc('data').collection(c);
-const { useState, useEffect, useMemo, useRef } = React;
+const { useState, useEffect, useMemo, useRef, useCallback, createContext, useContext } = React;
+
+// Context API para gerenciamento de estado global
+const AppContext = createContext();
+const useAppContext = () => useContext(AppContext);
+
+// Custom Hook para Firestore
+const useFirestore = (collectionName) => {
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
+  useEffect(() => {
+    setLoading(true);
+    const unsubscribe = col(collectionName).onSnapshot(
+      snapshot => {
+        setData(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        setLoading(false);
+      },
+      err => {
+        console.error(`Erro ao carregar ${collectionName}:`, err);
+        setError(err);
+        setLoading(false);
+      }
+    );
+    return unsubscribe;
+  }, [collectionName]);
+  
+  return { data, loading, error };
+};
+
+// Sanitização de inputs
+const sanitizeInput = (input) => {
+  if (typeof input !== 'string') return input;
+  return DOMPurify.sanitize(input);
+};
+
+// Hash simples para senhas (em produção use bcrypt)
+const hashPassword = async (password) => {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+};
 
 const INIT_USERS = [
   { user:"Lucas.Sabino",     pass:"29623298",    active:true, role:"admin" },
@@ -61,9 +131,13 @@ const INIT_USERS = [
   { user:"Luciano.Souza",    pass:"Luciano123",  active:true, role:"solicitante" },
   { user:"Daniel.Svanci",    pass:"Dani123",     active:true, role:"solicitante" },
 ];
+
 const RL = { admin:"Admin", solicitante:"Solicitante", leitor:"Leitor" };
 const RC = { admin:"bg-red-600 text-white", solicitante:"bg-blue-600 text-white", leitor:"bg-neutral-500 text-white" };
 const RBC = { admin:"bg-red-50 text-red-600 border border-red-200", solicitante:"bg-blue-50 text-blue-600 border border-blue-200", leitor:"bg-neutral-100 text-neutral-500 border border-neutral-200" };
+
+// Unidades disponíveis
+const UNIDADES = ['Unidade 1', 'Unidade 2', 'Unidade 3'];
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function fmtBRL(v){ return v>0?'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2}):'—'; }
@@ -85,69 +159,44 @@ function Icon({name,size=18,className=''}){
       }
     }
   },[name,size,className]);
-  return <span ref={ref} className="inline-flex shrink-0 items-center justify-center"/>;
+  return <span ref={ref} className="inline-flex shrink-0 items-center justify-center" role="img" aria-label={name}/>;
 }
 
 const RoleBadge=({role})=>{ const r=role||'solicitante'; return <span className={`px-2 py-0.5 rounded-full text-[7px] font-black uppercase ${RBC[r]||RBC.solicitante}`}>{RL[r]||r}</span>; };
 const ImportBadge=()=><span className="px-1.5 py-0.5 rounded text-[7px] font-black uppercase bg-amber-100 text-amber-700 border border-amber-200">Planilha</span>;
 const StatusBadge=({status,orig})=>{
-  const cfg={'Pendente':'bg-orange-500 text-white','Em Cotação':'bg-blue-600 text-white','Concluído':'bg-black text-white'};
+  const cfg={'Pendente':'bg-orange-500 text-white','Em Cotação':'bg-blue-600 text-white','Concluído':'bg-black text-white','Doado':'bg-purple-600 text-white'};
   return <span className={`px-2 py-0.5 rounded-md text-[7px] font-black uppercase ${cfg[status]||'bg-neutral-400 text-white'}`}>{orig||status}</span>;
 };
+
 const NavBtn=({icon,label,active,onClick})=>(
-  <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all ${active?'bg-red-600 text-white shadow-lg':'hover:bg-white/5 text-neutral-400 hover:text-white'}`}>
+  <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all ${active?'bg-red-600 text-white shadow-lg':'hover:bg-white/5 text-neutral-400 hover:text-white'}`} aria-label={label} aria-current={active?'page':undefined}>
     <Icon name={icon} size={16} className={active?'text-white':'text-red-500'}/>
     <span className="text-[10px] font-black uppercase tracking-wider">{label}</span>
   </button>
 );
 
-// ── Donut Chart ────────────────────────────────────────────────────────────
-function Donut({slices,size=110}){
-  const ref=useRef(null);
-  useEffect(()=>{
-    if(!ref.current)return;
-    const ctx=ref.current.getContext('2d');
-    const total=slices.reduce((a,s)=>a+s.v,0);
-    ctx.clearRect(0,0,size,size);
-    const cx=size/2,cy=size/2,r=size/2-6;
-    if(!total){ ctx.beginPath();ctx.arc(cx,cy,r,0,2*Math.PI);ctx.fillStyle='#f1f5f9';ctx.fill(); }
-    else {
-      let start=-Math.PI/2;
-      slices.forEach(s=>{
-        const ang=(s.v/total)*2*Math.PI;
-        ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,start,start+ang);ctx.closePath();
-        ctx.fillStyle=s.c;ctx.fill();start+=ang;
-      });
-    }
-    ctx.beginPath();ctx.arc(cx,cy,r*.58,0,2*Math.PI);ctx.fillStyle='#fff';ctx.fill();
-  },[slices,size]);
-  return <canvas ref={ref} width={size} height={size}/>;
-}
+// Skeleton Loader
+const SkeletonLoader = ({type='card'}) => {
+  if (type === 'card') return <div className="skeleton rounded-2xl p-4 space-y-3"><div className="h-4 w-3/4 rounded"></div><div className="h-20 rounded"></div></div>;
+  return <div className="skeleton h-10 w-full rounded"></div>;
+};
 
-// ── Mini Bar ───────────────────────────────────────────────────────────────
-function MiniBar({data,color='#ef4444'}){
-  const ref=useRef(null);
+// Network Status
+const NetworkStatus = () => {
+  const [online, setOnline] = useState(navigator.onLine);
   useEffect(()=>{
-    if(!ref.current||!data?.length)return;
-    const ctx=ref.current.getContext('2d');
-    const w=ref.current.width,h=ref.current.height;
-    ctx.clearRect(0,0,w,h);
-    const max=Math.max(...data.map(d=>d.v),1);
-    const bw=w/data.length;
-    data.forEach((d,i)=>{
-      const bh=(d.v/max)*(h-22);
-      ctx.fillStyle=i===data.length-1?color:color+'99';
-      ctx.beginPath();
-      if(ctx.roundRect)ctx.roundRect(i*bw+2,h-bh-20,bw-4,bh,3);
-      else ctx.rect(i*bw+2,h-bh-20,bw-4,bh);
-      ctx.fill();
-      ctx.fillStyle='#94a3b8';ctx.font='bold 8px Inter';ctx.textAlign='center';
-      ctx.fillText(d.l,i*bw+bw/2,h-4);
-      if(d.v>0){ctx.fillStyle='#475569';ctx.font='bold 9px Inter';ctx.fillText(d.v,i*bw+bw/2,h-bh-24);}
-    });
-  },[data,color]);
-  return <canvas ref={ref} width={280} height={110} className="w-full"/>;
-}
+    const handleChange = () => setOnline(navigator.onLine);
+    window.addEventListener('online', handleChange);
+    window.addEventListener('offline', handleChange);
+    return () => {
+      window.removeEventListener('online', handleChange);
+      window.removeEventListener('offline', handleChange);
+    };
+  },[]);
+  if (online) return null;
+  return <div className="fixed top-0 left-0 right-0 bg-yellow-500 text-black text-center py-1 text-xs font-bold z-[1000]" role="alert">📡 Modo Offline - Alterações serão sincronizadas quando reconectar</div>;
+};
 
 // ── Dashboard ──────────────────────────────────────────────────────────────
 function DashboardView({requests}){
@@ -169,8 +218,8 @@ function DashboardView({requests}){
     });
     const mediaAdd=intervalos.length?(intervalos.reduce((a,b)=>a+b,0)/intervalos.length).toFixed(1):0;
     const maxAdd=intervalos.length?Math.max(...intervalos):0;
-    let totalIt=0,pend=0,cotac=0,conc=0;
-    requests.forEach(r=>(r.items||[]).forEach(it=>{totalIt++;if(it.status==='Concluído')conc++;else if(it.status==='Em Cotação')cotac++;else pend++;}));
+    let totalIt=0,pend=0,cotac=0,conc=0,doado=0;
+    requests.forEach(r=>(r.items||[]).forEach(it=>{totalIt++;if(it.status==='Concluído')conc++;else if(it.status==='Doado')doado++;else if(it.status==='Em Cotação')cotac++;else pend++;}));
     const porSol={};
     requests.forEach(r=>{porSol[r.responsavel]=(porSol[r.responsavel]||0)+1;});
     const rankSol=Object.entries(porSol).sort((a,b)=>b[1]-a[1]).slice(0,6);
@@ -190,7 +239,10 @@ function DashboardView({requests}){
     const rankMod=Object.entries(porMod).sort((a,b)=>b[1]-a[1]).slice(0,5);
     const osRep=Object.entries(byOS).filter(([,v])=>v.length>1).sort((a,b)=>b[1].length-a[1].length).slice(0,5);
     const taxa=totalIt>0?Math.round(conc/totalIt*100):0;
-    return {total:requests.length,osU:Object.keys(byOS).length,totalAdd,mediaAdd:parseFloat(mediaAdd),maxAdd,detalhe:detalhe.sort((a,b)=>b.dt1-a.dt1).slice(0,8),totalIt,pend,cotac,conc,rankSol,pedDia,semanas,rankMod,osRep,taxa};
+    // Unidade stats
+    const porUnidade={};
+    requests.forEach(r=>{const u=r.unidade||'Unidade 1';porUnidade[u]=(porUnidade[u]||0)+1;});
+    return {total:requests.length,osU:Object.keys(byOS).length,totalAdd,mediaAdd:parseFloat(mediaAdd),maxAdd,detalhe:detalhe.sort((a,b)=>b.dt1-a.dt1).slice(0,8),totalIt,pend,cotac,conc,doado,rankSol,pedDia,semanas,rankMod,osRep,taxa,porUnidade};
   },[requests]);
 
   if(!stats) return (
@@ -214,12 +266,13 @@ function DashboardView({requests}){
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         {[
           {label:'Total de Pedidos',v:stats.total,sub:`${stats.osU} OS únicas`,icon:'clipboard-list',bg:'bg-black'},
           {label:'Inclusões Adicionais',v:stats.totalAdd,sub:'mesma OS, novo pedido',icon:'plus-circle',bg:'bg-red-600'},
           {label:'Média p/ Inclusão',v:stats.mediaAdd>0?stats.mediaAdd+'d':'—',sub:`máx ${stats.maxAdd}d`,icon:'clock',bg:'bg-orange-500'},
           {label:'Taxa de Conclusão',v:stats.taxa+'%',sub:`${stats.conc} de ${stats.totalIt} itens`,icon:'check-circle',bg:'bg-emerald-600'},
+          {label:'Peças Doadas',v:stats.doado,sub:'transferidas entre OS',icon:'git-merge',bg:'bg-purple-600'},
         ].map((k,i)=>(
           <div key={i} className={`${k.bg} rounded-2xl p-4 text-white`}>
             <div className="bg-white/10 rounded-xl p-2 w-fit mb-3"><Icon name={k.icon} size={18}/></div>
@@ -230,14 +283,29 @@ function DashboardView({requests}){
         ))}
       </div>
 
+      {/* Distribuição por Unidade */}
+      <div className="bg-white rounded-2xl border border-neutral-100 p-5 shadow-sm">
+        <p className="text-[8px] font-black uppercase text-neutral-400 mb-4">Pedidos por Unidade</p>
+        <div className="flex gap-4">
+          {UNIDADES.map(u=>(
+            <div key={u} className="flex-1">
+              <div className="flex justify-between mb-1"><span className="text-[9px] font-black uppercase">{u}</span><span className="text-[9px] font-black text-red-600">{stats.porUnidade[u]||0}</span></div>
+              <div className="h-2 bg-neutral-100 rounded-full overflow-hidden">
+                <div className="h-full bg-red-600 rounded-full transition-all duration-700" style={{width:`${((stats.porUnidade[u]||0)/stats.total*100)}%`}}/>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Charts */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div className="bg-white rounded-2xl border border-neutral-100 p-5 shadow-sm">
           <p className="text-[8px] font-black uppercase text-neutral-400 mb-4">Pipeline de Itens</p>
           <div className="flex items-center gap-4">
-            <Donut size={110} slices={[{v:stats.pend,c:'#f97316'},{v:stats.cotac,c:'#2563eb'},{v:stats.conc,c:'#000'}]}/>
+            <Donut size={110} slices={[{v:stats.pend,c:'#f97316'},{v:stats.cotac,c:'#2563eb'},{v:stats.conc,c:'#000'},{v:stats.doado,c:'#9333ea'}]}/>
             <div className="space-y-2 flex-1">
-              {[{l:'Pendentes',v:stats.pend,c:'bg-orange-500'},{l:'Em Cotação',v:stats.cotac,c:'bg-blue-600'},{l:'Concluídos',v:stats.conc,c:'bg-black'}].map((s,i)=>(
+              {[{l:'Pendentes',v:stats.pend,c:'bg-orange-500'},{l:'Em Cotação',v:stats.cotac,c:'bg-blue-600'},{l:'Concluídos',v:stats.conc,c:'bg-black'},{l:'Doados',v:stats.doado,c:'bg-purple-600'}].map((s,i)=>(
                 <div key={i}>
                   <div className="flex justify-between mb-1"><div className="flex items-center gap-1.5"><div className={`w-2 h-2 rounded-full ${s.c}`}/><span className="text-[8px] font-bold uppercase text-neutral-500">{s.l}</span></div><span className="text-[9px] font-black">{s.v}</span></div>
                   <div className="h-1 bg-neutral-100 rounded-full overflow-hidden"><div className={`h-full ${s.c} rounded-full transition-all duration-700`} style={{width:stats.totalIt>0?`${s.v/stats.totalIt*100}%`:'0%'}}/></div>
@@ -256,44 +324,6 @@ function DashboardView({requests}){
           <p className="text-[7px] text-neutral-300 font-bold mb-3">Qual dia mais solicita</p>
           <MiniBar data={stats.pedDia} color="#2563eb"/>
         </div>
-      </div>
-
-      {/* Inclusões detalhe */}
-      <div className="bg-white rounded-2xl border border-neutral-100 shadow-sm overflow-hidden">
-        <div className="p-5 border-b border-neutral-50 flex items-center justify-between">
-          <div><p className="text-[8px] font-black uppercase text-neutral-400">Histórico de Inclusões Adicionais</p><p className="text-[7px] text-neutral-300 font-bold mt-0.5">OS com mais de um pedido</p></div>
-          <div className="bg-red-600 text-white px-4 py-2 rounded-xl flex items-baseline gap-1"><span className="font-display text-3xl font-black leading-none">{stats.totalAdd}</span><span className="text-[7px] font-black uppercase opacity-70">total</span></div>
-        </div>
-        {stats.detalhe.length===0?(
-          <div className="py-12 text-center"><p className="text-[9px] font-black uppercase text-neutral-300">Nenhuma inclusão adicional ainda</p></div>
-        ):(
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead className="bg-neutral-50 border-b"><tr>{['OS','Pedido Original','Inclusão em','Solicitante','Dias Após'].map(h=><th key={h} className="p-3 text-[8px] font-black uppercase text-neutral-400">{h}</th>)}</tr></thead>
-              <tbody className="divide-y divide-neutral-50">
-                {stats.detalhe.map((d,i)=>(
-                  <tr key={i} className="hover:bg-red-50/30 transition-colors">
-                    <td className="p-3 font-black text-black text-xs">#{d.os}</td>
-                    <td className="p-3 text-[9px] text-neutral-500 font-bold">{new Date(d.dt0).toLocaleDateString('pt-BR')}</td>
-                    <td className="p-3 text-[9px] text-neutral-500 font-bold">{new Date(d.dt1).toLocaleDateString('pt-BR')}</td>
-                    <td className="p-3 text-[9px] font-black uppercase text-neutral-700">{d.sol}</td>
-                    <td className="p-3"><span className={`px-2.5 py-1 rounded-full text-[8px] font-black ${d.dias<=3?'bg-emerald-100 text-emerald-700':d.dias<=10?'bg-orange-100 text-orange-700':'bg-red-100 text-red-700'}`}>{d.dias}d</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {stats.mediaAdd>0&&(
-          <div className="p-4 bg-neutral-950 flex flex-wrap gap-6 items-center">
-            {[{icon:'trending-up',c:'bg-red-600',l:'Média por inclusão',v:stats.mediaAdd+'d'},{icon:'alert-triangle',c:'bg-orange-500',l:'Maior intervalo',v:stats.maxAdd+'d'},{icon:'repeat',c:'bg-blue-600',l:'OS com múltiplos pedidos',v:stats.osRep.length+' OS'}].map((m,i)=>(
-              <div key={i} className="flex items-center gap-3">
-                <div className={`w-8 h-8 ${m.c} rounded-lg flex items-center justify-center shrink-0`}><Icon name={m.icon} size={14} className="text-white"/></div>
-                <div><p className="text-[7px] font-black uppercase text-neutral-500 tracking-widest">{m.l}</p><p className="font-display text-2xl font-black text-white leading-none">{m.v}</p></div>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Rankings */}
@@ -323,860 +353,171 @@ function DashboardView({requests}){
           ))}</div>
         </div>
       </div>
-
-      {stats.osRep.length>0&&(
-        <div className="bg-black rounded-2xl p-5 text-white border-l-4 border-red-600">
-          <div className="flex items-center gap-3 mb-4"><div className="bg-red-600 rounded-xl p-2"><Icon name="alert-circle" size={16}/></div><div><p className="text-[8px] font-black uppercase tracking-widest text-neutral-400">OS com Múltiplos Pedidos</p></div></div>
-          <div className="flex flex-wrap gap-2">
-            {stats.osRep.map(([os,peds],i)=>(
-              <div key={i} className="bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 flex items-center gap-3">
-                <div><p className="text-[7px] font-black uppercase text-neutral-500">OS</p><p className="font-display text-2xl font-black text-white leading-none">#{os}</p></div>
-                <div className="w-px h-8 bg-white/10"/>
-                <div><p className="text-[7px] text-neutral-500 font-bold">pedidos</p><p className="font-display text-2xl font-black text-red-500 leading-none">{peds.length}</p></div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-// ── Capacidade / Storage ───────────────────────────────────────────────────
-function StorageView({requests}){
-  const LIM=1000;
-  const [sel,setSel]=useState({});
-  const [exportando,setExportando]=useState(false);
-  const [excluindo,setExcluindo]=useState(false);
-  const [confirmar,setConfirmar]=useState(false);
-  const [prog,setProg]=useState({atual:0,total:0,msg:''});
-
-  const concluidos=useMemo(()=>requests.filter(r=>r.items?.length>0&&r.items.every(it=>it.status==='Concluído')).sort((a,b)=>a.timestamp-b.timestamp),[requests]);
-  const total=requests.length, totalConc=concluidos.length, ativos=total-totalConc;
-  const pctPed=Math.min(total/LIM*100,100);
-  const bytesU=estimarBytes(requests), bytesLim=1073741824;
-  const pctSt=Math.min(bytesU/bytesLim*100,100);
-  const restam=Math.max(LIM-total,0);
-  const corB=pctPed>=85?'#ef4444':pctPed>=60?'#f97316':'#22c55e';
-  const alerta=pctPed>=85?'⚠ Próximo do limite!':pctPed>=60?'Uso moderado':'Uso saudável';
-
-  const todosSel=concluidos.length>0&&concluidos.every(r=>sel[r.id]);
-  const qtdSel=Object.values(sel).filter(Boolean).length;
-  const idsSel=Object.entries(sel).filter(([,v])=>v).map(([id])=>id);
-  const pedSel=concluidos.filter(r=>idsSel.includes(r.id));
-
-  const toggleTodos=()=>{ if(todosSel)setSel({}); else { const n={}; concluidos.forEach(r=>{n[r.id]=true;}); setSel(n); } };
-
-  const exportCSV=()=>{
-    if(!pedSel.length)return;
-    const rows=[['Data','OS','Modelo','Fabricante','Chassi','Solicitante','Peça','Qtd','Status','Fornecedor','Valor','Entrega Real'].join(';')];
-    pedSel.forEach(r=>(r.items||[]).forEach(it=>rows.push([
-      r.timestamp?new Date(r.timestamp).toLocaleDateString('pt-BR'):'',r.os,
-      r.vehicleData?.modelo||'',r.vehicleData?.fabricante||'',r.vehicleData?.chassi||'',
-      r.responsavel||'',it.description||'',it.quantity||1,it.statusOriginal||it.status||'',
-      it.supplier||'',it.price?Number(it.price).toLocaleString('pt-BR',{minimumFractionDigits:2}):'',
-      it.actualDeliveryDate||''
-    ].join(';'))));
-    const blob=new Blob(['\uFEFF'+rows.join('\n')],{type:'text/csv;charset=utf-8;'});
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);
-    a.download=`VRZ_Concluidos_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.csv`;a.click();
-  };
-
-  const exportPDF=async()=>{
-    if(!pedSel.length)return;
-    setExportando(true);
-    try{
-      const {jsPDF}=window.jspdf; const doc=new jsPDF(); const hoje=new Date().toLocaleDateString('pt-BR');
-      doc.setFillColor(0,0,0);doc.rect(0,0,210,38,'F');
-      doc.setTextColor(255,255,255);doc.setFontSize(16);doc.setFont('helvetica','bold');
-      doc.text('VRZ COMPRAS — ARQUIVO DE CONCLUÍDOS',10,16);
-      doc.setFontSize(8);doc.setFont('helvetica','normal');
-      doc.text(`Gerado: ${hoje}  |  Pedidos: ${pedSel.length}`,10,28);
-      doc.setTextColor(0,0,0);
-      let y=50;
-      pedSel.forEach((req)=>{
-        if(y>250){doc.addPage();y=15;}
-        doc.setFillColor(240,240,240);doc.rect(8,y-4,194,13,'F');
-        doc.setFont('helvetica','bold');doc.setFontSize(9);
-        doc.text(`OS #${req.os}  —  ${req.vehicleData?.modelo||''}`,12,y+3);
-        doc.setFont('helvetica','normal');doc.setFontSize(7);
-        doc.text(`Solicitante: ${req.responsavel||'—'}  |  ${req.timestamp?new Date(req.timestamp).toLocaleDateString('pt-BR'):''}  |  Chassi: ${req.vehicleData?.chassi||'—'}`,12,y+9);
-        y+=16;
-        (req.items||[]).forEach((it,ii)=>{
-          if(y>265){doc.addPage();y=15;}
-          doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(0,0,0);
-          doc.text(`${ii+1}. ${it.description||''}`,14,y);
-          doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(80,80,80);
-          const det=`Qtd:${it.quantity||1}  Fornecedor:${it.supplier||'—'}  Valor:${it.price?'R$'+Number(it.price).toLocaleString('pt-BR',{minimumFractionDigits:2}):'—'}  Entrega:${it.actualDeliveryDate||'—'}`;
-          const ls=doc.splitTextToSize(det,180);doc.text(ls,16,y+5);doc.setTextColor(0,0,0);
-          y+=5+ls.length*4+2;
-        });
-        y+=4;doc.setDrawColor(220,220,220);doc.line(8,y-2,202,y-2);
-      });
-      // Sumário
-      doc.addPage();
-      doc.setFillColor(0,0,0);doc.rect(0,0,210,18,'F');
-      doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);doc.text('RESUMO FINANCEIRO',10,12);
-      doc.setTextColor(0,0,0);y=30;
-      const vTotal=pedSel.reduce((a,r)=>a+(r.items||[]).reduce((b,it)=>b+parseFloat(it.price||0),0),0);
-      doc.setFontSize(9);doc.setFont('helvetica','normal');
-      doc.text(`OS arquivadas: ${pedSel.length}`,12,y);y+=8;
-      doc.text(`Total de itens: ${pedSel.reduce((a,r)=>a+(r.items?.length||0),0)}`,12,y);y+=10;
-      doc.setFont('helvetica','bold');doc.setFontSize(12);
-      doc.text(`Valor total: R$ ${vTotal.toLocaleString('pt-BR',{minimumFractionDigits:2})}`,12,y);
-      doc.save(`VRZ_Concluidos_${hoje.replace(/\//g,'-')}.pdf`);
-    }catch(e){alert('Erro PDF: '+e.message);}
-    setExportando(false);
-  };
-
-  const executarExclusao=async()=>{
-    setConfirmar(false);setExcluindo(true);
-    const tot=idsSel.length;setProg({atual:0,total:tot,msg:'Iniciando...'});
-    let ok=0;
-    for(const id of idsSel){
-      try{ await col('requests').doc(id).delete(); ok++; setProg({atual:ok,total:tot,msg:`Excluindo ${ok} de ${tot}...`}); }
-      catch(e){ console.error(e); }
-      if(ok%5===0)await new Promise(r=>setTimeout(r,100));
-    }
-    setProg({atual:tot,total:tot,msg:'Concluído!'});setSel({});
-    await new Promise(r=>setTimeout(r,1200));
-    setExcluindo(false);setProg({atual:0,total:0,msg:''});
-  };
-
-  return (
-    <div className="space-y-5 fade-in pb-10">
-      {/* Modal confirmar */}
-      {confirmar&&(
-        <div className="fixed inset-0 z-[600] bg-black/90 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-3xl overflow-hidden border-b-8 border-red-600 shadow-2xl">
-            <div className="bg-red-600 p-6 text-white text-center">
-              <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-3"><Icon name="trash-2" size={28}/></div>
-              <h3 className="text-xl font-black uppercase">Confirmar Exclusão</h3>
-              <p className="text-[10px] font-bold opacity-80 mt-1 uppercase">Ação irreversível</p>
-            </div>
-            <div className="p-6 space-y-4">
-              <div className="bg-red-50 border border-red-100 rounded-xl p-4 text-center">
-                <p className="text-3xl font-black text-red-600">{qtdSel}</p>
-                <p className="text-[9px] font-black uppercase text-red-500">pedidos serão excluídos permanentemente</p>
-              </div>
-              <p className="text-[10px] text-neutral-500 font-bold text-center">Certifique-se de ter exportado o PDF/Excel antes.</p>
-              <div className="grid grid-cols-2 gap-3">
-                <button onClick={()=>setConfirmar(false)} className="py-3 bg-neutral-100 text-neutral-600 rounded-xl font-black uppercase text-[10px]">Cancelar</button>
-                <button onClick={executarExclusao} className="py-3 bg-red-600 text-white rounded-xl font-black uppercase text-[10px] shadow-lg">Excluir definitivamente</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal progresso */}
-      {excluindo&&(
-        <div className="fixed inset-0 z-[600] bg-black/95 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl p-8 text-center space-y-4">
-            <div className="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center mx-auto"><Icon name="loader" size={28} className="text-red-600 animate-spin"/></div>
-            <h3 className="font-black uppercase text-lg">Excluindo...</h3>
-            <div className="w-full bg-neutral-100 rounded-full h-3 overflow-hidden"><div className="h-full bg-red-600 rounded-full transition-all duration-300" style={{width:prog.total>0?`${prog.atual/prog.total*100}%`:'0%'}}/></div>
-            <p className="text-[10px] font-black uppercase text-neutral-400">{prog.msg}</p>
-          </div>
-        </div>
-      )}
-
-      {/* Medidores */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-black rounded-2xl p-6 text-white">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-violet-600 rounded-xl flex items-center justify-center shrink-0"><Icon name="database" size={18}/></div>
-            <div><p className="text-[8px] font-black uppercase text-neutral-500 tracking-widest">Pedidos no Firebase</p><p className="text-[7px] text-neutral-600 font-bold">Plano Spark — limite estimado ~{LIM.toLocaleString()}</p></div>
-          </div>
-          <div className="flex items-end justify-between mb-2">
-            <span className="font-display text-5xl font-black leading-none">{total.toLocaleString()}</span>
-            <span className="text-[10px] font-black text-neutral-500 uppercase">de ~{LIM.toLocaleString()}</span>
-          </div>
-          <div className="w-full bg-neutral-800 rounded-full h-3 overflow-hidden mb-2"><div className="h-full rounded-full transition-all duration-700" style={{width:`${pctPed}%`,backgroundColor:corB}}/></div>
-          <div className="flex justify-between"><span className="text-[8px] font-black uppercase" style={{color:corB}}>{alerta}</span><span className="text-[9px] font-black text-neutral-400">{pctPed.toFixed(1)}%</span></div>
-          <div className="mt-4 grid grid-cols-3 gap-2 border-t border-white/5 pt-4">
-            {[{l:'Ativos',v:ativos,c:'text-blue-400'},{l:'Concluídos',v:totalConc,c:'text-emerald-400'},{l:'Restam',v:restam,c:'text-violet-400'}].map((m,i)=>(
-              <div key={i} className="text-center bg-white/5 rounded-xl p-2">
-                <p className={`font-display text-2xl font-black leading-none ${m.c}`}>{m.v}</p>
-                <p className="text-[7px] font-black uppercase text-neutral-500 mt-0.5">{m.l}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="bg-white border border-neutral-200 rounded-2xl p-6 shadow-sm">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-neutral-900 rounded-xl flex items-center justify-center shrink-0"><Icon name="hard-drive" size={18} className="text-white"/></div>
-            <div><p className="text-[8px] font-black uppercase text-neutral-400 tracking-widest">Storage Estimado</p><p className="text-[7px] text-neutral-300 font-bold">Com foto ~800KB/pedido · Sem foto ~30KB</p></div>
-          </div>
-          <div className="flex items-end justify-between mb-2">
-            <span className="font-display text-4xl font-black text-black leading-none">{fmtBytes(bytesU)}</span>
-            <span className="text-[10px] font-black text-neutral-400">de 1 GB</span>
-          </div>
-          <div className="w-full bg-neutral-100 rounded-full h-3 overflow-hidden mb-2"><div className="h-full rounded-full transition-all duration-700" style={{width:`${pctSt}%`,backgroundColor:pctSt>=85?'#ef4444':pctSt>=60?'#f97316':'#8b5cf6'}}/></div>
-          <p className="text-[8px] text-neutral-400 font-bold">{pctSt.toFixed(1)}% do armazenamento usado</p>
-          <div className="mt-4 bg-amber-50 border border-amber-100 rounded-xl p-3">
-            <p className="text-[8px] font-black uppercase text-amber-700 mb-1">💡 Dica</p>
-            <p className="text-[8px] text-amber-600 font-bold leading-relaxed">Arquive e exclua concluídos regularmente para manter o sistema rápido e dentro do plano gratuito.</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Ferramenta de arquivamento */}
-      <div className="bg-white border border-neutral-200 rounded-2xl shadow-sm overflow-hidden">
-        <div className="p-5 border-b border-neutral-50 flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <p className="text-sm font-black uppercase text-black">Arquivar Pedidos Concluídos</p>
-            <p className="text-[8px] text-neutral-400 font-bold uppercase mt-0.5">Exporte os dados e exclua para liberar capacidade</p>
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            <button onClick={exportCSV} disabled={!qtdSel} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-[9px] font-black uppercase transition-all ${qtdSel?'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm':'bg-neutral-100 text-neutral-300 cursor-not-allowed'}`}>
-              <Icon name="file-spreadsheet" size={13}/> Excel ({qtdSel})
-            </button>
-            <button onClick={exportPDF} disabled={!qtdSel||exportando} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-[9px] font-black uppercase transition-all ${qtdSel?'bg-blue-600 text-white hover:bg-blue-700 shadow-sm':'bg-neutral-100 text-neutral-300 cursor-not-allowed'}`}>
-              {exportando?<Icon name="loader" size={13} className="animate-spin"/>:<Icon name="file-down" size={13}/>} PDF ({qtdSel})
-            </button>
-            <button onClick={()=>qtdSel&&setConfirmar(true)} disabled={!qtdSel||excluindo} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-[9px] font-black uppercase transition-all ${qtdSel?'bg-red-600 text-white hover:bg-red-700 border-b-4 border-red-800 shadow-sm':'bg-neutral-100 text-neutral-300 cursor-not-allowed'}`}>
-              <Icon name="trash-2" size={13}/> Excluir ({qtdSel})
-            </button>
-          </div>
-        </div>
-
-        {concluidos.length===0?(
-          <div className="py-16 text-center"><Icon name="check-circle" size={32} className="text-neutral-200 mx-auto mb-3"/><p className="text-[9px] font-black uppercase text-neutral-300">Nenhum pedido totalmente concluído</p></div>
-        ):(
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead className="bg-neutral-50 border-b">
-                <tr>
-                  <th className="p-3 w-10"><input type="checkbox" checked={todosSel} onChange={toggleTodos} className="w-4 h-4 accent-red-600 cursor-pointer"/></th>
-                  {['OS','Veículo / Chassi','Solicitante','Data','Itens','Valor Total','Origem'].map(h=><th key={h} className="p-3 text-[8px] font-black uppercase text-neutral-400">{h}</th>)}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-50">
-                {concluidos.map(r=>{
-                  const vT=(r.items||[]).reduce((a,it)=>a+parseFloat(it.price||0),0);
-                  return (
-                    <tr key={r.id} onClick={()=>setSel(p=>({...p,[r.id]:!p[r.id]}))} className={`cursor-pointer transition-colors ${sel[r.id]?'bg-red-50':'hover:bg-neutral-50/60'}`}>
-                      <td className="p-3" onClick={e=>e.stopPropagation()}><input type="checkbox" checked={!!sel[r.id]} onChange={()=>setSel(p=>({...p,[r.id]:!p[r.id]}))} className="w-4 h-4 accent-red-600 cursor-pointer"/></td>
-                      <td className="p-3 font-black text-black text-xs">#{r.os}</td>
-                      <td className="p-3"><p className="text-[9px] font-black uppercase">{r.vehicleData?.modelo||'—'}</p><p className="text-[7px] font-mono text-neutral-400">{r.vehicleData?.chassi||''}</p></td>
-                      <td className="p-3 text-[9px] font-bold uppercase text-neutral-600">{r.responsavel||'—'}</td>
-                      <td className="p-3 text-[9px] font-bold text-neutral-500">{r.timestamp?new Date(r.timestamp).toLocaleDateString('pt-BR'):'—'}</td>
-                      <td className="p-3 text-center"><span className="bg-black text-white text-[8px] font-black px-2 py-0.5 rounded-full">{r.items?.length||0}</span></td>
-                      <td className="p-3 text-[9px] font-black text-emerald-600">{vT>0?fmtBRL(vT):'—'}</td>
-                      <td className="p-3">{r.importado?<ImportBadge/>:<span className="text-[7px] font-black uppercase text-neutral-400 bg-neutral-100 px-2 py-0.5 rounded">Portal</span>}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {concluidos.length>0&&(
-          <div className="p-4 bg-neutral-950 flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center gap-4">
-              <p className="text-[8px] font-black uppercase text-neutral-500">{qtdSel} de {concluidos.length} selecionados</p>
-              {qtdSel>0&&<p className="text-[8px] font-black text-emerald-400">Libera ~{fmtBytes(estimarBytes(pedSel))}</p>}
-            </div>
-            <div className="flex gap-2">
-              <button onClick={()=>setSel({})} className="text-[8px] font-black uppercase text-neutral-500 hover:text-white px-3 py-1.5 rounded-lg transition-colors">Limpar seleção</button>
-              <button onClick={toggleTodos} className="text-[8px] font-black uppercase text-neutral-400 hover:text-white px-3 py-1.5 bg-white/5 rounded-lg transition-colors">{todosSel?'Desmarcar todos':'Selecionar todos'}</button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Login ──────────────────────────────────────────────────────────────────
-function LoginView({onLogin,usersList}){
-  const [u,setU]=useState(''),[p,setP]=useState(''),[showP,setShowP]=useState(false),[err,setErr]=useState('');
-  const submit=e=>{
-    e.preventDefault();
-    const found=usersList.find(x=>x.user.toLowerCase()===u.trim().toLowerCase()&&x.pass===p.trim());
-    if(found){found.active===false?setErr('Conta desativada. Contate o Admin.'):onLogin(found);}
-    else setErr('Usuário ou senha incorretos.');
-  };
-  return (
-    <div className="h-screen w-full flex items-center justify-center login-bg p-4 fade-in">
-      <div className="bg-white w-full max-w-sm rounded-[2.5rem] shadow-2xl overflow-hidden border-b-[10px] border-red-600">
-        <div className="bg-black p-8 text-center text-white">
-          <div className="p-3 bg-red-600 rounded-2xl shadow-lg shadow-red-600/30 w-fit mx-auto mb-4"><Icon name="shopping-cart" size={32}/></div>
-          <h1 className="font-display text-4xl font-black uppercase tracking-[0.15em] leading-none">VRZ COMPRAS</h1>
-          <p className="text-[9px] font-bold text-neutral-500 uppercase tracking-widest italic mt-2">Acesso Restrito ao Sistema</p>
-        </div>
-        <form onSubmit={submit} className="p-8 space-y-6">
-          {err&&<div className={`bg-red-50 border border-red-100 p-3 rounded-xl flex items-center gap-2 text-red-600 ${err?'shake':''}`}><Icon name="alert-circle" size={14}/><span className="text-[10px] font-black uppercase">{err}</span></div>}
-          <div className="space-y-4">
-            <div><label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1">Usuário</label><div className="relative"><div className="absolute left-4 top-3.5 text-neutral-300"><Icon name="user" size={16}/></div><input type="text" value={u} onChange={e=>setU(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-neutral-50 border-2 border-neutral-100 rounded-2xl focus:border-red-600 outline-none font-bold text-sm" placeholder="USUÁRIO" required/></div></div>
-            <div><label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1">Senha</label>
-              <div className="relative"><div className="absolute left-4 top-3.5 text-neutral-300"><Icon name="lock" size={16}/></div>
-                <input type={showP?"text":"password"} value={p} onChange={e=>setP(e.target.value)} className="w-full pl-11 pr-12 py-3 bg-neutral-50 border-2 border-neutral-100 rounded-2xl focus:border-red-600 outline-none font-bold text-sm tracking-widest" placeholder="••••••••" required/>
-                <button type="button" onClick={()=>setShowP(!showP)} className="absolute right-4 top-3 text-neutral-400 hover:text-red-600">{showP?<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>:<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>}</button>
-              </div>
-            </div>
-          </div>
-          <button type="submit" className="w-full py-4 bg-red-600 text-white rounded-2xl font-black uppercase text-xs shadow-xl hover:bg-red-700 active:scale-95 transition-all tracking-[0.2em]">Entrar no Portal</button>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-// ── Request Form ───────────────────────────────────────────────────────────
-function RequestForm({user,loggedInUser,vehiclesDB,requests}){
-  const [os,setOs]=useState(''),[vehicle,setVehicle]=useState(null);
-  const [items,setItems]=useState([{id:Date.now(),description:'',quantity:1,photo:null,status:'Pendente'}]);
-  const [submitting,setSubmitting]=useState(false),[done,setDone]=useState(false);
-  const [semFoto,setSemFoto]=useState([]),[showFoto,setShowFoto]=useState(false);
-  const [showDup,setShowDup]=useState(false),[dups,setDups]=useState([]);
-
-  const onOSBlur=()=>{
-    const t=String(os).trim();if(!t)return;
-    const f=vehiclesDB.find(v=>String(v.os).trim()===t);
-    if(f)setVehicle(f);else{setVehicle(null);alert('OS não cadastrada.');}
-  };
-
-  const salvar=async()=>{
-    setSubmitting(true);
-    try{
-      await col('requests').add({os,responsavel:loggedInUser.user,localizacaoSolicitacao:'-',vehicleData:vehicle,items,timestamp:Date.now(),status:'Pendente',userId:user.uid||'anon'});
-      setDone(true);setShowDup(false);
-    }catch{alert('Erro ao salvar.');}
-    setSubmitting(false);
-  };
-
-  const submit=async e=>{
-    e.preventDefault();
-    if(!os.trim())return alert('OS obrigatória.');
-    if(!vehicle)return alert('OS não cadastrada no sistema.');
-    if(items.some(i=>!i.description.trim()))return alert('Todos os itens precisam de descrição.');
-    const sf=items.filter(i=>!i.photo).map(i=>i.id);
-    if(sf.length){setSemFoto(sf);setShowFoto(true);return;}
-    const ex=requests.filter(r=>String(r.os).trim()===String(os).trim());
-    if(ex.length){setDups(ex);setShowDup(true);return;}
-    await salvar();
-  };
-
-  if(done) return (
-    <div className="flex flex-col items-center justify-center py-10 fade-in bg-white rounded-3xl border p-8 max-w-md mx-auto text-center">
-      <Icon name="check-circle" size={48} className="text-emerald-500 mb-4"/>
-      <h2 className="text-xl font-black uppercase">Pedido Protocolado!</h2>
-      <button onClick={()=>{setDone(false);setOs('');setVehicle(null);setItems([{id:Date.now(),description:'',quantity:1,photo:null,status:'Pendente'}]);}} className="mt-8 w-full py-4 bg-red-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-red-700">Nova Solicitação</button>
-    </div>
-  );
-
-  return (
-    <div className="space-y-4 fade-in">
-      {showFoto&&(
-        <div className="fixed inset-0 z-[600] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl">
-            <div className="bg-red-600 p-6 text-center text-white"><div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-3"><Icon name="camera" size={28}/></div><h3 className="text-lg font-black uppercase">Foto Obrigatória!</h3></div>
-            <div className="p-6"><p className="text-xs font-bold text-neutral-600 text-center">{semFoto.length} item(s) sem foto.</p><button onClick={()=>setShowFoto(false)} className="mt-4 w-full py-3.5 bg-red-600 text-white rounded-xl font-black uppercase text-[10px]">Entendido</button></div>
-          </div>
-        </div>
-      )}
-      {showDup&&(
-        <div className="fixed inset-0 z-[600] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl">
-            <div className="bg-black p-5 text-white border-b-4 border-red-600 flex items-center gap-4"><div className="w-12 h-12 bg-red-600 rounded-2xl flex items-center justify-center shrink-0"><Icon name="alert-triangle" size={22}/></div><div><h3 className="text-base font-black uppercase">OS já possui pedido!</h3><p className="text-neutral-400 text-[9px] font-bold uppercase mt-1">OS #{os} — Contará como inclusão adicional</p></div></div>
-            <div className="p-5 max-h-[40vh] overflow-y-auto scrollbar-hide space-y-3">{dups.map((req,i)=><div key={i} className="bg-neutral-50 rounded-xl p-3 border"><p className="text-[9px] font-black uppercase text-neutral-500 mb-2">{new Date(req.timestamp).toLocaleDateString()} — {req.responsavel}</p><div className="flex flex-wrap gap-2">{(req.items||[]).map((it,j)=><div key={j} className="flex items-center gap-2 bg-white border rounded-lg px-2 py-1">{it.photo&&<img src={it.photo} className="w-7 h-7 rounded object-cover"/>}<div><p className="text-[8px] font-black uppercase">{it.description}</p><StatusBadge status={it.status||'Pendente'} orig={it.statusOriginal}/></div></div>)}</div></div>)}</div>
-            <div className="p-5 bg-neutral-50 border-t flex gap-3"><button onClick={()=>{setShowDup(false);setDups([]);}} className="flex-1 py-3 bg-neutral-200 text-neutral-600 rounded-xl font-black uppercase text-[9px]">Cancelar</button><button onClick={salvar} disabled={submitting} className="flex-1 py-3 bg-red-600 text-white rounded-xl font-black uppercase text-[9px] flex items-center justify-center gap-2">{submitting?<Icon name="refresh-cw" size={14} className="animate-spin"/>:<Icon name="check" size={14}/>}Incluir mesmo assim</button></div>
-          </div>
-        </div>
-      )}
-
-      <div><h2 className="text-xl md:text-2xl font-black text-black tracking-tighter uppercase leading-none">Nova Requisição</h2><span className="text-[9px] font-bold text-neutral-400 uppercase mt-1 tracking-widest italic block">Operacional VRZ</span></div>
-
-      <form onSubmit={submit} className="space-y-4">
-        <div className="bg-white rounded-2xl border border-neutral-200 shadow-sm overflow-hidden">
-          <div className="p-4 space-y-3">
-            <div><label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block mb-1.5">Número da OS</label><input type="text" inputMode="numeric" value={os} onChange={e=>setOs(e.target.value)} onBlur={onOSBlur} placeholder="Digite o nº da OS" className="w-full px-4 py-4 bg-neutral-50 border-2 border-neutral-200 rounded-xl focus:border-red-600 outline-none font-black text-2xl tracking-wide" required/></div>
-            <div className="flex items-center gap-3 bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3"><div className="w-9 h-9 rounded-lg bg-red-50 flex items-center justify-center text-red-600 border border-red-100 shrink-0"><Icon name="user" size={16}/></div><div className="min-w-0 flex-1"><p className="text-[8px] font-black uppercase text-neutral-400 leading-none mb-0.5">Solicitante</p><p className="text-sm font-black uppercase text-black truncate">{loggedInUser.user}</p></div><RoleBadge role={loggedInUser.role}/></div>
-          </div>
-          <div className="bg-neutral-950 border-t-4 border-red-600 p-4 text-white min-h-[100px] flex items-center">
-            {vehicle?(
-              <div className="w-full space-y-2.5">
-                <div className="flex items-start justify-between gap-2"><div><p className="text-neutral-500 text-[7px] font-black uppercase mb-0.5">Modelo</p><p className="text-white text-lg font-black uppercase leading-tight">{vehicle.modelo}</p></div><div className="text-right shrink-0"><p className="text-neutral-500 text-[7px] font-black uppercase mb-0.5">Fabricante</p><p className="text-white text-sm font-bold uppercase">{vehicle.fabricante||'N/A'}</p></div></div>
-                <div className="grid grid-cols-3 gap-2 border-t border-white/10 pt-2.5"><div><p className="text-neutral-500 text-[7px] font-black uppercase">Etapa</p><p className="text-red-400 text-[11px] font-black uppercase">{vehicle.etapa}</p></div><div><p className="text-neutral-500 text-[7px] font-black uppercase">Cor</p><p className="text-white text-[11px] font-bold uppercase">{vehicle.cor}</p></div><div><p className="text-neutral-500 text-[7px] font-black uppercase">Local</p><p className="text-white text-[11px] font-bold uppercase">{vehicle.localizacao}</p></div></div>
-                <div className="bg-white/5 rounded-lg px-3 py-2 border border-white/10 text-center"><p className="text-neutral-500 text-[7px] font-black uppercase mb-0.5">Chassi</p><p className="text-white font-mono-chassi text-sm font-black tracking-widest select-all">{vehicle.chassi}</p></div>
-              </div>
-            ):(
-              <div className="w-full text-center py-3"><Icon name="car" size={28} className="text-neutral-700 mx-auto mb-2"/><p className="text-neutral-600 text-[9px] font-black uppercase tracking-widest">Digite a OS para carregar o veículo</p></div>
-            )}
-          </div>
-        </div>
-
-        <div className="space-y-3">
-          <div className="flex justify-between items-center"><h3 className="font-black text-black uppercase text-sm flex items-center gap-2"><Icon name="package" size={16}/>Peças</h3><button type="button" onClick={()=>setItems([...items,{id:Date.now(),description:'',quantity:1,photo:null,status:'Pendente'}])} className="bg-red-600 text-white px-4 py-2.5 rounded-xl text-sm font-black uppercase hover:bg-red-700 flex items-center gap-1.5 shadow-sm active:scale-95 transition-transform">+ Item</button></div>
-          {items.map((it,idx)=>(
-            <div key={it.id} className={`bg-white rounded-2xl overflow-hidden shadow-sm ${semFoto.includes(it.id)?'border-2 border-red-500':'border border-neutral-200'}`}>
-              <div className="flex items-center justify-between px-4 py-3 bg-neutral-50 border-b border-neutral-100"><span className="text-[10px] font-black text-neutral-500 uppercase tracking-wider">Item {idx+1}</span><button type="button" onClick={()=>{if(items.length>1){setItems(items.filter(i=>i.id!==it.id));setSemFoto(p=>p.filter(id=>id!==it.id));}else{setItems([{id:Date.now(),description:'',quantity:1,photo:null,status:'Pendente'}]);setSemFoto([]);}}} className="flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-[9px] font-black uppercase active:scale-95 transition-transform">✕ Remover</button></div>
-              <div className="p-4 space-y-3">
-                <div><label className="text-[9px] font-black text-neutral-400 uppercase block mb-1.5">Descrição da Peça</label><input type="text" value={it.description} onChange={e=>setItems(p=>p.map(i=>i.id===it.id?{...i,description:e.target.value}:i))} placeholder="NOME DA PEÇA" className="w-full p-4 bg-neutral-50 border-2 border-neutral-200 rounded-xl font-black text-base uppercase focus:border-red-600 outline-none" required autoCapitalize="characters"/></div>
-                <div className="flex gap-3 items-end">
-                  <div className="w-28 shrink-0"><label className="text-[9px] font-black text-neutral-400 uppercase block mb-1.5">Qtd</label><input type="number" min="1" inputMode="numeric" value={it.quantity} onChange={e=>setItems(p=>p.map(i=>i.id===it.id?{...i,quantity:e.target.value}:i))} className="w-full p-4 bg-neutral-50 border-2 border-neutral-200 rounded-xl font-black text-xl text-center focus:border-red-600 outline-none"/></div>
-                  <div className="flex-1"><label className="text-[9px] font-black text-red-600 uppercase block mb-1.5">📷 Foto (Obrigatória)</label>
-                    {it.photo?(
-                      <div className="relative rounded-xl overflow-hidden border-2 border-emerald-400 h-20 group"><img src={it.photo} className="h-full w-full object-cover"/><button type="button" onClick={()=>setItems(p=>p.map(i=>i.id===it.id?{...i,photo:null}:i))} className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 active:opacity-100 text-white text-xs font-black">✕ Trocar</button><div className="absolute top-1.5 right-1.5 bg-emerald-500 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full">✓ OK</div></div>
-                    ):(
-                      <label className={`h-20 flex flex-col items-center justify-center gap-1.5 border-2 border-dashed rounded-xl cursor-pointer transition-all ${semFoto.includes(it.id)?'border-red-500 bg-red-50':'border-neutral-300 bg-neutral-50'}`}><Icon name="camera" size={26} className={semFoto.includes(it.id)?'text-red-500':'text-neutral-400'}/><span className={`text-[9px] font-black uppercase ${semFoto.includes(it.id)?'text-red-500':'text-neutral-400'}`}>Toque para fotografar</span><input type="file" accept="image/*" capture="environment" onChange={e=>{const r=new FileReader();r.onload=()=>{setItems(p=>p.map(i=>i.id===it.id?{...i,photo:r.result}:i));setSemFoto(p=>p.filter(id=>id!==it.id));};if(e.target.files[0])r.readAsDataURL(e.target.files[0]);}} className="hidden"/></label>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-        <button disabled={submitting||!vehicle} className={`w-full py-5 rounded-2xl font-black text-lg uppercase flex items-center justify-center gap-3 shadow-lg transition-all ${submitting||!vehicle?'bg-neutral-200 text-neutral-400':'bg-red-600 text-white border-b-4 border-red-800 hover:bg-red-700 active:translate-y-0.5 active:border-b-2'}`}>{submitting?<Icon name="refresh-cw" size={22} className="animate-spin"/>:<><Icon name="send" size={20}/>Enviar Pedido</>}</button>
-      </form>
-    </div>
-  );
-}
-
-// ── Status View ────────────────────────────────────────────────────────────
-function StatusView({requests,isAdmin}){
-  const [search,setSearch]=useState(''),[origem,setOrigem]=useState('todos'),[toDelete,setToDelete]=useState(null);
-  const filtered=useMemo(()=>requests.filter(r=>{
-    const t=search.toLowerCase();
-    const mb=String(r.os||'').toLowerCase().includes(t)||String(r.responsavel||'').toLowerCase().includes(t)||String(r.vehicleData?.modelo||'').toLowerCase().includes(t)||String(r.vehicleData?.chassi||'').toLowerCase().includes(t);
-    const mo=origem==='todos'||(origem==='importado'?r.importado:!r.importado);
-    return mb&&mo;
-  }),[requests,search,origem]);
-
-  const exportCSV=()=>{
-    const rows=[['Data','OS','Chassi','Veiculo','Peca','Qtd','Status','Valor','Loja','Prazo','Entrega'].join(';')];
-    requests.forEach(r=>(r.items||[]).forEach(it=>rows.push([r.timestamp?new Date(r.timestamp).toLocaleDateString():'',r.os,r.vehicleData?.chassi||'-',r.vehicleData?.modelo||'-',it.description||'-',it.quantity||1,it.statusOriginal||it.status||'Pendente',it.price||0,it.supplier||'-',it.deliveryDate||'-',it.actualDeliveryDate||'-'].join(';'))));
-    const blob=new Blob(['\uFEFF'+rows.join('\n')],{type:'text/csv;charset=utf-8;'});
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`Relatorio_VRZ_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.csv`;a.click();
-  };
-
-  // Exportação para PROCV — uma linha por OS, todas as peças na mesma célula
-  const exportControle=()=>{
-    const STATUS_ORDER=['Pendente','Em Cotação','Concluído'];
-    // Agrupar pedidos por OS — múltiplos pedidos da mesma OS viram uma única linha
-    const byOS={};
-    requests.forEach(r=>{
-      const k=String(r.os||'').trim();
-      if(!k)return;
-      if(!byOS[k]){byOS[k]={os:k,modelo:r.vehicleData?.modelo||'-',chassi:r.vehicleData?.chassi||'-',fabricante:r.vehicleData?.fabricante||'-',itens:[],ts:r.timestamp||0};}
-      (r.items||[]).forEach(it=>byOS[k].itens.push({
-        desc:it.description||'-',qty:it.quantity||1,status:it.status||'Pendente',orig:it.statusOriginal||''
-      }));
-      if((r.timestamp||0)>byOS[k].ts)byOS[k].ts=r.timestamp;
-    });
-
-    const header=['OS','Modelo','Fabricante','Chassi','Peças Solicitadas','Status Geral','Última Atualização'].join(';');
-    const rows=[header];
-
-    // Ordenar por OS numérica
-    Object.values(byOS).sort((a,b)=>{
-      const na=parseInt(a.os)||0, nb=parseInt(b.os)||0;
-      return na-nb||a.os.localeCompare(b.os);
-    }).forEach(r=>{
-      // Peças na mesma célula: "2x PARABRISA | 1x RETROVISOR LE | 3x PARAFUSO"
-      const pecas=r.itens.map(it=>`${it.qty}x ${it.desc}`).join(' | ');
-
-      // Status geral: se alguma Pendente → Pendente; se alguma Em Cotação → Em Cotação; senão Concluído
-      let sg='Concluído';
-      if(r.itens.some(it=>it.status==='Pendente'))sg='Pendente';
-      else if(r.itens.some(it=>it.status==='Em Cotação'))sg='Em Cotação';
-
-      const dt=r.ts?new Date(r.ts).toLocaleDateString('pt-BR'):'';
-      rows.push([r.os,r.modelo,r.fabricante,r.chassi,`"${pecas}"`,sg,dt].join(';'));
-    });
-
-    const blob=new Blob(['\uFEFF'+rows.join('\n')],{type:'text/csv;charset=utf-8;'});
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);
-    a.download=`VRZ_Controle_PROCV_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.csv`;a.click();
-  };
-
-  const exportPDF=async req=>{
-    const {jsPDF}=window.jspdf;const doc=new jsPDF();
-    doc.setFontSize(16);doc.text('Solicitacao de Pecas - VRZ',10,15);doc.setFontSize(9);
-    doc.text('OS: #'+req.os,10,24);doc.text('Data: '+new Date(req.timestamp).toLocaleString(),10,30);
-    doc.text('Veiculo: '+(req.vehicleData?.modelo||''),10,36);doc.text('Chassi: '+(req.vehicleData?.chassi||''),10,42);doc.text('Solicitante: '+req.responsavel,10,48);
-    let y=58;doc.setFontSize(11);doc.text('ITENS:',10,y);y+=8;
-    (req.items||[]).forEach((it,i)=>{if(y>250){doc.addPage();y=15;}doc.setFontSize(9);doc.text(`${i+1}. Qtd:${it.quantity} - ${it.description} [${it.status||'Pendente'}]`,14,y);y+=7;if(it.photo){try{doc.addImage(it.photo,'JPEG',14,y,45,28);y+=32;}catch{}}});
-    doc.save('OS_'+req.os+'_VRZ.pdf');
-  };
-
-  return (
-    <div className="space-y-4 fade-in">
-      {toDelete&&(
-        <div className="fixed inset-0 z-[500] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-sm rounded-[2rem] overflow-hidden shadow-2xl">
-            <div className="bg-red-600 p-6 text-center text-white"><div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3"><Icon name="trash-2" size={24}/></div><h3 className="text-lg font-black uppercase">Excluir Registro</h3></div>
-            <div className="p-6 space-y-4"><p className="text-xs font-bold text-neutral-500 text-center">Confirmar exclusão?</p><div className="grid grid-cols-2 gap-3"><button onClick={()=>setToDelete(null)} className="py-3 bg-neutral-100 text-neutral-500 rounded-xl font-black uppercase text-[10px]">Cancelar</button><button onClick={async()=>{try{await col('requests').doc(toDelete).delete();setToDelete(null);}catch{alert('Erro.');}}} className="py-3 bg-red-600 text-white rounded-xl font-black uppercase text-[10px]">Confirmar</button></div></div>
-          </div>
-        </div>
-      )}
-
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-3">
-        <div><h2 className="text-2xl font-black uppercase text-black leading-none tracking-tighter">Histórico de OS</h2><p className="text-[9px] font-bold text-neutral-400 uppercase tracking-widest mt-1 italic">Gestão e Exportação Detalhada</p></div>
-        <div className="flex flex-wrap gap-2 items-center">
-          <div className="flex bg-white border border-neutral-200 rounded-xl overflow-hidden shadow-sm">
-            {[['todos','Todos'],['portal','Portal'],['importado','Planilha']].map(([v,l])=>(
-              <button key={v} onClick={()=>setOrigem(v)} className={`px-3 py-2 text-[8px] font-black uppercase tracking-wider transition-colors ${origem===v?'bg-black text-white':'text-neutral-400 hover:text-black'}`}>{l}</button>
-            ))}
-          </div>
-          {isAdmin&&<button onClick={exportCSV} className="bg-emerald-600 text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase flex items-center gap-2 shadow-lg hover:bg-emerald-700"><Icon name="file-text" size={12}/>EXCEL</button>}
-          {isAdmin&&<button onClick={exportControle} className="bg-black text-white px-3 py-2 rounded-xl text-[9px] font-black uppercase flex items-center gap-2 shadow-lg hover:bg-neutral-800 border-b-2 border-red-600" title="Uma linha por OS, peças juntas numa célula — pronto para PROCV"><Icon name="table-2" size={12}/>PROCV</button>}
-          <div className="relative"><input type="text" placeholder="BUSCAR OS / CHASSI / NOME..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full md:w-64 pl-9 pr-4 py-2 bg-white border border-neutral-200 rounded-xl text-[9px] font-black uppercase outline-none focus:border-red-600 shadow-sm"/><div className="absolute left-3 top-2.5 text-neutral-300"><Icon name="search" size={12}/></div></div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 max-h-[75vh] overflow-y-auto pr-1 scrollbar-hide">
-        {filtered.length===0?(
-          <div className="py-20 text-center bg-white rounded-2xl border border-dashed"><Icon name="inbox" size={32} className="text-neutral-200 mx-auto mb-2"/><p className="text-[9px] font-black uppercase text-neutral-300">Nenhum resultado</p></div>
-        ):filtered.map(r=>(
-          <div key={r.id} className={`bg-white rounded-2xl border p-4 shadow-sm border-l-4 ${r.importado?'border-l-amber-400':'border-l-red-600'} hover:border-red-200 transition-all`}>
-            <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
-              <div className="flex items-center gap-2"><span className="text-sm font-black uppercase">OS #{r.os}</span>{r.importado&&<ImportBadge/>}</div>
-              <div className="flex gap-2">
-                <button onClick={()=>exportPDF(r)} className="px-3 py-1.5 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-[9px] font-black uppercase flex items-center gap-1"><Icon name="file-down" size={12}/>PDF</button>
-                {isAdmin&&<button onClick={()=>setToDelete(r.id)} className="px-3 py-1.5 bg-red-600 text-white hover:bg-red-700 rounded-lg text-[9px] font-black uppercase flex items-center gap-1"><Icon name="trash-2" size={12}/>Excluir</button>}
-              </div>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-[8px] font-black uppercase tracking-wider text-neutral-400 mb-2">
-              <div><span className="text-red-600 block mb-0.5">Solicitante</span><span className="text-black">{r.responsavel||'—'}</span></div>
-              <div><span className="block mb-0.5">Veículo</span><span className="text-black">{r.vehicleData?.modelo||'—'}</span></div>
-              <div><span className="block mb-0.5">Chassi</span><span className="text-black font-mono text-[7px]">{r.vehicleData?.chassi||'—'}</span></div>
-              <div><span className="block mb-0.5">Data</span><span className="text-black">{r.timestamp?new Date(r.timestamp).toLocaleDateString():'—'}</span></div>
-            </div>
-            <div className="flex gap-2 overflow-x-auto scrollbar-hide py-1">
-              {(r.items||[]).map((it,i)=>(
-                <div key={i} className="flex-shrink-0 flex items-center gap-2 bg-neutral-50 p-1.5 rounded-lg border border-neutral-100 min-w-[150px] max-w-[220px]">
-                  {it.photo&&<img src={it.photo} className="w-8 h-8 rounded-md object-cover border shrink-0"/>}
-                  {!it.photo&&r.importado&&<div className="w-8 h-8 rounded-md bg-amber-50 border border-amber-200 flex items-center justify-center shrink-0"><Icon name="archive" size={12} className="text-amber-400"/></div>}
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[8px] font-black uppercase leading-tight truncate">{it.description||'(sem descrição)'}</p>
-                    <div className="flex flex-wrap justify-between items-center mt-1 gap-1">
-                      <span className="text-[7px] text-red-600 font-bold">QTD:{it.quantity}</span>
-                      <StatusBadge status={it.status||'Pendente'} orig={it.statusOriginal}/>
-                    </div>
-                    {it.price>0&&<p className="text-[7px] text-emerald-600 font-black mt-0.5">{fmtBRL(it.price)}</p>}
-                    {it.supplier&&<p className="text-[7px] text-neutral-400 font-bold truncate">{it.supplier}</p>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ── User Management ────────────────────────────────────────────────────────
-function UserManagement({users,onAdd,onDelete,onToggle,onRole}){
-  const [nu,setNu]=useState(''),[np,setNp]=useState(''),[nr,setNr]=useState('solicitante'),[showP,setShowP]=useState(false);
-  return (
-    <div className="space-y-6 fade-in max-w-3xl mx-auto">
-      <div className="grid grid-cols-3 gap-3">
-        {[{role:'admin',items:['✓ Nova Req.','✓ Histórico','✓ Excluir','✓ Gestão','✓ Usuários']},{role:'solicitante',items:['✓ Nova Req.','✓ Histórico','✗ Excluir','✗ Gestão','✗ Usuários']},{role:'leitor',items:['✗ Nova Req.','✓ Histórico','✗ Excluir','✗ Gestão','✗ Usuários']}].map(({role,items})=>(
-          <div key={role} className={`rounded-xl p-3 ${role==='admin'?'bg-red-50 border border-red-100':role==='solicitante'?'bg-blue-50 border border-blue-100':'bg-neutral-50 border'}`}>
-            <RoleBadge role={role}/>
-            <ul className={`text-[8px] font-bold space-y-1 mt-2 ${role==='admin'?'text-red-700':role==='solicitante'?'text-blue-700':'text-neutral-500'}`}>{items.map((p,i)=><li key={i} className={p.startsWith('✗')?'opacity-40':''}>{p}</li>)}</ul>
-          </div>
-        ))}
-      </div>
-      <div className="bg-white p-6 rounded-3xl border shadow-sm space-y-4">
-        <h3 className="text-xs font-black uppercase tracking-widest text-red-600">Cadastrar Novo Acesso</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div><label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1">Usuário</label><input type="text" value={nu} onChange={e=>setNu(e.target.value)} className="w-full px-4 py-2.5 bg-neutral-50 border rounded-xl font-bold text-xs outline-none focus:border-red-600" placeholder="Nome.Sobrenome"/></div>
-          <div><label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1">Senha</label><div className="relative"><input type={showP?"text":"password"} value={np} onChange={e=>setNp(e.target.value)} className="w-full pl-4 pr-10 py-2.5 bg-neutral-50 border rounded-xl font-bold text-xs outline-none focus:border-red-600" placeholder="Senha"/><button type="button" onClick={()=>setShowP(!showP)} className="absolute right-3 top-2 text-neutral-400 hover:text-red-600 text-xs">{showP?'👁':'👁‍🗨'}</button></div></div>
-          <div><label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1">Categoria</label><select value={nr} onChange={e=>setNr(e.target.value)} className="w-full px-4 py-2.5 bg-neutral-50 border rounded-xl font-bold text-xs outline-none focus:border-red-600"><option value="solicitante">Solicitante</option><option value="leitor">Leitor</option><option value="admin">Admin</option></select></div>
-        </div>
-        <button onClick={()=>{if(!nu||!np)return alert('Preencha todos os campos.');onAdd(nu,np,nr);setNu('');setNp('');setNr('solicitante');}} className="w-full py-3 bg-red-600 text-white rounded-xl font-black uppercase text-[10px] tracking-widest shadow-lg hover:bg-red-700">+ CRIAR CONTA</button>
-      </div>
-      <div className="bg-white rounded-3xl border shadow-sm overflow-hidden">
-        <table className="w-full text-left">
-          <thead className="bg-neutral-50 border-b"><tr><th className="p-4 text-[9px] font-black uppercase text-neutral-400">Usuário</th><th className="p-4 text-[9px] font-black uppercase text-neutral-400">Categoria</th><th className="p-4 text-[9px] font-black uppercase text-neutral-400">Status</th><th className="p-4 text-[9px] font-black uppercase text-neutral-400 text-right">Ação</th></tr></thead>
-          <tbody className="divide-y divide-neutral-50">{users.map((u,i)=>(
-            <tr key={i} className="hover:bg-neutral-50/50">
-              <td className="p-4 text-xs font-bold text-black uppercase">{u.user}</td>
-              <td className="p-4"><select value={u.role||'solicitante'} onChange={e=>onRole(u,e.target.value)} className={`text-[7px] font-black uppercase px-2 py-1 rounded-full cursor-pointer outline-none ${RC[u.role||'solicitante']}`}><option value="admin">Admin</option><option value="solicitante">Solicitante</option><option value="leitor">Leitor</option></select></td>
-              <td className="p-4"><button onClick={()=>onToggle(u)} className={`text-[7px] font-black uppercase px-2 py-1 rounded-full border transition-all ${u.active!==false?'bg-emerald-100 text-emerald-600 border-emerald-200 hover:bg-red-100 hover:text-red-600':'bg-red-100 text-red-600 border-red-200 hover:bg-emerald-100 hover:text-emerald-600'}`}>{u.active!==false?'Ativo':'Desativado'}</button></td>
-              <td className="p-4 text-right"><button onClick={()=>onDelete(u.id||u.user)} className="text-white bg-red-600 hover:bg-red-700 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase flex items-center gap-1.5 ml-auto"><Icon name="trash-2" size={12}/>EXCLUIR</button></td>
-            </tr>
-          ))}</tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-// ── App ────────────────────────────────────────────────────────────────────
-function App(){
-  const [user,setUser]=useState(null),[loggedIn,setLoggedIn]=useState(null),[view,setView]=useState('request');
-  const [requests,setRequests]=useState([]),[vehicles,setVehicles]=useState([]),[users,setUsers]=useState([]);
-  const [editing,setEditing]=useState(null),[sidebarOpen,setSidebarOpen]=useState(false);
-  const [subView,setSubView]=useState('pending'),[importData,setImportData]=useState([]),[showImport,setShowImport]=useState(false);
-
-  const isAdmin=loggedIn?.role==='admin';
-  const isSol=loggedIn?.role==='solicitante'||isAdmin;
-
-  useEffect(()=>{ const u=auth.onAuthStateChanged(u=>{if(u)setUser(u);else auth.signInAnonymously();}); return u; },[]);
+// ── Donut Chart ────────────────────────────────────────────────────────────
+function Donut({slices,size=110}){
+  const ref=useRef(null);
   useEffect(()=>{
-    if(!user)return;
-    const u1=col('requests').onSnapshot(s=>setRequests(s.docs.map(d=>({id:d.id,...d.data()}))),()=>{});
-    const u2=col('vehicles').onSnapshot(s=>setVehicles(s.docs.map(d=>d.data())),()=>{});
-    const u3=col('users').onSnapshot(s=>{
-      const db=s.docs.map(d=>({id:d.id,...d.data()}));
-      const combined=[...db];
-      INIT_USERS.forEach(u=>{if(!db.find(d=>d.user.toLowerCase()===u.user.toLowerCase()))combined.push(u);});
-      setUsers(combined);
-    },()=>{});
-    return ()=>{u1();u2();u3();};
-  },[user]);
-
-  const addUser=async(u,p,role='solicitante')=>{try{await col('users').add({user:u,pass:p,active:true,role});}catch{alert('Erro.');}};
-  const deleteUser=async id=>{if(!window.confirm('Remover usuário?'))return;try{if(id&&id.length>15)await col('users').doc(id).delete();else setUsers(p=>p.filter(u=>u.user!==id));}catch{setUsers(p=>p.filter(u=>u.id!==id&&u.user!==id));}};
-  const toggleUser=async u=>{const s=!(u.active!==false);try{if(u.id)await col('users').doc(u.id).update({active:s});else await col('users').add({...u,active:s});}catch{alert('Erro.');}};
-  const changeRole=async(u,role)=>{try{if(u.id)await col('users').doc(u.id).update({role});else await col('users').add({...u,role});}catch{alert('Erro.');}};
-  const login=u=>{setLoggedIn(u);setView(u.role==='leitor'?'status':u.role==='admin'?'dashboard':'request');};
-  const logout=()=>{setLoggedIn(null);setView('request');};
-
-  const handlePaste=e=>{
-    const text=e.clipboardData.getData('text');
-    const lines=text.split(/\r?\n/).filter(l=>l.trim());if(!lines.length)return;
-    const headers=lines[0].split(/[,\t]/).map(h=>h.trim().toUpperCase());
-    const fi=t=>headers.findIndex(h=>t.some(x=>h.includes(x)));
-    const[iO,iM,iF,iC,iCh,iE,iL]=[fi(['OS']),fi(['MODELO']),fi(['FABRICANTE','MARCA']),fi(['COR']),fi(['CHASSI']),fi(['ETAPA']),fi(['LOCALIZA'])];
-    const rows=(iO!==-1?lines.slice(1):lines).map(l=>{const v=l.split(/[,\t]/);const g=(i,fb)=>(i!==-1?v[i]:v[fb])?.trim()||'';return{os:g(iO,0),modelo:g(iM,1),fabricante:g(iF,2),cor:g(iC,3),chassi:g(iCh,4),etapa:g(iE,5),localizacao:g(iL,6)};}).filter(r=>r.os);
-    setImportData(rows);
-  };
-
-  const commitImport=async()=>{
-    if(!importData.length)return;
-    const batch=db.batch();
-    importData.forEach(v=>batch.set(col('vehicles').doc(v.os),v));
-    await batch.commit();alert('Sucesso! '+importData.length+' veículos importados.');
-    setImportData([]);setShowImport(false);
-  };
-
-  const updateItem=async(reqId,idx,fields)=>{
-    const req=requests.find(r=>r.id===reqId);if(!req)return;
-    const newItems=[...req.items];const item={...newItems[idx],...fields};
-    if(item.price&&item.supplier&&item.deliveryDate&&!item.actualDeliveryDate)item.status='Em Cotação';
-    if(item.actualDeliveryDate)item.status='Concluído';
-    newItems[idx]=item;
-    let gs='Concluído';
-    if(newItems.some(it=>it.status==='Pendente'))gs='Pendente';
-    else if(newItems.some(it=>it.status==='Em Cotação'))gs='Em Cotação';
-    setEditing(p=>p?.id===reqId?{...p,items:newItems}:p);
-    try{await col('requests').doc(reqId).update({items:newItems,status:gs});}catch{}
-  };
-
-  if(!loggedIn)return <LoginView onLogin={login} usersList={users}/>;
-
-  const tabCounts={
-    pending:requests.filter(r=>r.items?.some(it=>it.status==='Pendente')).length,
-    quoting:requests.filter(r=>r.items?.some(it=>it.status==='Em Cotação')).length,
-    completed:requests.filter(r=>r.items?.every(it=>it.status==='Concluído')).length,
-  };
-
-  // Ordem das abas: Nova Peça, Histórico, Gestão Admin, Analytics
-  const navItems = [
-    isSol  && { key:'request',   icon:'plus',        label:'Nova Peça'  },
-                { key:'status',    icon:'search',      label:'Histórico'  },
-    isAdmin && { key:'admin',     icon:'shield',      label:'Gestão'     },
-    isAdmin && { key:'dashboard', icon:'bar-chart-2', label:'Analytics'  },
-  ].filter(Boolean);
-
-  const go = (v) => { setView(v); setSidebarOpen(false); };
-
-  return (
-    <div className="h-screen flex flex-col md:flex-row bg-slate-100 overflow-hidden">
-
-      {/* ── DESKTOP SIDEBAR ── */}
-      <nav className="hidden md:flex flex-col w-56 bg-black text-white p-5 gap-5 shrink-0 shadow-2xl">
-        {/* Logo */}
-        <div className="flex items-center gap-3 pb-4 border-b border-white/8">
-          <div className="p-2 bg-red-600 rounded-xl shadow-lg shadow-red-600/30 shrink-0"><Icon name="shopping-cart" size={20}/></div>
-          <div>
-            <p className="text-[8px] font-bold text-neutral-500 uppercase tracking-widest leading-none">Portal Compras</p>
-            <h1 className="font-display text-2xl font-black uppercase leading-none text-white">VRZ</h1>
-          </div>
-        </div>
-        {/* Nav */}
-        <div className="flex-1 space-y-1">
-          {navItems.map(n=>(
-            <NavBtn key={n.key} icon={n.icon} label={n.label} active={view===n.key} onClick={()=>go(n.key)}/>
-          ))}
-        </div>
-        {/* User */}
-        <div className="bg-neutral-900/60 p-3 rounded-xl border border-white/5 space-y-2">
-          <p className="text-[7px] font-black text-neutral-500 uppercase tracking-widest">Logado como:</p>
-          <p className="text-[10px] font-black uppercase text-red-500 truncate">{loggedIn.user}</p>
-          <RoleBadge role={loggedIn.role}/>
-          <button onClick={logout} className="mt-1 w-full py-1.5 bg-neutral-800 hover:bg-red-600 rounded-lg text-[8px] font-black uppercase transition-colors">Sair</button>
-        </div>
-        <div className="text-center"><span className={`text-[8px] font-black tracking-widest ${user?'text-red-600 pulse-dot':'text-neutral-500'}`}>● {user?'ONLINE':'RECONECTANDO...'}</span></div>
-      </nav>
-
-      {/* ── MOBILE HEADER ── */}
-      <div className="md:hidden bg-black text-white flex items-center justify-between px-4 py-3 z-[100] border-b-2 border-red-600 shrink-0">
-        <div className="flex items-center gap-2.5">
-          <div className="p-1.5 bg-red-600 rounded-lg"><Icon name="shopping-cart" size={15}/></div>
-          <div>
-            <p className="text-[7px] font-bold text-neutral-500 uppercase tracking-wider leading-none">Portal Compras</p>
-            <h1 className="font-display text-xl font-black uppercase leading-none">VRZ</h1>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="text-right">
-            <p className="text-[8px] font-black uppercase text-red-500 truncate max-w-[100px]">{loggedIn.user}</p>
-            <RoleBadge role={loggedIn.role}/>
-          </div>
-          <button onClick={logout} className="p-2 bg-neutral-900 hover:bg-red-600 rounded-xl transition-colors ml-1"><Icon name="log-out" size={16}/></button>
-        </div>
-      </div>
-
-      {/* ── MAIN CONTENT ── */}
-      <main className="flex-1 overflow-y-auto scrollbar-hide h-full min-w-0">
-        <div className="p-4 md:p-6 mobile-content md:pb-6 max-w-6xl mx-auto">
-          {!user?(
-            <div className="h-full flex flex-col items-center justify-center gap-4 pt-20"><Icon name="loader" size={32} className="text-red-600 animate-spin"/><span className="text-[10px] font-black uppercase tracking-[0.3em] text-neutral-400">Sincronizando...</span></div>
-          ):(
-            <>
-              {view==='dashboard'&&isAdmin&&<DashboardView requests={requests}/>}
-              {view==='request'&&isSol&&<RequestForm user={user} loggedInUser={loggedIn} vehiclesDB={vehicles} requests={requests}/>}
-              {view==='status'&&<StatusView requests={requests} isAdmin={isAdmin}/>}
-              {view==='admin'&&isAdmin&&(
-                <div className="space-y-5 fade-in pb-10">
-                  <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-neutral-200 pb-4 gap-3">
-                    <div><h2 className="text-2xl font-black uppercase text-black tracking-tighter leading-none">Gestão de Compras</h2><p className="text-[9px] font-bold text-neutral-400 mt-1 uppercase tracking-widest">Protocolos e Base de Dados</p></div>
-                    <button onClick={()=>setShowImport(true)} className="bg-black text-white px-4 py-2.5 rounded-xl font-black uppercase text-[10px] border-b-4 border-red-600 flex items-center gap-2 hover:bg-neutral-900 shadow-xl shrink-0"><Icon name="file-up" size={14}/>Importar Planilha</button>
-                  </div>
-
-                  {/* Admin tabs — scroll horizontal no mobile */}
-                  <div className="flex gap-1.5 bg-white p-1 rounded-xl border border-neutral-200 overflow-x-auto scrollbar-hide">
-                    {[
-                      {key:'pending', label:`Pendentes (${tabCounts.pending})`, color:'#f97316'},
-                      {key:'quoting', label:`Em Cotação (${tabCounts.quoting})`, color:'#2563eb'},
-                      {key:'completed',label:`Concluídos (${tabCounts.completed})`,color:'#000'},
-                      {key:'vehicles', label:`Veículos (${vehicles.length})`, color:'#262626'},
-                      {key:'users',    label:'Usuários',  color:'#ef4444'},
-                      {key:'storage',  label:'Capacidade', color:'#7c3aed', icon:'database'},
-                    ].map(t=>(
-                      <button key={t.key} onClick={()=>setSubView(t.key)}
-                        style={subView===t.key?{backgroundColor:t.color}:{}}
-                        className={`px-3 py-2 rounded-lg text-[9px] font-black uppercase whitespace-nowrap transition-all flex items-center gap-1 ${subView===t.key?'text-white shadow-md':'text-neutral-400 hover:text-neutral-700'}`}>
-                        {t.icon&&<Icon name={t.icon} size={10}/>}{t.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div>
-                    {subView==='users'&&<UserManagement users={users} onAdd={addUser} onDelete={deleteUser} onToggle={toggleUser} onRole={changeRole}/>}
-                    {subView==='storage'&&<StorageView requests={requests}/>}
-                    {subView==='vehicles'&&(
-                      <div className="bg-white rounded-2xl border border-neutral-200 shadow-sm overflow-hidden fade-in">
-                        <div className="overflow-x-auto max-h-[60vh] scrollbar-hide">
-                          <table className="w-full text-left border-collapse min-w-[900px]">
-                            <thead className="bg-neutral-100 text-[10px] font-black uppercase text-neutral-500 sticky top-0"><tr>{['OS','Modelo','Fabricante','Cor','Chassi','Etapa','Localização'].map(h=><th key={h} className="p-3 border-b">{h}</th>)}</tr></thead>
-                            <tbody className="text-[10px] font-medium text-neutral-700">
-                              {vehicles.length===0?<tr><td colSpan="7" className="p-10 text-center text-neutral-300 font-black uppercase">Vazio</td></tr>:vehicles.map((v,i)=>(
-                                <tr key={i} className="border-b hover:bg-slate-50"><td className="p-3 font-black text-black">#{v.os}</td><td className="p-3 uppercase font-bold">{v.modelo}</td><td className="p-3 uppercase">{v.fabricante}</td><td className="p-3 uppercase">{v.cor}</td><td className="p-3 font-mono font-black tracking-widest">{v.chassi}</td><td className="p-3"><span className="bg-red-50 text-red-600 px-2 py-0.5 rounded font-black uppercase text-[8px]">{v.etapa}</span></td><td className="p-3 uppercase">{v.localizacao}</td></tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    )}
-                    {['pending','quoting','completed'].includes(subView)&&(
-                      <div className="grid grid-cols-1 gap-3 fade-in">
-                        {requests.filter(r=>{
-                          if(subView==='pending')return r.items?.some(it=>it.status==='Pendente');
-                          if(subView==='quoting')return r.items?.some(it=>it.status==='Em Cotação');
-                          return r.items?.every(it=>it.status==='Concluído');
-                        }).map(req=>(
-                          <div key={req.id} className={`bg-white p-4 rounded-2xl border border-neutral-200 shadow-sm flex items-center justify-between gap-4 border-l-4 touch-card ${subView==='pending'?'border-l-orange-500':subView==='quoting'?'border-l-blue-600':'border-l-black'}`}>
-                            <div className="flex flex-1 gap-4 items-center min-w-0">
-                              <div className="text-center shrink-0"><p className="text-[7px] font-black text-neutral-400 uppercase">OS</p><p className="text-base font-black">#{req.os}</p>{req.importado&&<ImportBadge/>}</div>
-                              <div className="shrink-0 hidden sm:block"><p className="text-[7px] font-black text-neutral-400 uppercase">Veículo</p><p className="text-[9px] font-black uppercase">{req.vehicleData?.modelo||'—'}</p><p className="text-[7px] font-mono text-neutral-400">{req.vehicleData?.chassi||''}</p></div>
-                              <div className="min-w-0 flex-1"><p className="text-[7px] font-black text-neutral-400 uppercase mb-1">Itens ({req.items?.length||0})</p><div className="flex gap-1.5 flex-wrap">{req.items?.map((it,i)=><span key={i} className={`text-[8px] px-2 py-0.5 rounded-full font-black uppercase ${it.status==='Concluído'?'bg-black text-white':it.status==='Em Cotação'?'bg-blue-100 text-blue-600':'bg-orange-100 text-orange-600'}`}>{it.description}</span>)}</div></div>
-                            </div>
-                            <button onClick={()=>setEditing(req)} className="bg-black text-white px-4 py-2.5 rounded-lg font-black uppercase text-[9px] border-b-4 border-red-600 shadow-lg hover:bg-neutral-900 shrink-0">Gerenciar</button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </main>
-
-      {/* ── MOBILE BOTTOM NAV ── */}
-      <div className="md:hidden bottom-nav">
-        {navItems.map(n=>(
-          <button key={n.key} onClick={()=>go(n.key)} className={`bottom-nav-btn ${view===n.key?'active':''}`}>
-            <Icon name={n.icon} size={22} className={view===n.key?'text-red-500':'text-neutral-600'}/>
-            <span>{n.label}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* Import Modal */}
-      {showImport&&isAdmin&&(
-        <div className="fixed inset-0 z-[300] bg-black/95 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-6xl h-[85vh] rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden">
-            <header className="p-6 bg-black text-white flex justify-between items-center border-b-8 border-red-600"><div><h3 className="text-2xl font-black uppercase">Importar Planilha</h3><p className="text-neutral-500 text-[10px] font-bold mt-1 uppercase">COLE OS DADOS DO EXCEL (CTRL+V)</p></div><button onClick={()=>{setShowImport(false);setImportData([]);}} className="p-3 bg-neutral-900 rounded-2xl"><Icon name="x" size={24}/></button></header>
-            <div className="flex-1 overflow-hidden flex flex-col p-6 gap-6">
-              {importData.length===0?(
-                <div className="flex-1 flex flex-col items-center justify-center border-4 border-dashed border-neutral-100 rounded-[2rem] bg-neutral-50 space-y-4 relative"><Icon name="file-spreadsheet" size={60} className="text-neutral-200"/><div className="text-center"><p className="text-sm font-black uppercase text-neutral-400">Pronto para importar</p><p className="text-[10px] font-bold uppercase text-neutral-300">Selecione no Excel e CTRL+V</p></div><textarea onPaste={handlePaste} className="absolute inset-0 opacity-0 cursor-pointer" autoFocus/></div>
-              ):(
-                <div className="flex-1 overflow-hidden flex flex-col">
-                  <div className="overflow-auto border rounded-2xl bg-neutral-50 flex-1 scrollbar-hide"><table className="w-full text-left border-collapse min-w-[1000px]"><thead className="bg-neutral-200 text-[9px] font-black uppercase sticky top-0 z-10"><tr>{['OS','Modelo','Fabricante','Cor','Chassi','Etapa','Localização'].map(h=><th key={h} className="p-3 border">{h}</th>)}</tr></thead><tbody>{importData.map((row,rIdx)=><tr key={rIdx} className="bg-white border-b hover:bg-red-50">{['os','modelo','fabricante','cor','chassi','etapa','localizacao'].map(key=><td key={key} className="border p-0"><input className="excel-input" value={row[key]} onChange={e=>{const d=[...importData];d[rIdx][key]=e.target.value;setImportData(d);}}/></td>)}</tr>)}</tbody></table></div>
-                  <div className="pt-4 flex justify-between items-center"><p className="text-[10px] font-black text-neutral-400 uppercase">{importData.length} registros</p><div className="flex gap-4"><button onClick={()=>setImportData([])} className="px-8 py-3 bg-neutral-100 text-neutral-500 rounded-xl font-black text-[10px]">LIMPAR</button><button onClick={commitImport} className="px-10 py-3 bg-red-600 text-white rounded-xl font-black text-[10px] shadow-xl">SINCRONIZAR</button></div></div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Editing Modal */}
-      {editing&&isAdmin&&(
-        <div className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white w-full max-w-6xl rounded-[2.5rem] shadow-2xl flex flex-col my-auto border-b-[12px] border-red-600">
-            <header className="px-8 py-6 bg-black text-white flex justify-between items-center shrink-0">
-              <div><div className="flex items-center gap-3"><h3 className="text-xl font-black uppercase leading-none">OS #{editing.os}</h3>{editing.importado&&<ImportBadge/>}</div><p className="text-red-500 text-[8px] font-black uppercase mt-1">{editing.vehicleData?.modelo||''}{editing.vehicleData?.chassi?' · '+editing.vehicleData.chassi:''}</p></div>
-              <button onClick={()=>setEditing(null)} className="p-3 bg-neutral-900 hover:bg-neutral-800 rounded-2xl"><Icon name="x" size={24}/></button>
-            </header>
-            <div className="p-6 overflow-y-auto max-h-[70vh] space-y-4 scrollbar-hide">
-              {editing.items?.map((it,idx)=>(
-                <div key={idx} className="bg-neutral-50 p-5 rounded-2xl border-2 border-neutral-100 grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
-                  <div className="md:col-span-3 flex items-center gap-3 min-w-0">
-                    {it.photo?<img src={it.photo} className="w-12 h-12 rounded-xl object-cover border shrink-0"/>:<div className="w-12 h-12 rounded-xl bg-neutral-200 flex items-center justify-center shrink-0"><Icon name="package" size={18} className="text-neutral-400"/></div>}
-                    <div className="min-w-0 flex-1"><p className="text-[10px] font-black uppercase leading-tight truncate">{it.description}</p><div className="flex items-center gap-2 mt-1"><span className="text-[8px] text-neutral-400 font-bold">QTD:{it.quantity}</span><StatusBadge status={it.status||'Pendente'} orig={it.statusOriginal}/></div>{it.obs&&<p className="text-[7px] text-neutral-400 italic mt-1 truncate">{it.obs}</p>}</div>
-                  </div>
-                  <div className="md:col-span-9 grid grid-cols-2 lg:grid-cols-4 gap-3">
-                    <div><label className="text-[7px] font-black uppercase text-neutral-500 ml-1 block mb-1">Valor Total</label><input type="number" step="0.01" value={it.price||''} onChange={e=>updateItem(editing.id,idx,{price:e.target.value})} className="w-full bg-white border rounded-lg p-2 text-[9px] font-black outline-none focus:border-red-600" placeholder="0.00" disabled={it.status==='Concluído'}/></div>
-                    <div><label className="text-[7px] font-black uppercase text-neutral-500 ml-1 block mb-1">Fornecedor</label><input type="text" value={it.supplier||''} onChange={e=>updateItem(editing.id,idx,{supplier:e.target.value})} className="w-full bg-white border rounded-lg p-2 text-[9px] font-black uppercase outline-none focus:border-red-600" placeholder="LOJA" disabled={it.status==='Concluído'}/></div>
-                    <div><label className="text-[7px] font-black uppercase text-neutral-500 ml-1 block mb-1">Prazo</label><input type="date" value={it.deliveryDate||''} onChange={e=>updateItem(editing.id,idx,{deliveryDate:e.target.value})} className="w-full bg-white border rounded-lg p-2 text-[9px] font-black outline-none focus:border-red-600" disabled={it.status==='Concluído'}/></div>
-                    <div><label className="text-[7px] font-black uppercase text-red-500 ml-1 block mb-1">Entrega Real</label><input type="date" value={it.actualDeliveryDate||''} onChange={e=>updateItem(editing.id,idx,{actualDeliveryDate:e.target.value})} className="w-full bg-red-50 border-2 border-red-100 rounded-lg p-2 text-[9px] font-black outline-none focus:border-red-600" disabled={it.status==='Pendente'}/></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="p-6 bg-neutral-50 flex justify-between items-center shrink-0"><p className="text-[8px] text-neutral-400 font-bold uppercase italic">* Valor + Loja + Prazo → Em Cotação · Data Real → Concluído</p><button onClick={()=>setEditing(null)} className="px-10 py-3 bg-red-600 text-white rounded-xl font-black uppercase text-xs shadow-xl hover:bg-red-700">Fechar e Sincronizar</button></div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+    if(!ref.current)return;
+    const ctx=ref.current.getContext('2d');
+    const total=slices.reduce((a,s)=>a+s.v,0);
+    ctx.clearRect(0,0,size,size);
+    const cx=size/2,cy=size/2,r=size/2-6;
+    if(!total){ ctx.beginPath();ctx.arc(cx,cy,r,0,2*Math.PI);ctx.fillStyle='#f1f5f9';ctx.fill(); }
+    else {
+      let start=-Math.PI/2;
+      slices.forEach(s=>{
+        const ang=(s.v/total)*2*Math.PI;
+        ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,start,start+ang);ctx.closePath();
+        ctx.fillStyle=s.c;ctx.fill();start+=ang;
+      });
+    }
+    ctx.beginPath();ctx.arc(cx,cy,r*.58,0,2*Math.PI);ctx.fillStyle='#fff';ctx.fill();
+  },[slices,size]);
+  return <canvas ref={ref} width={size} height={size} role="img" aria-label="Gráfico de distribuição"/>;
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
-</script>
-</body>
-</html>
+// ── Mini Bar ───────────────────────────────────────────────────────────────
+function MiniBar({data,color='#ef4444'}){
+  const ref=useRef(null);
+  useEffect(()=>{
+    if(!ref.current||!data?.length)return;
+    const ctx=ref.current.getContext('2d');
+    const w=ref.current.width,h=ref.current.height;
+    ctx.clearRect(0,0,w,h);
+    const max=Math.max(...data.map(d=>d.v),1);
+    const bw=w/data.length;
+    data.forEach((d,i)=>{
+      const bh=(d.v/max)*(h-22);
+      ctx.fillStyle=i===data.length-1?color:color+'99';
+      ctx.beginPath();
+      if(ctx.roundRect)ctx.roundRect(i*bw+2,h-bh-20,bw-4,bh,3);
+      else ctx.rect(i*bw+2,h-bh-20,bw-4,bh);
+      ctx.fill();
+      ctx.fillStyle='#94a3b8';ctx.font='bold 8px Inter';ctx.textAlign='center';
+      ctx.fillText(d.l,i*bw+bw/2,h-4);
+      if(d.v>0){ctx.fillStyle='#475569';ctx.font='bold 9px Inter';ctx.fillText(d.v,i*bw+bw/2,h-bh-24);}
+    });
+  },[data,color]);
+  return <canvas ref={ref} width={280} height={110} className="w-full" role="img" aria-label="Gráfico de barras"/>;
+}
+
+// ── Sistema de Doador ──────────────────────────────────────────────────────
+function DonorSystem({requests, vehicles, onDonate}){
+  const [selectedSourceOS, setSelectedSourceOS] = useState('');
+  const [selectedTargetOS, setSelectedTargetOS] = useState('');
+  const [selectedItems, setSelectedItems] = useState([]);
+  const [step, setStep] = useState(1);
+  
+  const sourceRequest = requests.find(r => String(r.os) === selectedSourceOS);
+  const targetRequest = requests.find(r => String(r.os) === selectedTargetOS);
+  
+  const availableSourceItems = useMemo(() => {
+    if (!sourceRequest) return [];
+    return sourceRequest.items?.filter(it => it.status === 'Concluído' || it.status === 'Pendente') || [];
+  }, [sourceRequest]);
+  
+  const handleDonate = async () => {
+    if (!sourceRequest || !targetRequest || selectedItems.length === 0) {
+      alert('Selecione OS de origem, destino e pelo menos uma peça');
+      return;
+    }
+    
+    const confirm = window.confirm(
+      `Confirmar doação de ${selectedItems.length} peça(s) da OS ${selectedSourceOS} para OS ${selectedTargetOS}?\n\n` +
+      `As peças serão marcadas como "Doado" na OS ${selectedSourceOS} e novos pedidos serão criados na OS ${selectedTargetOS}.`
+    );
+    
+    if (!confirm) return;
+    
+    try {
+      const batch = db.batch();
+      
+      // 1. Marcar itens como doados na OS origem
+      const sourceItems = [...sourceRequest.items];
+      selectedItems.forEach(itemId => {
+        const idx = sourceItems.findIndex(it => it.id === itemId);
+        if (idx !== -1) {
+          sourceItems[idx] = {
+            ...sourceItems[idx],
+            status: 'Doado',
+            statusOriginal: 'Doado',
+            donatedTo: selectedTargetOS,
+            donatedAt: Date.now()
+          };
+        }
+      });
+      
+      batch.update(col('requests').doc(sourceRequest.id), { items: sourceItems });
+      
+      // 2. Criar novos pedidos na OS destino
+      const itemsToAdd = selectedItems.map(itemId => {
+        const originalItem = sourceRequest.items.find(it => it.id === itemId);
+        return {
+          ...originalItem,
+          id: Date.now() + Math.random(),
+          status: 'Pendente',
+          statusOriginal: undefined,
+          donatedFrom: selectedSourceOS,
+          photo: originalItem.photo,
+          price: undefined,
+          supplier: undefined,
+          deliveryDate: undefined,
+          actualDeliveryDate: undefined
+        };
+      });
+      
+      const targetItems = [...(targetRequest.items || []), ...itemsToAdd];
+      batch.update(col('requests').doc(targetRequest.id), { items: targetItems });
+      
+      // 3. Registrar log da doação
+      await col('donations').add({
+        sourceOS: selectedSourceOS,
+        targetOS: selectedTargetOS,
+        items: selectedItems,
+        donatedBy: loggedInUser?.user || 'Sistema',
+        timestamp: Date.now()
+      });
+      
+      await batch.commit();
+      
+      alert('Doação realizada com sucesso!');
+      onDonate?.();
+      setSelectedSourceOS('');
+      setSelectedTargetOS('');
+      setSelectedItems([]);
+      setStep(1);
+    } catch (error) {
+      console.error('Erro na doação:', error);
+      alert('Erro ao processar doação. Tente novamente.');
+    }
+  };
+  
+  const toggleItemSelection = (itemId) => {
+    setSelectedItems(prev => 
+      prev.includes(itemId) 
+        ? prev.filter(id => id !== itemId)
+        : [...prev, itemId]
+    );
+  };
+  
+  return (
+    <div className="bg-white rounded-2xl border border-neutral-200 shadow-sm overflow-hidden fade-in">
+      <div className="p-5 bg-gradient-to-r from-purple-600 to-purple-800 text-white">
+        <div className="flex items-center gap-3">
+          <div className="p-3 bg-white/20 rounded-xl">
+            <Icon name="git-merge" size={24}/>
+          </div>
+          <div>
+            <h3 className="text-xl font-black uppercase">Sistema de Doação de Peças</h3>
+            <p className="text-[9px] font-bold opacity-80">Transfira peças entre veículos para agilizar reparos</p>
+          </div>
+        </div>
+      </div>
+      
+      <div className="p-6">
+        {/* Step indicator */}
+        <div className
