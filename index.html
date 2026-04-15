@@ -46,7 +46,7 @@ body {
   font-family: 'JetBrains Mono', monospace;
 }
 
-/* Animações Suaves */
+/* Animações */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
@@ -248,7 +248,7 @@ body {
   box-shadow: inset 0 0 0 2px #ef4444;
 }
 
-/* Badge de Sugestão */
+/* Suggestion Badge */
 .suggestion-badge {
   background: linear-gradient(135deg, #8b5cf6, #7c3aed);
   color: white;
@@ -261,7 +261,7 @@ body {
   box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
 }
 
-/* Melhorias de Acessibilidade */
+/* Acessibilidade */
 button:focus-visible,
 input:focus-visible,
 select:focus-visible {
@@ -270,7 +270,7 @@ select:focus-visible {
   border-radius: 4px;
 }
 
-/* Gradientes Modernos */
+/* Gradientes */
 .gradient-primary {
   background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
 }
@@ -321,7 +321,7 @@ select:focus-visible {
   opacity: 0.3;
 }
 
-/* Status Badges Modernos */
+/* Status Badges */
 .status-badge {
   padding: 4px 10px;
   border-radius: 20px;
@@ -358,9 +358,19 @@ select:focus-visible {
   color: #5b21b6;
   border: 1px solid #a78bfa;
 }
+
+/* Shake Animation */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
+.shake {
+  animation: shake 0.2s ease-in-out 0s 2;
+}
 </style>
 
-<!-- Bibliotecas -->
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -375,29 +385,16 @@ select:focus-visible {
 <div id="root"></div>
 <script type="text/babel" data-presets="react">
 // ============================================================================
-// CONFIGURAÇÃO E UTILITÁRIOS
+// CONFIGURAÇÃO DO FIREBASE
 // ============================================================================
-
-const FB = (() => {
-  if (typeof process !== 'undefined' && process.env) {
-    return {
-      apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
-      authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
-      projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
-      storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
-      messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
-      appId: process.env.REACT_APP_FIREBASE_APP_ID
-    };
-  }
-  return { 
-    apiKey:"AIzaSyBT1N43mp6hoxXOj6bmTlqouQWSmfn32-E",
-    authDomain:"portal-compras-vrz.firebaseapp.com",
-    projectId:"portal-compras-vrz",
-    storageBucket:"portal-compras-vrz.firebasestorage.app",
-    messagingSenderId:"713014398002",
-    appId:"1:713014398002:web:d89f485af020178b00002b"
-  };
-})();
+const FB = { 
+  apiKey:"AIzaSyBT1N43mp6hoxXOj6bmTlqouQWSmfn32-E",
+  authDomain:"portal-compras-vrz.firebaseapp.com",
+  projectId:"portal-compras-vrz",
+  storageBucket:"portal-compras-vrz.firebasestorage.app",
+  messagingSenderId:"713014398002",
+  appId:"1:713014398002:web:d89f485af020178b00002b"
+};
 
 if (!firebase.apps.length) firebase.initializeApp(FB);
 const db = firebase.firestore();
@@ -408,10 +405,22 @@ const { useState, useEffect, useMemo, useRef, useCallback } = React;
 
 const UNIDADES = ['Unidade 1', 'Unidade 2', 'Unidade 3'];
 
-// ============================================================================
-// HOOKS PERSONALIZADOS
-// ============================================================================
+const INIT_USERS = [
+  { user:"Lucas.Sabino",     pass:"29623298",    active:true, role:"admin" },
+  { user:"Eduardo.Rocha",    pass:"Helito@1313", active:true, role:"solicitante" },
+  { user:"Gabriela.Bueno",   pass:"Dani123",     active:true, role:"solicitante" },
+  { user:"Josmar.Valentini", pass:"Josa123",     active:true, role:"solicitante" },
+  { user:"Luciano.Souza",    pass:"Luciano123",  active:true, role:"solicitante" },
+  { user:"Daniel.Svanci",    pass:"Dani123",     active:true, role:"solicitante" },
+];
 
+const RL = { admin:"Admin", solicitante:"Solicitante", leitor:"Leitor" };
+const RC = { admin:"bg-red-600 text-white", solicitante:"bg-blue-600 text-white", leitor:"bg-neutral-500 text-white" };
+const RBC = { admin:"bg-red-50 text-red-600 border border-red-200", solicitante:"bg-blue-50 text-blue-600 border border-blue-200", leitor:"bg-neutral-100 text-neutral-500 border border-neutral-200" };
+
+// ============================================================================
+// HOOK PERSONALIZADO
+// ============================================================================
 const useFirestore = (collectionName) => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -439,80 +448,61 @@ const useFirestore = (collectionName) => {
 // ============================================================================
 // FUNÇÕES UTILITÁRIAS
 // ============================================================================
-
-function fmtBRL(v) { 
-  return v > 0 ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '—'; 
-}
-
-function fmtBytes(b) { 
-  return b >= 1073741824 ? (b / 1073741824).toFixed(2) + 'GB' : 
-         b >= 1048576 ? (b / 1048576).toFixed(1) + 'MB' : 
-         (b / 1024).toFixed(0) + 'KB'; 
-}
-
-function estimarBytes(reqs) { 
-  return reqs.reduce((a, r) => a + (r.items?.some(i => i.photo) ? 800000 : 30000), 0); 
-}
-
-const sanitizeInput = (input) => {
-  if (typeof input !== 'string') return input;
-  return DOMPurify.sanitize(input);
-};
-
-const hashPassword = async (password) => {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(password);
-  const hash = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
-};
+function fmtBRL(v) { return v>0?'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2}):'—'; }
+function fmtBytes(b) { return b>=1073741824?(b/1073741824).toFixed(2)+'GB':b>=1048576?(b/1048576).toFixed(1)+'MB':(b/1024).toFixed(0)+'KB'; }
+function estimarBytes(reqs) { return reqs.reduce((a,r)=>a+(r.items?.some(i=>i.photo)?800000:30000),0); }
+const sanitizeInput = (input) => typeof input !== 'string' ? input : DOMPurify.sanitize(input);
 
 // ============================================================================
 // COMPONENTE DE ÍCONE
 // ============================================================================
-
-function Icon({ name, size = 18, className = '' }) {
-  const ref = useRef(null);
-  
-  useEffect(() => {
-    if (ref.current && window.lucide) {
-      const d = window.lucide.icons[name];
-      if (d) {
-        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        const [, at, ch] = d;
-        Object.entries({
-          ...at,
-          width: size,
-          height: size,
-          class: `lucide-${name} ${className}`,
-          viewBox: '0 0 24 24',
-          fill: 'none',
-          stroke: 'currentColor',
-          'stroke-width': 2,
-          'stroke-linecap': 'round',
-          'stroke-linejoin': 'round'
-        }).forEach(([k, v]) => svg.setAttribute(k, v));
-        ch.forEach(([t, a]) => {
-          const el = document.createElementNS('http://www.w3.org/2000/svg', t);
-          Object.entries(a).forEach(([k, v]) => el.setAttribute(k, v));
-          svg.appendChild(el);
-        });
-        ref.current.innerHTML = '';
-        ref.current.appendChild(svg);
+function Icon({name,size=18,className=''}){
+  const ref=useRef(null);
+  useEffect(()=>{
+    if(ref.current&&window.lucide){
+      const d=window.lucide.icons[name];
+      if(d){
+        const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+        const[,at,ch]=d;
+        Object.entries({...at,width:size,height:size,class:`lucide-${name} ${className}`,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':2,'stroke-linecap':'round','stroke-linejoin':'round'}).forEach(([k,v])=>svg.setAttribute(k,v));
+        ch.forEach(([t,a])=>{ const el=document.createElementNS('http://www.w3.org/2000/svg',t); Object.entries(a).forEach(([k,v])=>el.setAttribute(k,v)); svg.appendChild(el); });
+        ref.current.innerHTML=''; ref.current.appendChild(svg);
       }
     }
-  }, [name, size, className]);
-  
-  return <span ref={ref} className="inline-flex shrink-0 items-center justify-center" role="img" aria-label={name} />;
+  },[name,size,className]);
+  return <span ref={ref} className="inline-flex shrink-0 items-center justify-center" role="img" aria-label={name}/>;
 }
 
 // ============================================================================
 // COMPONENTES DE UI
 // ============================================================================
+const RoleBadge=({role})=>{ const r=role||'solicitante'; return <span className={`px-2 py-0.5 rounded-full text-[7px] font-black uppercase ${RBC[r]||RBC.solicitante}`}>{RL[r]||r}</span>; };
+const ImportBadge=()=><span className="px-1.5 py-0.5 rounded text-[7px] font-black uppercase bg-amber-100 text-amber-700 border border-amber-200">Planilha</span>;
+
+const StatusBadge=({status,orig})=>{
+  const config = {
+    'Pendente': 'status-pending',
+    'Em Cotação': 'status-quoting',
+    'Concluído': 'status-completed',
+    'Doado': 'status-donated'
+  };
+  const icons = {
+    'Pendente': 'clock',
+    'Em Cotação': 'trending-up',
+    'Concluído': 'check-circle',
+    'Doado': 'git-merge'
+  };
+  return (
+    <span className={`status-badge ${config[status]||'bg-slate-100 text-slate-600'}`}>
+      <Icon name={icons[status]||'circle'} size={10} />
+      {orig||status}
+    </span>
+  );
+};
 
 const NetworkStatus = () => {
   const [online, setOnline] = useState(navigator.onLine);
-  
-  useEffect(() => {
+  useEffect(()=>{
     const handleChange = () => setOnline(navigator.onLine);
     window.addEventListener('online', handleChange);
     window.addEventListener('offline', handleChange);
@@ -520,10 +510,8 @@ const NetworkStatus = () => {
       window.removeEventListener('online', handleChange);
       window.removeEventListener('offline', handleChange);
     };
-  }, []);
-  
+  },[]);
   if (online) return null;
-  
   return (
     <div className="fixed top-0 left-0 right-0 bg-gradient-to-r from-amber-500 to-orange-500 text-white text-center py-2 text-xs font-bold z-[1000] shadow-lg" role="alert">
       <div className="flex items-center justify-center gap-2">
@@ -534,45 +522,61 @@ const NetworkStatus = () => {
   );
 };
 
-const SkeletonLoader = ({ type = 'card' }) => {
-  if (type === 'card') {
-    return (
-      <div className="skeleton rounded-2xl p-5 space-y-3">
-        <div className="h-4 w-3/4 rounded-lg bg-slate-200"></div>
-        <div className="h-20 rounded-lg bg-slate-200"></div>
-      </div>
-    );
-  }
-  return <div className="skeleton h-12 w-full rounded-xl bg-slate-200"></div>;
-};
+const NavBtn=({icon,label,active,onClick})=>(
+  <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all ${active?'bg-red-600 text-white shadow-lg':'hover:bg-white/5 text-neutral-400 hover:text-white'}`} aria-label={label}>
+    <Icon name={icon} size={16} className={active?'text-white':'text-red-500'}/>
+    <span className="text-[10px] font-black uppercase tracking-wider">{label}</span>
+  </button>
+);
 
-const StatusBadge = ({ status, orig }) => {
-  const config = {
-    'Pendente': 'status-pending',
-    'Em Cotação': 'status-quoting',
-    'Concluído': 'status-completed',
-    'Doado': 'status-donated'
-  };
+// ============================================================================
+// TELA DE LOGIN
+// ============================================================================
+function LoginView({onLogin, usersList}){
+  const [u,setU]=useState('');
+  const [p,setP]=useState('');
+  const [showP,setShowP]=useState(false);
+  const [err,setErr]=useState('');
   
-  const icons = {
-    'Pendente': 'clock',
-    'Em Cotação': 'trending-up',
-    'Concluído': 'check-circle',
-    'Doado': 'git-merge'
+  const submit=e=>{
+    e.preventDefault();
+    const found=usersList.find(x=>x.user.toLowerCase()===u.trim().toLowerCase()&&x.pass===p.trim());
+    if(found){
+      found.active===false?setErr('Conta desativada. Contate o Admin.'):onLogin(found);
+    } else setErr('Usuário ou senha incorretos.');
   };
   
   return (
-    <span className={`status-badge ${config[status] || 'bg-slate-100 text-slate-600'}`}>
-      <Icon name={icons[status] || 'circle'} size={10} />
-      {orig || status}
-    </span>
+    <div className="h-screen w-full flex items-center justify-center login-bg p-4 fade-in">
+      <div className="bg-white w-full max-w-sm rounded-[2.5rem] shadow-2xl overflow-hidden border-b-[10px] border-red-600">
+        <div className="bg-black p-8 text-center text-white">
+          <div className="p-3 bg-red-600 rounded-2xl shadow-lg shadow-red-600/30 w-fit mx-auto mb-4">
+            <Icon name="shopping-cart" size={32}/>
+          </div>
+          <h1 className="font-display text-4xl font-black uppercase tracking-[0.15em] leading-none">VRZ COMPRAS</h1>
+          <p className="text-[9px] font-bold text-neutral-500 uppercase tracking-widest italic mt-2">Acesso Restrito ao Sistema</p>
+        </div>
+        <form onSubmit={submit} className="p-8 space-y-6">
+          {err&&<div className={`bg-red-50 border border-red-100 p-3 rounded-xl flex items-center gap-2 text-red-600 ${err?'shake':''}`}><Icon name="alert-circle" size={14}/><span className="text-[10px] font-black uppercase">{err}</span></div>}
+          <div className="space-y-4">
+            <div><label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1">Usuário</label><div className="relative"><div className="absolute left-4 top-3.5 text-neutral-300"><Icon name="user" size={16}/></div><input type="text" value={u} onChange={e=>setU(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-neutral-50 border-2 border-neutral-100 rounded-2xl focus:border-red-600 outline-none font-bold text-sm" placeholder="USUÁRIO" required/></div></div>
+            <div><label className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1">Senha</label>
+              <div className="relative"><div className="absolute left-4 top-3.5 text-neutral-300"><Icon name="lock" size={16}/></div>
+                <input type={showP?"text":"password"} value={p} onChange={e=>setP(e.target.value)} className="w-full pl-11 pr-12 py-3 bg-neutral-50 border-2 border-neutral-100 rounded-2xl focus:border-red-600 outline-none font-bold text-sm tracking-widest" placeholder="••••••••" required/>
+                <button type="button" onClick={()=>setShowP(!showP)} className="absolute right-4 top-3 text-neutral-400 hover:text-red-600">{showP?'👁':'👁‍🗨'}</button>
+              </div>
+            </div>
+          </div>
+          <button type="submit" className="w-full py-4 bg-red-600 text-white rounded-2xl font-black uppercase text-xs shadow-xl hover:bg-red-700 active:scale-95 transition-all tracking-[0.2em]">Entrar no Portal</button>
+        </form>
+      </div>
+    </div>
   );
-};
+}
 
 // ============================================================================
 // SISTEMA DE DOAÇÃO INTELIGENTE
 // ============================================================================
-
 function DonorSystem({ requests, vehicles, onDonate, loggedInUser }) {
   const [step, setStep] = useState(1);
   const [targetOS, setTargetOS] = useState('');
@@ -580,37 +584,17 @@ function DonorSystem({ requests, vehicles, onDonate, loggedInUser }) {
   const [selectedItems, setSelectedItems] = useState([]);
   const [searchDonor, setSearchDonor] = useState('');
   
-  // Encontrar o veículo alvo
-  const targetRequest = useMemo(() => {
-    return requests.find(r => String(r.os) === targetOS);
-  }, [requests, targetOS]);
+  const targetRequest = useMemo(() => requests.find(r => String(r.os) === targetOS), [requests, targetOS]);
+  const targetVehicle = useMemo(() => vehicles.find(v => String(v.os) === targetOS), [vehicles, targetOS]);
   
-  const targetVehicle = useMemo(() => {
-    return vehicles.find(v => String(v.os) === targetOS);
-  }, [vehicles, targetOS]);
-  
-  // Sugestões de doadores do mesmo modelo
   const donorSuggestions = useMemo(() => {
     if (!targetVehicle?.modelo) return [];
-    
-    const sameModel = vehicles.filter(v => 
-      v.modelo === targetVehicle.modelo && 
-      String(v.os) !== targetOS
-    );
-    
-    // Encontrar requests desses veículos que têm peças disponíveis
+    const sameModel = vehicles.filter(v => v.modelo === targetVehicle.modelo && String(v.os) !== targetOS);
     const suggestions = [];
     sameModel.forEach(vehicle => {
-      const vehicleRequests = requests.filter(r => 
-        String(r.os) === String(vehicle.os) &&
-        r.items?.some(it => it.status === 'Concluído' || it.status === 'Pendente')
-      );
-      
+      const vehicleRequests = requests.filter(r => String(r.os) === String(vehicle.os) && r.items?.some(it => it.status === 'Concluído' || it.status === 'Pendente'));
       vehicleRequests.forEach(req => {
-        const availableItems = req.items?.filter(it => 
-          it.status === 'Concluído' || it.status === 'Pendente'
-        ) || [];
-        
+        const availableItems = req.items?.filter(it => it.status === 'Concluído' || it.status === 'Pendente') || [];
         if (availableItems.length > 0) {
           suggestions.push({
             os: vehicle.os,
@@ -624,31 +608,16 @@ function DonorSystem({ requests, vehicles, onDonate, loggedInUser }) {
         }
       });
     });
-    
     return suggestions.sort((a, b) => b.availableItems - a.availableItems);
   }, [targetVehicle, vehicles, requests, targetOS]);
   
-  // Items disponíveis do doador selecionado
-  const sourceRequest = useMemo(() => {
-    if (!selectedSourceOS) return null;
-    return requests.find(r => String(r.os) === selectedSourceOS);
-  }, [requests, selectedSourceOS]);
+  const sourceRequest = useMemo(() => selectedSourceOS ? requests.find(r => String(r.os) === selectedSourceOS) : null, [requests, selectedSourceOS]);
+  const availableSourceItems = useMemo(() => sourceRequest ? sourceRequest.items?.filter(it => it.status === 'Concluído' || it.status === 'Pendente') || [] : [], [sourceRequest]);
   
-  const availableSourceItems = useMemo(() => {
-    if (!sourceRequest) return [];
-    return sourceRequest.items?.filter(it => 
-      it.status === 'Concluído' || it.status === 'Pendente'
-    ) || [];
-  }, [sourceRequest]);
-  
-  // Filtrar sugestões por busca
   const filteredSuggestions = useMemo(() => {
     if (!searchDonor) return donorSuggestions;
     const search = searchDonor.toLowerCase();
-    return donorSuggestions.filter(s => 
-      String(s.os).toLowerCase().includes(search) ||
-      s.modelo?.toLowerCase().includes(search)
-    );
+    return donorSuggestions.filter(s => String(s.os).toLowerCase().includes(search) || s.modelo?.toLowerCase().includes(search));
   }, [donorSuggestions, searchDonor]);
   
   const handleDonate = async () => {
@@ -656,73 +625,27 @@ function DonorSystem({ requests, vehicles, onDonate, loggedInUser }) {
       alert('Selecione OS doadora, OS receptora e pelo menos uma peça');
       return;
     }
-    
-    const confirm = window.confirm(
-      `✅ Confirmar doação de ${selectedItems.length} peça(s)\n\n` +
-      `🚗 Doador: OS ${selectedSourceOS} (${sourceRequest.vehicleData?.modelo})\n` +
-      `🎯 Receptor: OS ${targetOS} (${targetRequest.vehicleData?.modelo})\n\n` +
-      `As peças serão transferidas automaticamente.`
-    );
-    
+    const confirm = window.confirm(`✅ Confirmar doação de ${selectedItems.length} peça(s)\n\n🚗 Doador: OS ${selectedSourceOS}\n🎯 Receptor: OS ${targetOS}`);
     if (!confirm) return;
-    
     try {
       const batch = db.batch();
-      
-      // Marcar itens como doados na OS origem
       const sourceItems = [...sourceRequest.items];
-      const donatedItems = [];
-      
       selectedItems.forEach(itemId => {
         const idx = sourceItems.findIndex(it => it.id === itemId);
         if (idx !== -1) {
-          const donatedItem = {
-            ...sourceItems[idx],
-            status: 'Doado',
-            statusOriginal: 'Doado',
-            donatedTo: targetOS,
-            donatedAt: Date.now()
-          };
-          sourceItems[idx] = donatedItem;
-          donatedItems.push(donatedItem);
+          sourceItems[idx] = { ...sourceItems[idx], status: 'Doado', statusOriginal: 'Doado', donatedTo: targetOS, donatedAt: Date.now() };
         }
       });
-      
       batch.update(col('requests').doc(sourceRequest.id), { items: sourceItems });
-      
-      // Criar novos pedidos na OS destino
       const itemsToAdd = selectedItems.map(itemId => {
         const originalItem = sourceRequest.items.find(it => it.id === itemId);
-        return {
-          ...originalItem,
-          id: Date.now() + Math.random(),
-          status: 'Pendente',
-          statusOriginal: undefined,
-          donatedFrom: selectedSourceOS,
-          photo: originalItem.photo,
-          price: undefined,
-          supplier: undefined,
-          deliveryDate: undefined,
-          actualDeliveryDate: undefined
-        };
+        return { ...originalItem, id: Date.now() + Math.random(), status: 'Pendente', statusOriginal: undefined, donatedFrom: selectedSourceOS, photo: originalItem.photo, price: undefined, supplier: undefined, deliveryDate: undefined, actualDeliveryDate: undefined };
       });
-      
       const targetItems = [...(targetRequest.items || []), ...itemsToAdd];
       batch.update(col('requests').doc(targetRequest.id), { items: targetItems });
-      
-      // Registrar log da doação
-      await col('donations').add({
-        sourceOS: selectedSourceOS,
-        targetOS: targetOS,
-        items: selectedItems.length,
-        donatedBy: loggedInUser?.user || 'Sistema',
-        timestamp: Date.now(),
-        vehicleModel: sourceRequest.vehicleData?.modelo
-      });
-      
+      await col('donations').add({ sourceOS: selectedSourceOS, targetOS: targetOS, items: selectedItems.length, donatedBy: loggedInUser?.user || 'Sistema', timestamp: Date.now() });
       await batch.commit();
-      
-      alert(`✨ Doação realizada com sucesso!\n${selectedItems.length} peça(s) transferida(s) da OS ${selectedSourceOS} para OS ${targetOS}`);
+      alert(`✨ Doação realizada com sucesso!`);
       onDonate?.();
       setTargetOS('');
       setSelectedSourceOS('');
@@ -731,21 +654,16 @@ function DonorSystem({ requests, vehicles, onDonate, loggedInUser }) {
       setSearchDonor('');
     } catch (error) {
       console.error('Erro na doação:', error);
-      alert('❌ Erro ao processar doação. Tente novamente.');
+      alert('❌ Erro ao processar doação.');
     }
   };
   
   const toggleItemSelection = (itemId) => {
-    setSelectedItems(prev => 
-      prev.includes(itemId) 
-        ? prev.filter(id => id !== itemId)
-        : [...prev, itemId]
-    );
+    setSelectedItems(prev => prev.includes(itemId) ? prev.filter(id => id !== itemId) : [...prev, itemId]);
   };
   
   return (
     <div className="space-y-5 fade-in pb-10">
-      {/* Header */}
       <div className="glass-card rounded-3xl p-6 border-0">
         <div className="flex items-center gap-4">
           <div className="w-14 h-14 gradient-purple rounded-2xl flex items-center justify-center shadow-lg">
@@ -758,288 +676,131 @@ function DonorSystem({ requests, vehicles, onDonate, loggedInUser }) {
         </div>
       </div>
       
-      {/* Step Indicator */}
       <div className="flex items-center justify-center gap-2 py-4">
-        {[
-          { num: 1, label: 'OS Receptora' },
-          { num: 2, label: 'Sugestões de Doadores' },
-          { num: 3, label: 'Confirmar Doação' }
-        ].map((s, i) => (
+        {[{ num: 1, label: 'OS Receptora' }, { num: 2, label: 'Sugestões de Doadores' }, { num: 3, label: 'Confirmar Doação' }].map((s, i) => (
           <React.Fragment key={s.num}>
             <div className="flex items-center gap-2">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm transition-all duration-300 ${
-                step >= s.num 
-                  ? 'gradient-purple text-white shadow-lg' 
-                  : 'bg-slate-100 text-slate-400'
-              }`}>
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm transition-all duration-300 ${step >= s.num ? 'gradient-purple text-white shadow-lg' : 'bg-slate-100 text-slate-400'}`}>
                 {step > s.num ? <Icon name="check" size={16} /> : s.num}
               </div>
-              <span className={`text-xs font-bold uppercase hidden sm:block ${
-                step >= s.num ? 'text-purple-600' : 'text-slate-400'
-              }`}>
-                {s.label}
-              </span>
+              <span className={`text-xs font-bold uppercase hidden sm:block ${step >= s.num ? 'text-purple-600' : 'text-slate-400'}`}>{s.label}</span>
             </div>
-            {i < 2 && (
-              <div className={`w-12 h-0.5 rounded-full transition-all duration-300 ${
-                step > s.num ? 'bg-purple-600' : 'bg-slate-200'
-              }`} />
-            )}
+            {i < 2 && <div className={`w-12 h-0.5 rounded-full transition-all duration-300 ${step > s.num ? 'bg-purple-600' : 'bg-slate-200'}`} />}
           </React.Fragment>
         ))}
       </div>
       
-      {/* Step 1: Selecionar OS Receptora */}
       {step === 1 && (
         <div className="glass-card rounded-3xl p-6 space-y-4 scale-in">
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
-              <Icon name="search" size={18} className="text-purple-600" />
-            </div>
-            <div>
-              <h3 className="font-black text-slate-800">Passo 1: OS que precisa de peças</h3>
-              <p className="text-xs text-slate-500">Digite o número da OS que receberá as peças doadas</p>
-            </div>
+            <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center"><Icon name="search" size={18} className="text-purple-600" /></div>
+            <div><h3 className="font-black text-slate-800">Passo 1: OS que precisa de peças</h3><p className="text-xs text-slate-500">Digite o número da OS que receberá as peças doadas</p></div>
           </div>
-          
           <div>
             <label className="text-xs font-black uppercase text-slate-500 mb-2 block">Número da OS Receptora</label>
-            <input
-              type="text"
-              inputMode="numeric"
-              value={targetOS}
-              onChange={e => setTargetOS(e.target.value)}
-              placeholder="Ex: 9193"
-              className="w-full px-5 py-4 bg-white border-2 border-slate-200 rounded-2xl font-black text-2xl tracking-wide focus:border-purple-500 outline-none transition-all"
-            />
+            <input type="text" inputMode="numeric" value={targetOS} onChange={e=>setTargetOS(e.target.value)} placeholder="Ex: 9193" className="w-full px-5 py-4 bg-white border-2 border-slate-200 rounded-2xl font-black text-2xl tracking-wide focus:border-purple-500 outline-none transition-all" />
           </div>
-          
           {targetRequest && targetVehicle && (
             <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-2xl p-5 border border-purple-200">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-3">
                   <Icon name="car" size={24} className="text-purple-600" />
-                  <div>
-                    <p className="font-black text-purple-800 text-lg">OS #{targetOS}</p>
-                    <p className="text-sm font-bold text-purple-600">{targetVehicle.modelo} • {targetVehicle.cor}</p>
-                  </div>
+                  <div><p className="font-black text-purple-800 text-lg">OS #{targetOS}</p><p className="text-sm font-bold text-purple-600">{targetVehicle.modelo} • {targetVehicle.cor}</p></div>
                 </div>
-                <span className="px-3 py-1 bg-purple-200 text-purple-700 rounded-full text-xs font-black">
-                  {targetVehicle.localizacao}
-                </span>
+                <span className="px-3 py-1 bg-purple-200 text-purple-700 rounded-full text-xs font-black">{targetVehicle.localizacao}</span>
               </div>
-              <p className="text-xs text-purple-700 font-medium">
-                Chassi: <span className="font-mono font-bold">{targetVehicle.chassi}</span>
-              </p>
+              <p className="text-xs text-purple-700 font-medium">Chassi: <span className="font-mono font-bold">{targetVehicle.chassi}</span></p>
             </div>
           )}
-          
           <div className="flex gap-3 pt-4">
-            <button
-              onClick={() => setStep(2)}
-              disabled={!targetOS || !targetRequest}
-              className={`flex-1 py-4 rounded-2xl font-black uppercase text-sm transition-all ${
-                targetOS && targetRequest
-                  ? 'gradient-purple text-white shadow-lg hover:shadow-xl hover-lift'
-                  : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-              }`}
-            >
-              <span className="flex items-center justify-center gap-2">
-                Próximo <Icon name="arrow-right" size={16} />
-              </span>
+            <button onClick={()=>setStep(2)} disabled={!targetOS||!targetRequest} className={`flex-1 py-4 rounded-2xl font-black uppercase text-sm transition-all ${targetOS&&targetRequest?'gradient-purple text-white shadow-lg hover:shadow-xl hover-lift':'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>
+              <span className="flex items-center justify-center gap-2">Próximo <Icon name="arrow-right" size={16}/></span>
             </button>
           </div>
         </div>
       )}
       
-      {/* Step 2: Sugestões de Doadores */}
       {step === 2 && (
         <div className="glass-card rounded-3xl p-6 space-y-4 slide-in">
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center">
-              <Icon name="sparkles" size={18} className="text-green-600" />
-            </div>
-            <div>
-              <h3 className="font-black text-slate-800">Passo 2: Sugestões de Doadores</h3>
-              <p className="text-xs text-slate-500">
-                Veículos do mesmo modelo ({targetVehicle?.modelo}) com peças disponíveis
-              </p>
-            </div>
+            <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center"><Icon name="sparkles" size={18} className="text-green-600" /></div>
+            <div><h3 className="font-black text-slate-800">Passo 2: Sugestões de Doadores</h3><p className="text-xs text-slate-500">Veículos do mesmo modelo ({targetVehicle?.modelo}) com peças disponíveis</p></div>
           </div>
-          
-          {/* Barra de busca */}
           <div className="relative">
             <Icon name="search" size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Buscar por OS ou modelo..."
-              value={searchDonor}
-              onChange={e => setSearchDonor(e.target.value)}
-              className="w-full pl-11 pr-4 py-3 bg-white border-2 border-slate-200 rounded-xl text-sm font-medium outline-none focus:border-purple-500"
-            />
+            <input type="text" placeholder="Buscar por OS ou modelo..." value={searchDonor} onChange={e=>setSearchDonor(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-white border-2 border-slate-200 rounded-xl text-sm font-medium outline-none focus:border-purple-500" />
           </div>
-          
           {filteredSuggestions.length === 0 ? (
             <div className="text-center py-12">
               <Icon name="car" size={48} className="text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-400 font-bold">
-                {searchDonor ? 'Nenhum veículo encontrado' : `Nenhum veículo ${targetVehicle?.modelo} com peças disponíveis`}
-              </p>
-              {searchDonor && (
-                <button onClick={() => setSearchDonor('')} className="mt-3 text-purple-600 font-bold text-sm">
-                  Limpar busca
-                </button>
-              )}
+              <p className="text-slate-400 font-bold">{searchDonor?'Nenhum veículo encontrado':`Nenhum veículo ${targetVehicle?.modelo} com peças disponíveis`}</p>
+              {searchDonor&&<button onClick={()=>setSearchDonor('')} className="mt-3 text-purple-600 font-bold text-sm">Limpar busca</button>}
             </div>
           ) : (
             <div className="space-y-3 max-h-96 overflow-y-auto">
-              {filteredSuggestions.map((suggestion, idx) => (
-                <div
-                  key={idx}
-                  onClick={() => {
-                    setSelectedSourceOS(suggestion.os);
-                    setStep(3);
-                  }}
-                  className={`p-5 rounded-2xl border-2 cursor-pointer transition-all hover-lift ${
-                    selectedSourceOS === suggestion.os
-                      ? 'border-purple-500 bg-purple-50 shadow-lg'
-                      : 'border-slate-200 bg-white hover:border-purple-300'
-                  }`}
-                >
+              {filteredSuggestions.map((suggestion, idx)=>(
+                <div key={idx} onClick={()=>{setSelectedSourceOS(suggestion.os);setStep(3);}} className={`p-5 rounded-2xl border-2 cursor-pointer transition-all hover-lift ${selectedSourceOS===suggestion.os?'border-purple-500 bg-purple-50 shadow-lg':'border-slate-200 bg-white hover:border-purple-300'}`}>
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                        selectedSourceOS === suggestion.os ? 'bg-purple-600' : 'bg-slate-100'
-                      }`}>
-                        <Icon name="car" size={18} className={selectedSourceOS === suggestion.os ? 'text-white' : 'text-slate-600'} />
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${selectedSourceOS===suggestion.os?'bg-purple-600':'bg-slate-100'}`}>
+                        <Icon name="car" size={18} className={selectedSourceOS===suggestion.os?'text-white':'text-slate-600'} />
                       </div>
-                      <div>
-                        <p className="font-black text-slate-800">OS #{suggestion.os}</p>
-                        <p className="text-xs font-bold text-slate-500">{suggestion.modelo} • {suggestion.cor}</p>
-                      </div>
+                      <div><p className="font-black text-slate-800">OS #{suggestion.os}</p><p className="text-xs font-bold text-slate-500">{suggestion.modelo} • {suggestion.cor}</p></div>
                     </div>
                     <div className="text-right">
-                      <span className="suggestion-badge">
-                        {suggestion.availableItems} peça{suggestion.availableItems > 1 ? 's' : ''}
-                      </span>
+                      <span className="suggestion-badge">{suggestion.availableItems} peça{suggestion.availableItems>1?'s':''}</span>
                       <p className="text-[10px] text-slate-400 font-bold mt-1">{suggestion.localizacao}</p>
                     </div>
                   </div>
-                  
-                  {/* Preview dos itens */}
                   <div className="flex flex-wrap gap-2 mt-3">
-                    {suggestion.items.slice(0, 3).map((item, i) => (
-                      <span key={i} className="px-3 py-1.5 bg-slate-50 rounded-lg text-[10px] font-bold text-slate-600 border border-slate-200">
-                        {item.description}
-                      </span>
+                    {suggestion.items.slice(0,3).map((item,i)=>(
+                      <span key={i} className="px-3 py-1.5 bg-slate-50 rounded-lg text-[10px] font-bold text-slate-600 border border-slate-200">{item.description}</span>
                     ))}
-                    {suggestion.items.length > 3 && (
-                      <span className="px-3 py-1.5 bg-purple-50 rounded-lg text-[10px] font-bold text-purple-600">
-                        +{suggestion.items.length - 3} mais
-                      </span>
-                    )}
+                    {suggestion.items.length>3&&<span className="px-3 py-1.5 bg-purple-50 rounded-lg text-[10px] font-bold text-purple-600">+{suggestion.items.length-3} mais</span>}
                   </div>
                 </div>
               ))}
             </div>
           )}
-          
           <div className="flex gap-3 pt-4">
-            <button
-              onClick={() => setStep(1)}
-              className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black uppercase text-sm hover:bg-slate-200 transition-all"
-            >
-              <span className="flex items-center justify-center gap-2">
-                <Icon name="arrow-left" size={16} /> Voltar
-              </span>
+            <button onClick={()=>setStep(1)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black uppercase text-sm hover:bg-slate-200 transition-all">
+              <span className="flex items-center justify-center gap-2"><Icon name="arrow-left" size={16}/> Voltar</span>
             </button>
           </div>
         </div>
       )}
       
-      {/* Step 3: Confirmar Doação */}
       {step === 3 && selectedSourceOS && sourceRequest && (
         <div className="glass-card rounded-3xl p-6 space-y-4 scale-in">
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center">
-              <Icon name="check-circle" size={18} className="text-emerald-600" />
-            </div>
-            <div>
-              <h3 className="font-black text-slate-800">Passo 3: Confirmar Doação</h3>
-              <p className="text-xs text-slate-500">Selecione as peças que serão transferidas</p>
-            </div>
+            <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center"><Icon name="check-circle" size={18} className="text-emerald-600" /></div>
+            <div><h3 className="font-black text-slate-800">Passo 3: Confirmar Doação</h3><p className="text-xs text-slate-500">Selecione as peças que serão transferidas</p></div>
           </div>
-          
-          {/* Resumo */}
           <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-2xl p-5 border border-purple-200">
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs font-bold text-purple-600 uppercase mb-1">🚗 Doador</p>
-                <p className="font-black text-slate-800">OS #{selectedSourceOS}</p>
-                <p className="text-sm text-slate-600">{sourceRequest.vehicleData?.modelo}</p>
-              </div>
-              <div>
-                <p className="text-xs font-bold text-purple-600 uppercase mb-1">🎯 Receptor</p>
-                <p className="font-black text-slate-800">OS #{targetOS}</p>
-                <p className="text-sm text-slate-600">{targetVehicle?.modelo}</p>
-              </div>
+              <div><p className="text-xs font-bold text-purple-600 uppercase mb-1">🚗 Doador</p><p className="font-black text-slate-800">OS #{selectedSourceOS}</p><p className="text-sm text-slate-600">{sourceRequest.vehicleData?.modelo}</p></div>
+              <div><p className="text-xs font-bold text-purple-600 uppercase mb-1">🎯 Receptor</p><p className="font-black text-slate-800">OS #{targetOS}</p><p className="text-sm text-slate-600">{targetVehicle?.modelo}</p></div>
             </div>
           </div>
-          
-          {/* Lista de peças */}
           <div className="space-y-2 max-h-80 overflow-y-auto">
             <p className="text-xs font-black uppercase text-slate-500">Peças disponíveis para doação</p>
-            {availableSourceItems.map((item) => (
-              <label
-                key={item.id}
-                className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                  selectedItems.includes(item.id)
-                    ? 'border-purple-500 bg-purple-50'
-                    : 'border-slate-200 bg-white hover:border-purple-300'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedItems.includes(item.id)}
-                  onChange={() => toggleItemSelection(item.id)}
-                  className="w-5 h-5 accent-purple-600 rounded"
-                />
-                {item.photo && (
-                  <img src={item.photo} className="w-14 h-14 rounded-lg object-cover" alt="Peça" />
-                )}
+            {availableSourceItems.map((item)=>(
+              <label key={item.id} className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-all ${selectedItems.includes(item.id)?'border-purple-500 bg-purple-50':'border-slate-200 bg-white hover:border-purple-300'}`}>
+                <input type="checkbox" checked={selectedItems.includes(item.id)} onChange={()=>toggleItemSelection(item.id)} className="w-5 h-5 accent-purple-600 rounded" />
+                {item.photo&&<img src={item.photo} className="w-14 h-14 rounded-lg object-cover" alt="Peça" />}
                 <div className="flex-1">
                   <p className="font-black text-slate-800">{item.description}</p>
-                  <div className="flex gap-3 mt-1">
-                    <span className="text-xs text-slate-500">Qtd: {item.quantity}</span>
-                    <StatusBadge status={item.status} />
-                  </div>
+                  <div className="flex gap-3 mt-1"><span className="text-xs text-slate-500">Qtd: {item.quantity}</span><StatusBadge status={item.status} /></div>
                 </div>
               </label>
             ))}
           </div>
-          
           <div className="flex gap-3 pt-4">
-            <button
-              onClick={() => setStep(2)}
-              className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black uppercase text-sm hover:bg-slate-200 transition-all"
-            >
-              <span className="flex items-center justify-center gap-2">
-                <Icon name="arrow-left" size={16} /> Voltar
-              </span>
+            <button onClick={()=>setStep(2)} className="flex-1 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black uppercase text-sm hover:bg-slate-200 transition-all">
+              <span className="flex items-center justify-center gap-2"><Icon name="arrow-left" size={16}/> Voltar</span>
             </button>
-            <button
-              onClick={handleDonate}
-              disabled={selectedItems.length === 0}
-              className={`flex-1 py-4 rounded-2xl font-black uppercase text-sm transition-all ${
-                selectedItems.length > 0
-                  ? 'gradient-purple text-white shadow-lg hover:shadow-xl hover-lift'
-                  : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-              }`}
-            >
-              <span className="flex items-center justify-center gap-2">
-                <Icon name="git-merge" size={16} />
-                Doar {selectedItems.length} peça{selectedItems.length !== 1 ? 's' : ''}
-              </span>
+            <button onClick={handleDonate} disabled={selectedItems.length===0} className={`flex-1 py-4 rounded-2xl font-black uppercase text-sm transition-all ${selectedItems.length>0?'gradient-purple text-white shadow-lg hover:shadow-xl hover-lift':'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>
+              <span className="flex items-center justify-center gap-2"><Icon name="git-merge" size={16}/>Doar {selectedItems.length} peça{selectedItems.length!==1?'s':''}</span>
             </button>
           </div>
         </div>
@@ -1049,66 +810,261 @@ function DonorSystem({ requests, vehicles, onDonate, loggedInUser }) {
 }
 
 // ============================================================================
-// COMPONENTES PRINCIPAIS (Dashboard, RequestForm, StatusView, etc.)
-// Mantidos do código anterior com melhorias visuais
+// FORMULÁRIO DE SOLICITAÇÃO (COM UNIDADE)
 // ============================================================================
+function RequestForm({user,loggedInUser,vehiclesDB,requests}){
+  const [os,setOs]=useState('');
+  const [vehicle,setVehicle]=useState(null);
+  const [unidade,setUnidade]=useState('Unidade 1');
+  const [items,setItems]=useState([{id:Date.now(),description:'',quantity:1,photo:null,status:'Pendente'}]);
+  const [submitting,setSubmitting]=useState(false);
+  const [done,setDone]=useState(false);
+  const [semFoto,setSemFoto]=useState([]);
+  const [showFoto,setShowFoto]=useState(false);
+  const [showDup,setShowDup]=useState(false);
+  const [dups,setDups]=useState([]);
 
-// ... (restante do código mantido com as melhorias visuais aplicadas)
-// Nota: Por brevidade, estou mostrando apenas o DonorSystem aprimorado.
-// Os outros componentes foram mantidos com as classes CSS atualizadas.
+  const onOSBlur=()=>{
+    const t=String(os).trim();if(!t)return;
+    const f=vehiclesDB.find(v=>String(v.os).trim()===t);
+    if(f)setVehicle(f);else{setVehicle(null);alert('OS não cadastrada.');}
+  };
 
-// ============================================================================
-// APP PRINCIPAL
-// ============================================================================
+  const salvar=async()=>{
+    setSubmitting(true);
+    try{
+      await col('requests').add({os,responsavel:loggedInUser.user,localizacaoSolicitacao:'-',vehicleData:vehicle,unidade,items,timestamp:Date.now(),status:'Pendente',userId:user.uid||'anon'});
+      setDone(true);setShowDup(false);
+    }catch{alert('Erro ao salvar.');}
+    setSubmitting(false);
+  };
 
-function App() {
-  const [user, setUser] = useState(null);
-  const [loggedIn, setLoggedIn] = useState(null);
-  const [view, setView] = useState('request');
-  
-  const { data: requests, loading: requestsLoading } = useFirestore('requests');
-  const { data: vehicles, loading: vehiclesLoading } = useFirestore('vehicles');
-  
-  // Mock login para demonstração
-  useEffect(() => {
-    // Auto-login para teste
-    setLoggedIn({ user: 'Admin', role: 'admin' });
-    setView('donor');
-  }, []);
-  
-  if (!loggedIn) {
-    return (
-      <div className="h-screen flex items-center justify-center login-bg">
-        <div className="text-white text-center">
-          <Icon name="loader" size={32} className="animate-spin mx-auto mb-4" />
-          <p>Carregando...</p>
-        </div>
-      </div>
-    );
-  }
-  
+  const submit=async e=>{
+    e.preventDefault();
+    if(!os.trim())return alert('OS obrigatória.');
+    if(!vehicle)return alert('OS não cadastrada no sistema.');
+    if(items.some(i=>!i.description.trim()))return alert('Todos os itens precisam de descrição.');
+    const sf=items.filter(i=>!i.photo).map(i=>i.id);
+    if(sf.length){setSemFoto(sf);setShowFoto(true);return;}
+    const ex=requests.filter(r=>String(r.os).trim()===String(os).trim());
+    if(ex.length){setDups(ex);setShowDup(true);return;}
+    await salvar();
+  };
+
+  if(done) return (
+    <div className="flex flex-col items-center justify-center py-10 fade-in bg-white rounded-3xl border p-8 max-w-md mx-auto text-center">
+      <Icon name="check-circle" size={48} className="text-emerald-500 mb-4"/>
+      <h2 className="text-xl font-black uppercase">Pedido Protocolado!</h2>
+      <button onClick={()=>{setDone(false);setOs('');setVehicle(null);setItems([{id:Date.now(),description:'',quantity:1,photo:null,status:'Pendente'}]);}} className="mt-8 w-full py-4 bg-red-600 text-white rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-red-700">Nova Solicitação</button>
+    </div>
+  );
+
   return (
-    <div className="h-screen flex flex-col md:flex-row bg-gradient-to-br from-slate-50 to-blue-50 overflow-hidden">
-      <NetworkStatus />
-      
-      {/* Main Content */}
-      <main className="flex-1 overflow-y-auto scrollbar-hide h-full">
-        <div className="p-4 md:p-6 mobile-content md:pb-6 max-w-7xl mx-auto">
-          <DonorSystem 
-            requests={requests} 
-            vehicles={vehicles} 
-            loggedInUser={loggedIn}
-            onDonate={() => console.log('Doação concluída!')}
-          />
+    <div className="space-y-4 fade-in">
+      <div><h2 className="text-xl md:text-2xl font-black text-black tracking-tighter uppercase leading-none">Nova Requisição</h2><span className="text-[9px] font-bold text-neutral-400 uppercase mt-1 tracking-widest italic block">Operacional VRZ</span></div>
+      <form onSubmit={submit} className="space-y-4">
+        <div className="bg-white rounded-2xl border border-neutral-200 shadow-sm overflow-hidden">
+          <div className="p-4 space-y-3">
+            <div><label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block mb-1.5">Número da OS</label><input type="text" inputMode="numeric" value={os} onChange={e=>setOs(sanitizeInput(e.target.value))} onBlur={onOSBlur} placeholder="Digite o nº da OS" className="w-full px-4 py-4 bg-neutral-50 border-2 border-neutral-200 rounded-xl focus:border-red-600 outline-none font-black text-2xl tracking-wide" required/></div>
+            <div><label className="text-[9px] font-black text-neutral-400 uppercase tracking-widest block mb-1.5">Unidade</label><select value={unidade} onChange={e=>setUnidade(e.target.value)} className="w-full px-4 py-3 bg-neutral-50 border-2 border-neutral-200 rounded-xl font-black text-sm uppercase focus:border-red-600 outline-none">{UNIDADES.map(u=><option key={u} value={u}>{u}</option>)}</select></div>
+            <div className="flex items-center gap-3 bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3"><div className="w-9 h-9 rounded-lg bg-red-50 flex items-center justify-center text-red-600 border border-red-100 shrink-0"><Icon name="user" size={16}/></div><div className="min-w-0 flex-1"><p className="text-[8px] font-black uppercase text-neutral-400 leading-none mb-0.5">Solicitante</p><p className="text-sm font-black uppercase text-black truncate">{loggedInUser.user}</p></div><RoleBadge role={loggedInUser.role}/></div>
+          </div>
+          <div className="bg-neutral-950 border-t-4 border-red-600 p-4 text-white min-h-[100px] flex items-center">
+            {vehicle?(
+              <div className="w-full space-y-2.5">
+                <div className="flex items-start justify-between gap-2"><div><p className="text-neutral-500 text-[7px] font-black uppercase mb-0.5">Modelo</p><p className="text-white text-lg font-black uppercase leading-tight">{vehicle.modelo}</p></div><div className="text-right shrink-0"><p className="text-neutral-500 text-[7px] font-black uppercase mb-0.5">Fabricante</p><p className="text-white text-sm font-bold uppercase">{vehicle.fabricante||'N/A'}</p></div></div>
+                <div className="grid grid-cols-3 gap-2 border-t border-white/10 pt-2.5"><div><p className="text-neutral-500 text-[7px] font-black uppercase">Etapa</p><p className="text-red-400 text-[11px] font-black uppercase">{vehicle.etapa}</p></div><div><p className="text-neutral-500 text-[7px] font-black uppercase">Cor</p><p className="text-white text-[11px] font-bold uppercase">{vehicle.cor}</p></div><div><p className="text-neutral-500 text-[7px] font-black uppercase">Local</p><p className="text-white text-[11px] font-bold uppercase">{vehicle.localizacao}</p></div></div>
+                <div className="bg-white/5 rounded-lg px-3 py-2 border border-white/10 text-center"><p className="text-neutral-500 text-[7px] font-black uppercase mb-0.5">Chassi</p><p className="text-white font-mono-chassi text-sm font-black tracking-widest select-all">{vehicle.chassi}</p></div>
+              </div>
+            ):(
+              <div className="w-full text-center py-3"><Icon name="car" size={28} className="text-neutral-700 mx-auto mb-2"/><p className="text-neutral-600 text-[9px] font-black uppercase tracking-widest">Digite a OS para carregar o veículo</p></div>
+            )}
+          </div>
         </div>
-      </main>
+        <div className="space-y-3">
+          <div className="flex justify-between items-center"><h3 className="font-black text-black uppercase text-sm flex items-center gap-2"><Icon name="package" size={16}/>Peças</h3><button type="button" onClick={()=>setItems([...items,{id:Date.now(),description:'',quantity:1,photo:null,status:'Pendente'}])} className="bg-red-600 text-white px-4 py-2.5 rounded-xl text-sm font-black uppercase hover:bg-red-700 flex items-center gap-1.5 shadow-sm active:scale-95 transition-transform">+ Item</button></div>
+          {items.map((it,idx)=>(
+            <div key={it.id} className={`bg-white rounded-2xl overflow-hidden shadow-sm ${semFoto.includes(it.id)?'border-2 border-red-500':'border border-neutral-200'}`}>
+              <div className="flex items-center justify-between px-4 py-3 bg-neutral-50 border-b border-neutral-100"><span className="text-[10px] font-black text-neutral-500 uppercase tracking-wider">Item {idx+1}</span><button type="button" onClick={()=>{if(items.length>1){setItems(items.filter(i=>i.id!==it.id));setSemFoto(p=>p.filter(id=>id!==it.id));}else{setItems([{id:Date.now(),description:'',quantity:1,photo:null,status:'Pendente'}]);setSemFoto([]);}}} className="flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-[9px] font-black uppercase active:scale-95 transition-transform">✕ Remover</button></div>
+              <div className="p-4 space-y-3">
+                <div><label className="text-[9px] font-black text-neutral-400 uppercase block mb-1.5">Descrição da Peça</label><input type="text" value={it.description} onChange={e=>setItems(p=>p.map(i=>i.id===it.id?{...i,description:sanitizeInput(e.target.value)}:i))} placeholder="NOME DA PEÇA" className="w-full p-4 bg-neutral-50 border-2 border-neutral-200 rounded-xl font-black text-base uppercase focus:border-red-600 outline-none" required autoCapitalize="characters"/></div>
+                <div className="flex gap-3 items-end">
+                  <div className="w-28 shrink-0"><label className="text-[9px] font-black text-neutral-400 uppercase block mb-1.5">Qtd</label><input type="number" min="1" inputMode="numeric" value={it.quantity} onChange={e=>setItems(p=>p.map(i=>i.id===it.id?{...i,quantity:e.target.value}:i))} className="w-full p-4 bg-neutral-50 border-2 border-neutral-200 rounded-xl font-black text-xl text-center focus:border-red-600 outline-none"/></div>
+                  <div className="flex-1"><label className="text-[9px] font-black text-red-600 uppercase block mb-1.5">📷 Foto (Obrigatória)</label>
+                    {it.photo?(
+                      <div className="relative rounded-xl overflow-hidden border-2 border-emerald-400 h-20 group"><img src={it.photo} className="h-full w-full object-cover"/><button type="button" onClick={()=>setItems(p=>p.map(i=>i.id===it.id?{...i,photo:null}:i))} className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 active:opacity-100 text-white text-xs font-black">✕ Trocar</button><div className="absolute top-1.5 right-1.5 bg-emerald-500 text-white text-[7px] font-black px-1.5 py-0.5 rounded-full">✓ OK</div></div>
+                    ):(
+                      <label className={`h-20 flex flex-col items-center justify-center gap-1.5 border-2 border-dashed rounded-xl cursor-pointer transition-all ${semFoto.includes(it.id)?'border-red-500 bg-red-50':'border-neutral-300 bg-neutral-50'}`}><Icon name="camera" size={26} className={semFoto.includes(it.id)?'text-red-500':'text-neutral-400'}/><span className={`text-[9px] font-black uppercase ${semFoto.includes(it.id)?'text-red-500':'text-neutral-400'}`}>Toque para fotografar</span><input type="file" accept="image/*" capture="environment" onChange={e=>{const r=new FileReader();r.onload=()=>{setItems(p=>p.map(i=>i.id===it.id?{...i,photo:r.result}:i));setSemFoto(p=>p.filter(id=>id!==it.id));};if(e.target.files[0])r.readAsDataURL(e.target.files[0]);}} className="hidden"/></label>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <button disabled={submitting||!vehicle} className={`w-full py-5 rounded-2xl font-black text-lg uppercase flex items-center justify-center gap-3 shadow-lg transition-all ${submitting||!vehicle?'bg-neutral-200 text-neutral-400':'bg-red-600 text-white border-b-4 border-red-800 hover:bg-red-700 active:translate-y-0.5 active:border-b-2'}`}>{submitting?<Icon name="refresh-cw" size={22} className="animate-spin"/>:<><Icon name="send" size={20}/>Enviar Pedido</>}</button>
+      </form>
     </div>
   );
 }
 
 // ============================================================================
-// RENDER
+// APP PRINCIPAL
 // ============================================================================
+function App(){
+  const [user,setUser]=useState(null);
+  const [loggedIn,setLoggedIn]=useState(null);
+  const [view,setView]=useState('request');
+  const [sidebarOpen,setSidebarOpen]=useState(false);
+  
+  const { data: requests, loading: requestsLoading } = useFirestore('requests');
+  const { data: vehicles, loading: vehiclesLoading } = useFirestore('vehicles');
+  const { data: usersData } = useFirestore('users');
+  
+  const [users, setUsers] = useState([]);
+  
+  useEffect(() => {
+    const combined = [...usersData];
+    INIT_USERS.forEach(u => {
+      if (!combined.find(d => d.user.toLowerCase() === u.user.toLowerCase())) {
+        combined.push(u);
+      }
+    });
+    setUsers(combined);
+  }, [usersData]);
+
+  const isAdmin = loggedIn?.role === 'admin';
+  const isSol = loggedIn?.role === 'solicitante' || isAdmin;
+
+  useEffect(() => { 
+    const u = auth.onAuthStateChanged(u => {
+      if (u) setUser(u);
+      else auth.signInAnonymously();
+    }); 
+    return u; 
+  }, []);
+
+  const login = u => {
+    setLoggedIn(u);
+    setView(u.role === 'leitor' ? 'status' : u.role === 'admin' ? 'dashboard' : 'request');
+  };
+  
+  const logout = () => {
+    setLoggedIn(null);
+    setView('request');
+  };
+
+  if (!loggedIn) return <LoginView onLogin={login} usersList={users} />;
+
+  const navItems = [
+    isSol && { key: 'request', icon: 'plus', label: 'Nova Peça' },
+    { key: 'status', icon: 'search', label: 'Histórico' },
+    isAdmin && { key: 'donor', icon: 'git-merge', label: 'Doações' },
+    isAdmin && { key: 'admin', icon: 'shield', label: 'Gestão' },
+    isAdmin && { key: 'dashboard', icon: 'bar-chart-2', label: 'Analytics' },
+  ].filter(Boolean);
+
+  const go = (v) => {
+    setView(v);
+    setSidebarOpen(false);
+  };
+
+  const loading = requestsLoading || vehiclesLoading;
+
+  return (
+    <div className="h-screen flex flex-col md:flex-row bg-gradient-to-br from-slate-50 to-blue-50 overflow-hidden">
+      <NetworkStatus />
+      
+      {/* DESKTOP SIDEBAR */}
+      <nav className="hidden md:flex flex-col w-56 bg-slate-900 text-white p-5 gap-5 shrink-0 shadow-2xl">
+        <div className="flex items-center gap-3 pb-4 border-b border-white/8">
+          <div className="p-2 gradient-primary rounded-xl shadow-lg shadow-red-600/30 shrink-0">
+            <Icon name="shopping-cart" size={20} />
+          </div>
+          <div>
+            <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest leading-none">Portal Compras</p>
+            <h1 className="font-display text-2xl font-black uppercase leading-none text-white">VRZ</h1>
+          </div>
+        </div>
+        
+        <div className="flex-1 space-y-1">
+          {navItems.map(n => (
+            <NavBtn key={n.key} icon={n.icon} label={n.label} active={view === n.key} onClick={() => go(n.key)} />
+          ))}
+        </div>
+        
+        <div className="bg-slate-800/60 p-3 rounded-xl border border-white/5 space-y-2">
+          <p className="text-[7px] font-black text-slate-400 uppercase tracking-widest">Logado como:</p>
+          <p className="text-[10px] font-black uppercase text-red-500 truncate">{loggedIn.user}</p>
+          <RoleBadge role={loggedIn.role} />
+          <button onClick={logout} className="mt-1 w-full py-1.5 bg-slate-700 hover:bg-red-600 rounded-lg text-[8px] font-black uppercase transition-colors">Sair</button>
+        </div>
+        <div className="text-center">
+          <span className={`text-[8px] font-black tracking-widest ${user ? 'text-red-600 pulse-dot' : 'text-slate-500'}`}>
+            ● {user ? 'ONLINE' : 'RECONECTANDO...'}
+          </span>
+        </div>
+      </nav>
+
+      {/* MOBILE HEADER */}
+      <div className="md:hidden bg-slate-900 text-white flex items-center justify-between px-4 py-3 z-[100] border-b-2 border-red-600 shrink-0">
+        <div className="flex items-center gap-2.5">
+          <div className="p-1.5 gradient-primary rounded-lg">
+            <Icon name="shopping-cart" size={15} />
+          </div>
+          <div>
+            <p className="text-[7px] font-bold text-slate-400 uppercase tracking-wider leading-none">Portal Compras</p>
+            <h1 className="font-display text-xl font-black uppercase leading-none">VRZ</h1>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="text-right">
+            <p className="text-[8px] font-black uppercase text-red-500 truncate max-w-[100px]">{loggedIn.user}</p>
+            <RoleBadge role={loggedIn.role} />
+          </div>
+          <button onClick={logout} className="p-2 bg-slate-800 hover:bg-red-600 rounded-xl transition-colors ml-1">
+            <Icon name="log-out" size={16} />
+          </button>
+        </div>
+      </div>
+
+      {/* MAIN CONTENT */}
+      <main className="flex-1 overflow-y-auto scrollbar-hide h-full min-w-0">
+        <div className="p-4 md:p-6 mobile-content md:pb-6 max-w-7xl mx-auto">
+          {loading ? (
+            <div className="space-y-4">
+              <div className="skeleton rounded-2xl p-5 space-y-3"><div className="h-4 w-3/4 rounded-lg bg-slate-200"></div><div className="h-20 rounded-lg bg-slate-200"></div></div>
+            </div>
+          ) : (
+            <>
+              {view === 'request' && isSol && <RequestForm user={user} loggedInUser={loggedIn} vehiclesDB={vehicles} requests={requests} />}
+              {view === 'donor' && isAdmin && <DonorSystem requests={requests} vehicles={vehicles} loggedInUser={loggedIn} onDonate={() => {}} />}
+              {view !== 'request' && view !== 'donor' && (
+                <div className="flex items-center justify-center h-full">
+                  <div className="text-center">
+                    <Icon name="construction" size={48} className="text-slate-300 mx-auto mb-4" />
+                    <p className="text-slate-500 font-bold">Em desenvolvimento</p>
+                    <p className="text-sm text-slate-400">Esta seção está sendo atualizada</p>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </main>
+
+      {/* MOBILE BOTTOM NAV */}
+      <div className="md:hidden bottom-nav">
+        {navItems.map(n => (
+          <button key={n.key} onClick={() => go(n.key)} className={`bottom-nav-btn ${view === n.key ? 'active' : ''}`} aria-label={n.label}>
+            <Icon name={n.icon} size={22} className={view === n.key ? 'text-red-500' : 'text-slate-500'} />
+            <span>{n.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App />);
 </script>
