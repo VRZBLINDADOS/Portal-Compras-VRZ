@@ -433,9 +433,12 @@ function DonorSystem({requests,vehicles,loggedInUser}){
   },[requests,targetOS]);
 
   // Peças pendentes / em cotação da OS receptora
+  // Usa targetOS (já confirmado) para garantir que os dados estejam disponíveis
   const targetItems=useMemo(()=>{
     if(!targetRequest)return[];
-    return(targetRequest.items||[]).filter(it=>it.status==='Pendente'||it.status==='Em Cotação'||it.status==='Comprado');
+    return(targetRequest.items||[]).filter(it=>
+      it.status==='Pendente'||it.status==='Em Cotação'||it.status==='Comprado'
+    );
   },[targetRequest]);
 
   const targetModelo=(targetRequest?.vehicleData?.modelo||'').trim().toLowerCase();
@@ -469,8 +472,13 @@ function DonorSystem({requests,vehicles,loggedInUser}){
   const confirmStep1=()=>{
     const t=targetOSInput.trim();
     if(!t)return alert('Digite o número da OS receptora.');
-    if(!targetRequest){alert('Nenhum pedido encontrado para a OS '+t+'.');return;}
-    if(targetItems.length===0){alert('Esta OS não possui peças pendentes para transferir.');return;}
+    // Verifica diretamente pelo input, sem depender dos estados async
+    const matching=requests.filter(r=>String(r.os).trim()===t);
+    if(!matching.length){alert('Nenhum pedido encontrado para a OS '+t+'.');return;}
+    const allItems=[];const seen=new Set();
+    matching.forEach(r=>(r.items||[]).forEach(it=>{const k=it.id||it.description;if(!seen.has(k)){seen.add(k);allItems.push(it);}}));
+    const pending=allItems.filter(it=>it.status==='Pendente'||it.status==='Em Cotação'||it.status==='Comprado');
+    if(pending.length===0){alert('Esta OS não possui peças pendentes para transferir.');return;}
     setTargetOS(t);setStep(2);
   };
 
