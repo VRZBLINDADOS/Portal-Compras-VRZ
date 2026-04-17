@@ -9,20 +9,12 @@
 <style>
 *{box-sizing:border-box;-webkit-font-smoothing:antialiased}
 :root{
-  --red:#DC1F1F;
-  --red-deep:#A81515;
-  --red-light:#FFF0F0;
-  --black:#0D0D0D;
-  --ink:#1A1A1A;
-  --smoke:#F7F5F3;
-  --border:#E8E3E0;
-  --muted:#9A9189;
+  --red:#DC1F1F;--red-deep:#A81515;--red-light:#FFF0F0;
+  --black:#0D0D0D;--ink:#1A1A1A;--smoke:#F7F5F3;--border:#E8E3E0;--muted:#9A9189;
 }
 body{font-family:'Plus Jakarta Sans',sans-serif;margin:0;background:#fff;overflow:hidden;color:var(--ink)}
-.serif{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;letter-spacing:-.02em}
 .mono{font-family:'JetBrains Mono',monospace}
 
-/* Animations */
 @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 @keyframes slideIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
@@ -30,7 +22,6 @@ body{font-family:'Plus Jakarta Sans',sans-serif;margin:0;background:#fff;overflo
 @keyframes pulse-beacon{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.85)}}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
-@keyframes progressFill{from{width:0}to{width:var(--target-w)}}
 
 .fade-up{animation:fadeUp .35s cubic-bezier(.22,1,.36,1) forwards}
 .fade-in{animation:fadeIn .25s ease forwards}
@@ -40,42 +31,28 @@ body{font-family:'Plus Jakarta Sans',sans-serif;margin:0;background:#fff;overflo
 .pulse-beacon{animation:pulse-beacon 2s ease-in-out infinite}
 .skeleton{background:linear-gradient(90deg,#f0ece8 25%,#e8e3df 50%,#f0ece8 75%);background-size:200% 100%;animation:shimmer 1.8s infinite}
 
-/* Scrollbar */
 .scroll-y{overflow-y:auto}
 .scroll-y::-webkit-scrollbar{width:3px}
 .scroll-y::-webkit-scrollbar-track{background:transparent}
 .scroll-y::-webkit-scrollbar-thumb{background:var(--border);border-radius:999px}
 
-/* Nav */
+/* ── BLACK SIDEBAR NAV ── */
+.nav-item{display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:9px;cursor:pointer;transition:all .18s;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.4);border:none;background:transparent;width:100%;text-align:left;font-family:'Plus Jakarta Sans',sans-serif}
+.nav-item:hover{background:rgba(255,255,255,.12);color:#fff}
+.nav-item.active{background:#fff;color:var(--ink)}
+.nav-item .nav-icon{width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:7px;background:rgba(255,255,255,.08);flex-shrink:0;transition:all .18s}
+.nav-item.active .nav-icon{background:var(--red)}
+.nav-item:hover:not(.active) .nav-icon{background:rgba(255,255,255,.18)}
 
-
-
-
-
-
-
-/* Bottom nav mobile */
 .bottom-nav{position:fixed;bottom:0;left:0;right:0;z-index:90;background:#fff;border-top:1px solid var(--border);display:flex;padding-bottom:env(safe-area-inset-bottom);box-shadow:0 -8px 30px rgba(0,0,0,.06)}
 .bottom-nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 4px 8px;gap:4px;border:none;background:transparent;color:var(--muted);cursor:pointer;transition:color .2s;-webkit-tap-highlight-color:transparent;min-width:0;font-family:'Plus Jakarta Sans',sans-serif}
 .bottom-nav-btn.active{color:var(--red)}
 .bottom-nav-btn span{font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;line-height:1}
-.mobile-content{padding-bottom:calc(72px + env(safe-area-inset-bottom))}
 
-/* Nav - Black sidebar */
-.nav-item{display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:9px;cursor:pointer;transition:all .18s;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.4);border:none;background:transparent;width:100%;text-align:left;font-family:"Plus Jakarta Sans",sans-serif}
-.nav-item:hover{background:rgba(255,255,255,.12);color:#fff}
-.nav-item.active{background:#fff;color:var(--ink)}
-.nav-item .nav-icon{width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:7px;background:rgba(255,255,255,.08);flex-shrink:0;transition:all .18s}
-.nav-item.active .nav-icon{background:var(--red);color:#fff}
-.nav-item:hover:not(.active) .nav-icon{background:rgba(255,255,255,.15)}
-.nav-item.active .nav-icon svg,.nav-item.active svg{stroke:#fff}
-
-/* Inputs */
 .input{width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:10px;font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;font-weight:600;outline:none;background:#fff;transition:border-color .2s,box-shadow .2s;color:var(--ink)}
 .input:focus{border-color:var(--red);box-shadow:0 0 0 3px rgba(220,31,31,.08)}
 .input::placeholder{color:var(--muted);font-weight:500}
 
-/* Buttons */
 .btn-primary{background:var(--red);color:#fff;border:none;border-radius:10px;padding:13px 24px;font-family:'Plus Jakarta Sans',sans-serif;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:8px}
 .btn-primary:hover{background:var(--red-deep)}
 .btn-primary:active{transform:scale(.98)}
@@ -83,56 +60,44 @@ body{font-family:'Plus Jakarta Sans',sans-serif;margin:0;background:#fff;overflo
 .btn-ghost{background:var(--smoke);color:var(--ink);border:1.5px solid var(--border);border-radius:10px;padding:11px 20px;font-family:'Plus Jakarta Sans',sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;cursor:pointer;transition:all .2s}
 .btn-ghost:hover{border-color:var(--ink);background:#fff}
 
-/* Cards */
 .card{background:#fff;border:1.5px solid var(--border);border-radius:16px;overflow:hidden}
-.card-dark{background:var(--ink);border:none;border-radius:16px;overflow:hidden;color:#fff}
 
-/* Status badges */
+/* ── STATUS BADGES ── */
 .badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:6px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.06em}
 .badge-pending{background:#FFF4E6;color:#C45E00;border:1px solid #FFD9A8}
 .badge-quoting{background:#EAF0FF;color:#1A4EC2;border:1px solid #C0D0F5}
+/* NEW: Comprado badge */
+.badge-bought{background:#F3E8FF;color:#6B21A8;border:1px solid #D8B4FE}
 .badge-done{background:#EDFAF3;color:#0A6B34;border:1px solid #AAE6C5}
 .badge-donated{background:#FFF0F0;color:var(--red);border:1px solid #FFBDBD}
-.badge-import{background:#FFFBE6;color:#856A00;border:1px solid #FFE680}
 .badge-admin{background:var(--red);color:#fff}
 .badge-sol{background:#1A4EC2;color:#fff}
 .badge-reader{background:var(--muted);color:#fff}
 
-/* Tag pill */
 .pill{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:999px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;border:1px solid var(--border)}
 
-/* Table */
 .vtable thead{background:var(--smoke)}
 .vtable thead th{padding:10px 14px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);border-bottom:1px solid var(--border)}
 .vtable tbody tr{border-bottom:1px solid var(--smoke)}
 .vtable tbody tr:hover{background:var(--smoke)}
 .vtable tbody td{padding:10px 14px;font-size:11px;color:var(--ink)}
 
-/* Excel input */
 .excel-input{border:none;width:100%;height:100%;padding:6px 10px;background:transparent;font-size:11px;font-family:'Plus Jakarta Sans',sans-serif;outline:none}
 .excel-input:focus{background:#FFFBE6;box-shadow:inset 0 0 0 2px var(--red)}
 
-/* Donut / MiniBar */
 canvas{display:block}
-
-/* Divider */
 .divider{display:flex;align-items:center;gap:10px}
 .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border)}
-
-/* Login */
 .login-bg{background:linear-gradient(145deg,#0D0D0D 0%,#1A0505 60%,#2A0808 100%)}
-
-/* Suggested OS */
 .donor-card{border:1.5px solid var(--border);border-radius:12px;cursor:pointer;transition:all .18s;padding:14px}
 .donor-card:hover{border-color:var(--red);background:var(--red-light)}
 .donor-card.selected{border-color:var(--red);background:var(--red-light)}
-
-/* Step indicator dot */
 .step-dot{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;transition:all .25s}
-
-/* Progress bar */
 .progress-track{height:5px;background:var(--smoke);border-radius:999px;overflow:hidden}
 .progress-fill{height:100%;border-radius:999px;transition:width .7s cubic-bezier(.22,1,.36,1)}
+/* Bought button inline */
+.btn-bought{background:#F3E8FF;color:#6B21A8;border:1px solid #D8B4FE;border-radius:8px;padding:6px 12px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;cursor:pointer;transition:all .18s;display:flex;align-items:center;gap:5px;font-family:'Plus Jakarta Sans',sans-serif}
+.btn-bought:hover{background:#6B21A8;color:#fff;border-color:#6B21A8}
 </style>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -152,7 +117,7 @@ if(!firebase.apps.length)firebase.initializeApp(FB);
 const db=firebase.firestore();const auth=firebase.auth();
 const AID='portal-compras-vrz';
 const col=(c)=>db.collection('artifacts').doc(AID).collection('public').doc('data').collection(c);
-const{useState,useEffect,useMemo,useRef,useCallback,createContext,useContext}=React;
+const{useState,useEffect,useMemo,useRef,useCallback}=React;
 
 const useFirestore=(collectionName)=>{
   const[data,setData]=useState([]);const[loading,setLoading]=useState(true);
@@ -175,9 +140,44 @@ const INIT_USERS=[
   {user:"Daniel.Svanci",pass:"Dani123",active:true,role:"solicitante"},
 ];
 const UNIDADES=['Unidade 1','Unidade 2','Unidade 3'];
+
 function fmtBRL(v){return v>0?'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2}):'—';}
 function fmtBytes(b){return b>=1073741824?(b/1073741824).toFixed(2)+'GB':b>=1048576?(b/1048576).toFixed(1)+'MB':(b/1024).toFixed(0)+'KB';}
 function estimarBytes(r){return r.reduce((a,x)=>a+(x.items?.some(i=>i.photo)?800000:30000),0);}
+
+// ── MESCLAR pedidos da mesma OS ────────────────────────────────────────────
+// Retorna um array onde cada OS aparece UMA vez, com todos os itens mesclados
+function mergeByOS(requests){
+  const map={};
+  const order=[];
+  requests.forEach(r=>{
+    const k=String(r.os||'').trim();
+    if(!k){order.push(r);return;}
+    if(!map[k]){
+      map[k]={...r,_merged:false};
+      order.push(map[k]);
+    } else {
+      // Mescla itens, mantém dados do veículo/responsável mais recente
+      const existing=map[k];
+      const allItems=[...(existing.items||[]),...(r.items||[])];
+      // Remove duplicados por id
+      const seen=new Set();
+      const deduped=allItems.filter(it=>{
+        const key=it.id||it.description;
+        if(seen.has(key))return false;
+        seen.add(key);return true;
+      });
+      existing.items=deduped;
+      existing._merged=true;
+      // Mantém o timestamp mais recente para exibição
+      if((r.timestamp||0)>(existing.timestamp||0)){
+        existing.vehicleData=r.vehicleData||existing.vehicleData;
+        existing.responsavel=r.responsavel||existing.responsavel;
+      }
+    }
+  });
+  return order;
+}
 
 // ── Icon ──────────────────────────────────────────────────────────────────
 function Icon({name,size=18,className=''}){
@@ -196,7 +196,13 @@ function Icon({name,size=18,className=''}){
 
 // ── Badges ────────────────────────────────────────────────────────────────
 const StatusBadge=({status,orig})=>{
-  const map={'Pendente':'badge-pending','Em Cotação':'badge-quoting','Concluído':'badge-done','Doado':'badge-donated'};
+  const map={
+    'Pendente':'badge-pending',
+    'Em Cotação':'badge-quoting',
+    'Comprado':'badge-bought',      // NOVO
+    'Concluído':'badge-done',
+    'Doado':'badge-donated'
+  };
   return <span className={`badge ${map[status]||'badge-pending'}`}>{orig||status}</span>;
 };
 const RoleBadge=({role})=>{
@@ -206,7 +212,6 @@ const RoleBadge=({role})=>{
   return <span className={`badge ${map[r]||'badge-sol'}`}>{labels[r]||r}</span>;
 };
 
-// ── Network Status ────────────────────────────────────────────────────────
 const NetworkStatus=()=>{
   const[online,setOnline]=useState(navigator.onLine);
   useEffect(()=>{const h=()=>setOnline(navigator.onLine);window.addEventListener('online',h);window.addEventListener('offline',h);return()=>{window.removeEventListener('online',h);window.removeEventListener('offline',h);};},[]);
@@ -214,28 +219,25 @@ const NetworkStatus=()=>{
   return <div style={{position:'fixed',top:0,left:0,right:0,background:'#F59E0B',color:'#000',textAlign:'center',padding:'6px',fontSize:'11px',fontWeight:700,zIndex:1000}}>📡 Modo Offline — alterações sincronizarão ao reconectar</div>;
 };
 
-// ── Skeleton ──────────────────────────────────────────────────────────────
 const Skeleton=()=>(
-  <div className="space-y-3 p-6">
+  <div style={{padding:24}} className="space-y-3">
     {[1,2,3].map(i=>(
-      <div key={i} className="card p-5 space-y-3">
-        <div className="skeleton h-4 w-1/3 rounded-full"/>
-        <div className="skeleton h-3 w-2/3 rounded-full"/>
-        <div className="skeleton h-16 rounded-xl"/>
+      <div key={i} className="card" style={{padding:20}} >
+        <div className="skeleton" style={{height:14,width:'40%',borderRadius:8,marginBottom:10}}/>
+        <div className="skeleton" style={{height:10,width:'65%',borderRadius:8,marginBottom:10}}/>
+        <div className="skeleton" style={{height:60,borderRadius:12}}/>
       </div>
     ))}
   </div>
 );
 
-// ── Donut chart ───────────────────────────────────────────────────────────
+// ── Donut ─────────────────────────────────────────────────────────────────
 function Donut({slices,size=100}){
   const ref=useRef(null);
   useEffect(()=>{
     if(!ref.current)return;
-    const ctx=ref.current.getContext('2d');
-    const total=slices.reduce((a,s)=>a+s.v,0);
-    ctx.clearRect(0,0,size,size);
-    const cx=size/2,cy=size/2,r=size/2-5;
+    const ctx=ref.current.getContext('2d');const total=slices.reduce((a,s)=>a+s.v,0);
+    ctx.clearRect(0,0,size,size);const cx=size/2,cy=size/2,r=size/2-5;
     if(!total){ctx.beginPath();ctx.arc(cx,cy,r,0,2*Math.PI);ctx.fillStyle='#F0EAE6';ctx.fill();}
     else{let s=-Math.PI/2;slices.forEach(sl=>{const a=(sl.v/total)*2*Math.PI;ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,s,s+a);ctx.closePath();ctx.fillStyle=sl.c;ctx.fill();s+=a;});}
     ctx.beginPath();ctx.arc(cx,cy,r*.56,0,2*Math.PI);ctx.fillStyle='#fff';ctx.fill();
@@ -243,16 +245,12 @@ function Donut({slices,size=100}){
   return <canvas ref={ref} width={size} height={size}/>;
 }
 
-// ── Mini Bar chart ────────────────────────────────────────────────────────
 function MiniBar({data,color='#DC1F1F'}){
   const ref=useRef(null);
   useEffect(()=>{
     if(!ref.current||!data?.length)return;
-    const ctx=ref.current.getContext('2d');
-    const w=ref.current.width,h=ref.current.height;
-    ctx.clearRect(0,0,w,h);
-    const max=Math.max(...data.map(d=>d.v),1);
-    const bw=w/data.length;
+    const ctx=ref.current.getContext('2d');const w=ref.current.width,h=ref.current.height;
+    ctx.clearRect(0,0,w,h);const max=Math.max(...data.map(d=>d.v),1);const bw=w/data.length;
     data.forEach((d,i)=>{
       const bh=(d.v/max)*(h-22);
       ctx.fillStyle=i===data.length-1?color:color+'66';
@@ -260,9 +258,9 @@ function MiniBar({data,color='#DC1F1F'}){
       if(ctx.roundRect)ctx.roundRect(i*bw+3,h-bh-20,bw-6,bh,4);
       else ctx.rect(i*bw+3,h-bh-20,bw-6,bh);
       ctx.fill();
-      ctx.fillStyle='#9A9189';ctx.font='bold 8px Syne';ctx.textAlign='center';
+      ctx.fillStyle='#9A9189';ctx.font='bold 8px Plus Jakarta Sans';ctx.textAlign='center';
       ctx.fillText(d.l,i*bw+bw/2,h-4);
-      if(d.v>0){ctx.fillStyle='#1A1A1A';ctx.font='bold 9px Syne';ctx.fillText(d.v,i*bw+bw/2,h-bh-26);}
+      if(d.v>0){ctx.fillStyle='#1A1A1A';ctx.font='bold 9px Plus Jakarta Sans';ctx.fillText(d.v,i*bw+bw/2,h-bh-26);}
     });
   },[data,color]);
   return <canvas ref={ref} width={280} height={115} className="w-full"/>;
@@ -277,11 +275,18 @@ function DashboardView({requests}){
     const multi=Object.entries(byOS).filter(([,a])=>a.length>1);
     const totalAdd=multi.reduce((a,[,arr])=>a+(arr.length-1),0);
     const intervalos=[];
-    multi.forEach(([os,arr])=>{const sorted=[...arr].sort((a,b)=>a.timestamp-b.timestamp);sorted.slice(1).forEach(p=>{intervalos.push(Math.round((p.timestamp-sorted[0].timestamp)/864e5));});});
+    multi.forEach(([,arr])=>{const sorted=[...arr].sort((a,b)=>a.timestamp-b.timestamp);sorted.slice(1).forEach(p=>{intervalos.push(Math.round((p.timestamp-sorted[0].timestamp)/864e5));});});
     const mediaAdd=intervalos.length?(intervalos.reduce((a,b)=>a+b,0)/intervalos.length).toFixed(1):0;
     const maxAdd=intervalos.length?Math.max(...intervalos):0;
-    let totalIt=0,pend=0,cotac=0,conc=0,doado=0;
-    requests.forEach(r=>(r.items||[]).forEach(it=>{totalIt++;if(it.status==='Concluído')conc++;else if(it.status==='Doado')doado++;else if(it.status==='Em Cotação')cotac++;else pend++;}));
+    let totalIt=0,pend=0,cotac=0,comprado=0,conc=0,doado=0;
+    requests.forEach(r=>(r.items||[]).forEach(it=>{
+      totalIt++;
+      if(it.status==='Concluído')conc++;
+      else if(it.status==='Doado')doado++;
+      else if(it.status==='Comprado')comprado++;
+      else if(it.status==='Em Cotação')cotac++;
+      else pend++;
+    }));
     const porSol={};requests.forEach(r=>{porSol[r.responsavel]=(porSol[r.responsavel]||0)+1;});
     const rankSol=Object.entries(porSol).sort((a,b)=>b[1]-a[1]).slice(0,6);
     const diasSem=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];const porDia=[0,0,0,0,0,0,0];
@@ -297,211 +302,208 @@ function DashboardView({requests}){
     const rankMod=Object.entries(porMod).sort((a,b)=>b[1]-a[1]).slice(0,5);
     const taxa=totalIt>0?Math.round(conc/totalIt*100):0;
     const porUnidade={};requests.forEach(r=>{const u=r.unidade||'Unidade 1';porUnidade[u]=(porUnidade[u]||0)+1;});
-    return{total:requests.length,osU:Object.keys(byOS).length,totalAdd,mediaAdd:parseFloat(mediaAdd),maxAdd,totalIt,pend,cotac,conc,doado,rankSol,pedDia,semanas,rankMod,taxa,porUnidade};
+    return{total:requests.length,osU:Object.keys(byOS).length,totalAdd,mediaAdd:parseFloat(mediaAdd),maxAdd,totalIt,pend,cotac,comprado,conc,doado,rankSol,pedDia,semanas,rankMod,taxa,porUnidade};
   },[requests]);
 
   if(!stats)return(
-    <div className="flex flex-col items-center justify-center py-24 text-center fade-in">
-      <div style={{width:64,height:64,background:'var(--smoke)',borderRadius:16,display:'flex',alignItems:'center',justifyContent:'center',marginBottom:16}}>
-        <Icon name="bar-chart-2" size={26} className="text-muted"/></div>
+    <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'80px 20px',textAlign:'center'}}>
+      <div style={{width:64,height:64,background:'var(--smoke)',borderRadius:16,display:'flex',alignItems:'center',justifyContent:'center',marginBottom:16}}><Icon name="bar-chart-2" size={26}/></div>
       <p style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)'}}>Nenhum dado disponível</p>
     </div>
   );
-
   const maxSol=stats.rankSol[0]?.[1]||1,maxMod=stats.rankMod[0]?.[1]||1;
-
-  return (
-    <div className="space-y-5 fade-up pb-10">
-      {/* Header */}
-      <div className="flex items-end justify-between">
+  return(
+    <div style={{paddingBottom:40}} className="fade-up">
+      <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',marginBottom:20}}>
         <div>
           <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.15em',color:'var(--red)',marginBottom:4}}>Inteligência Operacional</p>
-          <h2 className="serif" style={{fontSize:42,fontWeight:400,lineHeight:1,color:'var(--ink)',margin:0}}>Análises VRZ</h2>
+          <h2 style={{fontSize:36,fontWeight:800,lineHeight:1,color:'var(--ink)',margin:0,letterSpacing:'-.02em'}}>Análises VRZ</h2>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:8,background:'var(--ink)',color:'#fff',padding:'8px 16px',borderRadius:10}}>
           <span className="pulse-beacon" style={{width:7,height:7,borderRadius:'50%',background:'var(--red)',display:'inline-block'}}/>
           <span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em'}}>Tempo real</span>
         </div>
       </div>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:12,marginBottom:16}}>
         {[
           {label:'Total de Pedidos',v:stats.total,sub:`${stats.osU} OS únicas`,icon:'clipboard-list',dark:true},
           {label:'Inclusões Adicionais',v:stats.totalAdd,sub:'mesma OS',icon:'plus-circle',red:true},
-          {label:'Média por Inclusão',v:stats.mediaAdd>0?stats.mediaAdd+'d':'—',sub:`máx ${stats.maxAdd}d`,icon:'clock',light:true},
-          {label:'Taxa de Conclusão',v:stats.taxa+'%',sub:`${stats.conc} de ${stats.totalIt}`,icon:'check-circle',light:true},
-          {label:'Itens Doados',v:stats.doado,sub:'transferidos entre OS',icon:'git-merge',light:true},
+          {label:'Taxa de Conclusão',v:stats.taxa+'%',sub:`${stats.conc}/${stats.totalIt}`,icon:'check-circle'},
+          {label:'Itens Comprados',v:stats.comprado,sub:'aguardando entrega',icon:'shopping-bag'},
+          {label:'Itens Doados',v:stats.doado,sub:'transferidos entre OS',icon:'git-merge'},
         ].map((k,i)=>(
-          <div key={i} style={{
-            background:k.dark?'var(--ink)':k.red?'var(--red)':'var(--smoke)',
-            color:k.dark||k.red?'#fff':'var(--ink)',
-            borderRadius:14,padding:'20px',
-            border:k.light?'1.5px solid var(--border)':'none'
-          }}>
-            <div style={{width:32,height:32,borderRadius:8,background:k.dark||k.red?'rgba(255,255,255,.12)':'var(--border)',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:14}}>
-              <Icon name={k.icon} size={16}/>
-            </div>
-            <p className="serif" style={{fontSize:38,lineHeight:1,margin:0}}>{k.v}</p>
+          <div key={i} style={{background:k.dark?'var(--ink)':k.red?'var(--red)':'var(--smoke)',color:k.dark||k.red?'#fff':'var(--ink)',borderRadius:14,padding:20,border:(!k.dark&&!k.red)?'1.5px solid var(--border)':'none'}}>
+            <div style={{width:32,height:32,borderRadius:8,background:k.dark||k.red?'rgba(255,255,255,.12)':'var(--border)',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:14}}><Icon name={k.icon} size={16}/></div>
+            <p style={{fontSize:36,fontWeight:800,lineHeight:1,margin:0,letterSpacing:'-.02em'}}>{k.v}</p>
             <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.08em',marginTop:6,opacity:.7}}>{k.label}</p>
             <p style={{fontSize:8,fontWeight:500,marginTop:2,opacity:.4}}>{k.sub}</p>
           </div>
         ))}
       </div>
-
-      {/* Unidades */}
-      <div className="card p-5">
-        <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:16}}>Pedidos por Unidade</p>
-        <div className="flex gap-6">
-          {UNIDADES.map(u=>(
-            <div key={u} style={{flex:1}}>
-              <div className="flex justify-between mb-2">
-                <span style={{fontSize:10,fontWeight:700,color:'var(--ink)'}}>{u}</span>
-                <span style={{fontSize:10,fontWeight:800,color:'var(--red)'}}>{stats.porUnidade[u]||0}</span>
-              </div>
-              <div className="progress-track">
-                <div className="progress-fill" style={{width:`${((stats.porUnidade[u]||0)/stats.total*100)}%`,background:'var(--red)'}}/>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Charts row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div className="card p-5">
-          <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:16}}>Pipeline de Itens</p>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:16}}>
+        <div className="card" style={{padding:20}}>
+          <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:16}}>Pipeline</p>
           <div style={{display:'flex',alignItems:'center',gap:16}}>
-            <Donut size={100} slices={[{v:stats.pend,c:'#F59E0B'},{v:stats.cotac,c:'#2563EB'},{v:stats.conc,c:'#059669'},{v:stats.doado,c:'#DC1F1F'}]}/>
+            <Donut size={90} slices={[{v:stats.pend,c:'#F59E0B'},{v:stats.cotac,c:'#2563EB'},{v:stats.comprado,c:'#7C3AED'},{v:stats.conc,c:'#059669'},{v:stats.doado,c:'#DC1F1F'}]}/>
             <div style={{flex:1}}>
-              {[
-                {l:'Pendentes',v:stats.pend,c:'#F59E0B'},
-                {l:'Em Cotação',v:stats.cotac,c:'#2563EB'},
-                {l:'Concluídos',v:stats.conc,c:'#059669'},
-                {l:'Doados',v:stats.doado,c:'#DC1F1F'}
-              ].map((s,i)=>(
-                <div key={i} style={{marginBottom:8}}>
-                  <div className="flex justify-between mb-1">
-                    <div className="flex items-center gap-1.5">
-                      <div style={{width:7,height:7,borderRadius:'50%',background:s.c}}/>
-                      <span style={{fontSize:8,fontWeight:700,color:'var(--muted)',textTransform:'uppercase'}}>{s.l}</span>
-                    </div>
+              {[{l:'Pendente',v:stats.pend,c:'#F59E0B'},{l:'Em Cotação',v:stats.cotac,c:'#2563EB'},{l:'Comprado',v:stats.comprado,c:'#7C3AED'},{l:'Concluído',v:stats.conc,c:'#059669'},{l:'Doado',v:stats.doado,c:'#DC1F1F'}].map((s,i)=>(
+                <div key={i} style={{marginBottom:6}}>
+                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:2}}>
+                    <div style={{display:'flex',alignItems:'center',gap:5}}><div style={{width:6,height:6,borderRadius:'50%',background:s.c}}/><span style={{fontSize:8,fontWeight:700,color:'var(--muted)',textTransform:'uppercase'}}>{s.l}</span></div>
                     <span style={{fontSize:9,fontWeight:800,color:'var(--ink)'}}>{s.v}</span>
                   </div>
-                  <div className="progress-track">
-                    <div className="progress-fill" style={{width:stats.totalIt>0?`${s.v/stats.totalIt*100}%`:'0%',background:s.c}}/>
-                  </div>
+                  <div className="progress-track"><div className="progress-fill" style={{width:stats.totalIt>0?`${s.v/stats.totalIt*100}%`:'0%',background:s.c}}/></div>
                 </div>
               ))}
             </div>
           </div>
         </div>
-        <div className="card p-5">
+        <div className="card" style={{padding:20}}>
           <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:2}}>Pedidos por Semana</p>
           <p style={{fontSize:8,color:'var(--muted)',marginBottom:14,fontWeight:500}}>Últimas 8 semanas</p>
           <MiniBar data={stats.semanas} color="#DC1F1F"/>
         </div>
-        <div className="card p-5">
+        <div className="card" style={{padding:20}}>
           <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:2}}>Distribuição Semanal</p>
           <p style={{fontSize:8,color:'var(--muted)',marginBottom:14,fontWeight:500}}>Pico de solicitações</p>
           <MiniBar data={stats.pedDia} color="#1A4EC2"/>
         </div>
       </div>
-
-      {/* Rank rows */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div className="card p-5">
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+        <div className="card" style={{padding:20}}>
           <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:16}}>Top Solicitantes</p>
-          <div className="space-y-3">
-            {stats.rankSol.map(([nome,qtd],i)=>(
-              <div key={i} style={{display:'flex',alignItems:'center',gap:10}}>
-                <div style={{width:22,height:22,borderRadius:7,background:i===0?'var(--red)':i===1?'var(--ink)':'var(--smoke)',color:i<2?'#fff':'var(--muted)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:800,flexShrink:0}}>{i+1}</div>
-                <div style={{flex:1,minWidth:0}}>
-                  <div className="flex justify-between mb-1">
-                    <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',truncate:true}}>{nome}</span>
-                    <span style={{fontSize:10,fontWeight:800,color:'var(--muted)',marginLeft:8,flexShrink:0}}>{qtd}</span>
-                  </div>
-                  <div className="progress-track">
-                    <div className="progress-fill" style={{width:`${qtd/maxSol*100}%`,background:i===0?'var(--red)':'var(--ink)'}}/>
-                  </div>
+          {stats.rankSol.map(([nome,qtd],i)=>(
+            <div key={i} style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
+              <div style={{width:22,height:22,borderRadius:7,background:i===0?'var(--red)':i===1?'var(--ink)':'var(--smoke)',color:i<2?'#fff':'var(--muted)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:800,flexShrink:0}}>{i+1}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
+                  <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase'}}>{nome}</span>
+                  <span style={{fontSize:10,fontWeight:800,color:'var(--muted)'}}>{qtd}</span>
                 </div>
+                <div className="progress-track"><div className="progress-fill" style={{width:`${qtd/maxSol*100}%`,background:i===0?'var(--red)':'var(--ink)'}}/></div>
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
-        <div className="card p-5">
+        <div className="card" style={{padding:20}}>
           <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:16}}>Modelos Mais Solicitados</p>
-          <div className="space-y-3">
-            {stats.rankMod.map(([mod,qtd],i)=>(
-              <div key={i} style={{display:'flex',alignItems:'center',gap:10}}>
-                <div style={{width:22,height:22,borderRadius:7,background:i===0?'var(--ink)':'var(--smoke)',color:i===0?'#fff':'var(--muted)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:800,flexShrink:0}}>{i+1}</div>
-                <div style={{flex:1,minWidth:0}}>
-                  <div className="flex justify-between mb-1">
-                    <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase'}}>{mod}</span>
-                    <span style={{fontSize:10,fontWeight:800,color:'var(--muted)',marginLeft:8,flexShrink:0}}>{qtd}×</span>
-                  </div>
-                  <div className="progress-track">
-                    <div className="progress-fill" style={{width:`${qtd/maxMod*100}%`,background:'var(--ink)'}}/>
-                  </div>
+          {stats.rankMod.map(([mod,qtd],i)=>(
+            <div key={i} style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
+              <div style={{width:22,height:22,borderRadius:7,background:i===0?'var(--ink)':'var(--smoke)',color:i===0?'#fff':'var(--muted)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:800,flexShrink:0}}>{i+1}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
+                  <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase'}}>{mod}</span>
+                  <span style={{fontSize:10,fontWeight:800,color:'var(--muted)'}}>{qtd}×</span>
                 </div>
+                <div className="progress-track"><div className="progress-fill" style={{width:`${qtd/maxMod*100}%`,background:'var(--ink)'}}/></div>
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
   );
 }
 
-// ── Donor System ──────────────────────────────────────────────────────────
+// ── Donor System — MELHORIAS 2 e 3 ────────────────────────────────────────
+// Melhoria 2: digitar OS diretamente
+// Melhoria 3: busca no banco de veículos (vehicles), não em requests;
+//             todos do mesmo modelo exceto os entregues; recebidos primeiro
 function DonorSystem({requests,vehicles,loggedInUser}){
   const[step,setStep]=useState(1);
+  const[targetOSInput,setTargetOSInput]=useState('');
   const[targetOS,setTargetOS]=useState('');
   const[selectedItems,setSelectedItems]=useState([]);
   const[sourceOS,setSourceOS]=useState('');
   const[processing,setProcessing]=useState(false);
   const[done,setDone]=useState(false);
 
-  const targetRequest=useMemo(()=>requests.find(r=>String(r.os)===targetOS),[requests,targetOS]);
-  const sourceRequest=useMemo(()=>requests.find(r=>String(r.os)===sourceOS),[requests,sourceOS]);
+  // OS receptora: encontrar o pedido de compra pela OS digitada
+  const targetRequest=useMemo(()=>{
+    if(!targetOS)return null;
+    // Junta todos os pedidos da mesma OS em um único objeto para exibir peças
+    const matching=requests.filter(r=>String(r.os).trim()===targetOS.trim());
+    if(!matching.length)return null;
+    // Mescla peças de todos os pedidos da mesma OS
+    const base={...matching[0]};
+    const allItems=[];const seen=new Set();
+    matching.forEach(r=>(r.items||[]).forEach(it=>{const k=it.id||it.description;if(!seen.has(k)){seen.add(k);allItems.push(it);}}));
+    base.items=allItems;
+    return base;
+  },[requests,targetOS]);
+
+  // Peças pendentes / em cotação da OS receptora
   const targetItems=useMemo(()=>{
     if(!targetRequest)return[];
-    return(targetRequest.items||[]).filter(it=>it.status==='Pendente'||it.status==='Em Cotação');
+    return(targetRequest.items||[]).filter(it=>it.status==='Pendente'||it.status==='Em Cotação'||it.status==='Comprado');
   },[targetRequest]);
-  const targetModelo=targetRequest?.vehicleData?.modelo||'';
-  const suggestedDonors=useMemo(()=>{
-    if(!targetModelo)return[];
-    return requests.filter(r=>{
-      if(String(r.os)===targetOS)return false;
-      return(r.vehicleData?.modelo||'').trim().toLowerCase()===targetModelo.trim().toLowerCase()&&
-             (r.vehicleData?.localizacao||'').trim().toLowerCase()==='recebido';
+
+  const targetModelo=(targetRequest?.vehicleData?.modelo||'').trim().toLowerCase();
+
+  // MELHORIA 3: busca no banco de veículos (vehicles collection)
+  // Excluir a própria OS; excluir os com etapa/localizacao = "Entregue"
+  // Recebidos sempre primeiro
+  const vehicleCandidates=useMemo(()=>{
+    if(!targetModelo)return{recebidos:[],outros:[]};
+    const candidatos=vehicles.filter(v=>{
+      if(String(v.os).trim()===targetOS.trim())return false;// exclui a própria
+      const modelo=(v.modelo||'').trim().toLowerCase();
+      if(modelo!==targetModelo)return false;
+      // Exclui entregues
+      const loc=(v.localizacao||'').trim().toLowerCase();
+      const etapa=(v.etapa||'').trim().toLowerCase();
+      if(loc==='entregue'||etapa==='entregue')return false;
+      return true;
     });
-  },[requests,targetModelo,targetOS]);
-  const otherDonors=useMemo(()=>{
-    const ids=new Set(suggestedDonors.map(r=>r.id));
-    return requests.filter(r=>String(r.os)!==targetOS&&!ids.has(r.id));
-  },[requests,targetOS,suggestedDonors]);
+    const recebidos=candidatos.filter(v=>(v.localizacao||'').trim().toLowerCase()==='recebido');
+    const outros=candidatos.filter(v=>(v.localizacao||'').trim().toLowerCase()!=='recebido');
+    return{recebidos,outros};
+  },[vehicles,targetModelo,targetOS]);
+
+  // Encontra o request da OS doadora (se existir) para exibir info extra
+  const sourceVehicle=useMemo(()=>vehicles.find(v=>String(v.os).trim()===sourceOS.trim()),[vehicles,sourceOS]);
 
   const toggleItem=(id)=>setSelectedItems(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
-  const reset=()=>{setStep(1);setTargetOS('');setSelectedItems([]);setSourceOS('');setDone(false);};
+  const reset=()=>{setStep(1);setTargetOSInput('');setTargetOS('');setSelectedItems([]);setSourceOS('');setDone(false);};
+
+  const confirmStep1=()=>{
+    const t=targetOSInput.trim();
+    if(!t)return alert('Digite o número da OS receptora.');
+    if(!targetRequest){alert('Nenhum pedido encontrado para a OS '+t+'.');return;}
+    if(targetItems.length===0){alert('Esta OS não possui peças pendentes para transferir.');return;}
+    setTargetOS(t);setStep(2);
+  };
 
   const handleConfirm=async()=>{
-    if(!targetRequest||!sourceRequest||selectedItems.length===0)return;
+    if(!targetRequest||!sourceOS||selectedItems.length===0)return;
     if(!window.confirm(`Transferir ${selectedItems.length} peça(s) da OS #${targetOS} para a OS #${sourceOS}?`))return;
     setProcessing(true);
     try{
       const batch=db.batch();
-      const newTgt=[...targetRequest.items];
-      selectedItems.forEach(itemId=>{
-        const idx=newTgt.findIndex(it=>it.id===itemId);
-        if(idx!==-1)newTgt[idx]={...newTgt[idx],status:'Doado',statusOriginal:'Doado',donatedTo:sourceOS,donatedAt:Date.now()};
+      // Atualiza itens na OS receptora — marca como Doado em TODOS os docs com essa OS
+      const matchingDocs=requests.filter(r=>String(r.os).trim()===targetOS.trim());
+      matchingDocs.forEach(req=>{
+        const newItems=[...req.items];let changed=false;
+        selectedItems.forEach(itemId=>{
+          const idx=newItems.findIndex(it=>it.id===itemId);
+          if(idx!==-1){newItems[idx]={...newItems[idx],status:'Doado',statusOriginal:'Doado',donatedTo:sourceOS,donatedAt:Date.now()};changed=true;}
+        });
+        if(changed)batch.update(col('requests').doc(req.id),{items:newItems});
       });
-      batch.update(col('requests').doc(targetRequest.id),{items:newTgt});
+      // Cria novos pedidos na OS doadora — encontra ou cria request
+      const existingDonorReqs=requests.filter(r=>String(r.os).trim()===sourceOS.trim());
       const toTransfer=selectedItems.map(itemId=>{
         const orig=targetRequest.items.find(it=>it.id===itemId);
         return{...orig,id:Date.now()+Math.random(),status:'Pendente',statusOriginal:undefined,donatedFrom:targetOS,price:undefined,supplier:undefined,deliveryDate:undefined,actualDeliveryDate:undefined};
       });
-      batch.update(col('requests').doc(sourceRequest.id),{items:[...(sourceRequest.items||[]),...toTransfer]});
+      if(existingDonorReqs.length>0){
+        const donorReq=existingDonorReqs[0];
+        batch.update(col('requests').doc(donorReq.id),{items:[...(donorReq.items||[]),...toTransfer]});
+      } else {
+        // Cria novo pedido para a OS doadora com dados do veículo
+        const newRef=col('requests').doc();
+        batch.set(newRef,{os:sourceOS,responsavel:loggedInUser?.user||'Sistema',vehicleData:sourceVehicle||{os:sourceOS},unidade:'Unidade 1',items:toTransfer,timestamp:Date.now(),status:'Pendente'});
+      }
       await col('donations').add({targetOS,sourceOS,itemIds:selectedItems,donatedBy:loggedInUser?.user||'Sistema',timestamp:Date.now()});
       await batch.commit();
       setDone(true);
@@ -511,45 +513,38 @@ function DonorSystem({requests,vehicles,loggedInUser}){
 
   if(done)return(
     <div style={{maxWidth:440,margin:'0 auto',background:'#fff',borderRadius:20,border:'1.5px solid var(--border)',padding:40,textAlign:'center'}} className="fade-up">
-      <div style={{width:64,height:64,background:'var(--red-light)',borderRadius:18,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 20px'}}>
-        <Icon name="check-circle" size={32} className="" style={{color:'var(--red)'}}/>
-      </div>
-      <h2 className="serif" style={{fontSize:28,fontWeight:400,margin:'0 0 8px',color:'var(--ink)'}}>Transferência Concluída</h2>
+      <div style={{width:64,height:64,background:'#EDFAF3',borderRadius:18,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 20px'}}><Icon name="check-circle" size={32}/></div>
+      <h2 style={{fontSize:24,fontWeight:800,margin:'0 0 8px',letterSpacing:'-.02em'}}>Transferência Concluída</h2>
       <p style={{fontSize:12,color:'var(--muted)',marginBottom:20}}>{selectedItems.length} peça(s) da OS <strong>#{targetOS}</strong> → OS <strong>#{sourceOS}</strong></p>
       <div style={{background:'var(--smoke)',borderRadius:12,padding:'14px 16px',textAlign:'left',marginBottom:24}}>
         <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--red)',marginBottom:6}}>Resultado</p>
         <p style={{fontSize:11,color:'var(--ink)',margin:'0 0 4px'}}>• Itens marcados como <strong>Doado</strong> na OS #{targetOS}</p>
-        <p style={{fontSize:11,color:'var(--ink)',margin:0}}>• Pedidos criados na OS #{sourceOS}</p>
+        <p style={{fontSize:11,color:'var(--ink)',margin:0}}>• Pedido de compra criado/atualizado na OS #{sourceOS}</p>
       </div>
-      <button onClick={reset} className="btn-primary" style={{width:'100%',padding:'14px'}}>Nova Transferência</button>
+      <button onClick={reset} className="btn-primary" style={{width:'100%',padding:14}}>Nova Transferência</button>
     </div>
   );
 
   const steps=[{n:1,label:'OS Receptora',icon:'inbox'},{n:2,label:'Peças',icon:'package'},{n:3,label:'OS Doadora',icon:'send'}];
 
   return(
-    <div style={{maxWidth:680,margin:'0 auto'}} className="space-y-4 fade-up">
+    <div style={{maxWidth:680,margin:'0 auto'}} className="fade-up">
       {/* Header */}
-      <div style={{background:'var(--ink)',borderRadius:16,padding:'20px 24px',display:'flex',alignItems:'center',gap:14,color:'#fff'}}>
-        <div style={{width:44,height:44,background:'var(--red)',borderRadius:12,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-          <Icon name="git-merge" size={20}/>
-        </div>
+      <div style={{background:'var(--ink)',borderRadius:16,padding:'20px 24px',display:'flex',alignItems:'center',gap:14,color:'#fff',marginBottom:16}}>
+        <div style={{width:44,height:44,background:'var(--red)',borderRadius:12,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="git-merge" size={20}/></div>
         <div>
-          <h3 style={{margin:0,fontSize:18,fontWeight:700}}>Transferência de Peças</h3>
+          <h3 style={{margin:0,fontSize:18,fontWeight:800}}>Transferência de Peças</h3>
           <p style={{margin:0,fontSize:9,color:'rgba(255,255,255,.45)',textTransform:'uppercase',letterSpacing:'.1em',marginTop:2}}>Redirecionar pedido entre OS</p>
         </div>
       </div>
 
-      {/* Steps */}
-      <div className="card p-4">
+      {/* Steps indicator */}
+      <div className="card" style={{padding:16,marginBottom:16}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
           {steps.map((s,i)=>(
             <React.Fragment key={s.n}>
               <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:6}}>
-                <div className="step-dot" style={{
-                  background:step>s.n?'#059669':step===s.n?'var(--red)':'var(--smoke)',
-                  color:step>s.n||step===s.n?'#fff':'var(--muted)'
-                }}>
+                <div className="step-dot" style={{background:step>s.n?'#059669':step===s.n?'var(--red)':'var(--smoke)',color:step>s.n||step===s.n?'#fff':'var(--muted)'}}>
                   {step>s.n?<Icon name="check" size={14}/>:<Icon name={s.icon} size={14}/>}
                 </div>
                 <span style={{fontSize:7,fontWeight:800,textTransform:'uppercase',letterSpacing:'.08em',color:step===s.n?'var(--red)':step>s.n?'#059669':'var(--muted)'}}>{s.label}</span>
@@ -560,73 +555,92 @@ function DonorSystem({requests,vehicles,loggedInUser}){
         </div>
       </div>
 
-      {/* Step 1 */}
+      {/* PASSO 1 — Digitar OS receptora */}
       {step===1&&(
         <div className="card slide-in">
           <div style={{padding:'16px 20px',borderBottom:'1px solid var(--border)',background:'var(--smoke)'}}>
             <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--red)',margin:'0 0 2px'}}>Passo 1 de 3</p>
-            <h4 style={{margin:0,fontSize:15,fontWeight:700,color:'var(--ink)'}}>Qual OS precisa de peças?</h4>
-            <p style={{margin:0,fontSize:10,color:'var(--muted)',marginTop:2}}>Selecione o veículo que vai RECEBER as peças</p>
+            <h4 style={{margin:0,fontSize:15,fontWeight:800}}>Qual OS precisa de peças?</h4>
+            <p style={{margin:0,fontSize:10,color:'var(--muted)',marginTop:2}}>Digite o número da OS que vai RECEBER as peças</p>
           </div>
-          <div style={{padding:20}} className="space-y-4">
-            <select value={targetOS} onChange={e=>{setTargetOS(e.target.value);setSelectedItems([]);}} className="input" style={{fontWeight:700,textTransform:'uppercase',appearance:'auto'}}>
-              <option value="">Selecione a OS receptora...</option>
-              {requests.filter(r=>(r.items||[]).some(it=>it.status==='Pendente'||it.status==='Em Cotação')).sort((a,b)=>parseInt(a.os)-parseInt(b.os)).map(r=>(
-                <option key={r.id} value={r.os}>OS #{r.os} — {r.vehicleData?.modelo||'Sem modelo'} ({r.items?.filter(it=>it.status==='Pendente'||it.status==='Em Cotação').length||0} peças)</option>
-              ))}
-            </select>
-            {targetRequest&&(
-              <div style={{background:'var(--ink)',borderRadius:12,padding:16,color:'#fff'}}>
-                <p style={{fontSize:7,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'rgba(255,255,255,.3)',margin:'0 0 6px'}}>Veículo selecionado</p>
-                <p style={{fontSize:20,fontWeight:700,margin:'0 0 10px',textTransform:'uppercase'}}>{targetRequest.vehicleData?.modelo||'—'}</p>
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
-                  {[['Chassi',targetRequest.vehicleData?.chassi||'—',true],['Localização',targetRequest.vehicleData?.localizacao||'—'],['OS','#'+targetRequest.os]].map(([l,v,mono])=>(
-                    <div key={l}>
-                      <p style={{fontSize:7,color:'rgba(255,255,255,.3)',fontWeight:700,textTransform:'uppercase',margin:'0 0 2px'}}>{l}</p>
-                      <p className={mono?'mono':''} style={{fontSize:11,fontWeight:700,color:'rgba(255,255,255,.85)',margin:0}}>{v}</p>
-                    </div>
-                  ))}
-                </div>
-                <div style={{marginTop:10,paddingTop:10,borderTop:'1px solid rgba(255,255,255,.1)'}}>
-                  <span style={{fontSize:8,color:'rgba(255,255,255,.4)'}}>{targetItems.length} peças disponíveis para transferir</span>
-                </div>
+          <div style={{padding:20}}>
+            {/* MELHORIA 2: input de texto em vez de select */}
+            <div style={{marginBottom:16}}>
+              <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',display:'block',marginBottom:6}}>Número da OS Receptora</label>
+              <div style={{display:'flex',gap:10}}>
+                <input
+                  type="text" inputMode="numeric"
+                  value={targetOSInput}
+                  onChange={e=>setTargetOSInput(sanitize(e.target.value))}
+                  onKeyDown={e=>e.key==='Enter'&&confirmStep1()}
+                  placeholder="Ex: 12345"
+                  className="input"
+                  style={{fontSize:22,fontWeight:800,letterSpacing:'.05em',flex:1}}
+                  autoFocus
+                />
+                <button onClick={confirmStep1} className="btn-primary" style={{padding:'12px 20px',flexShrink:0}}>
+                  Buscar <Icon name="search" size={15}/>
+                </button>
               </div>
-            )}
-            <button onClick={()=>setStep(2)} disabled={!targetOS||targetItems.length===0} className="btn-primary" style={{width:'100%',padding:'13px'}}>
+            </div>
+
+            {/* Preview do request encontrado */}
+            {targetOSInput.trim()&&(()=>{
+              const found=requests.filter(r=>String(r.os).trim()===targetOSInput.trim());
+              if(!found.length)return <p style={{fontSize:10,color:'var(--muted)',textAlign:'center',padding:'12px 0'}}>Nenhum pedido encontrado para OS #{targetOSInput.trim()}</p>;
+              const allItems=[];const seen=new Set();
+              found.forEach(r=>(r.items||[]).forEach(it=>{const k=it.id||it.description;if(!seen.has(k)){seen.add(k);allItems.push(it);}}));
+              const pending=allItems.filter(it=>it.status==='Pendente'||it.status==='Em Cotação'||it.status==='Comprado');
+              const vData=found[0].vehicleData||{};
+              return(
+                <div style={{background:'var(--ink)',borderRadius:12,padding:16,color:'#fff'}}>
+                  <p style={{fontSize:7,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'rgba(255,255,255,.3)',margin:'0 0 6px'}}>Pedido encontrado</p>
+                  <p style={{fontSize:20,fontWeight:800,margin:'0 0 10px',textTransform:'uppercase'}}>{vData.modelo||'—'}</p>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,marginBottom:10}}>
+                    {[['Chassi',vData.chassi||'—',true],['Local',vData.localizacao||'—'],['OS','#'+found[0].os]].map(([l,v,mono])=>(
+                      <div key={l}><p style={{fontSize:7,color:'rgba(255,255,255,.3)',fontWeight:700,textTransform:'uppercase',margin:'0 0 2px'}}>{l}</p>
+                      <p className={mono?'mono':''} style={{fontSize:11,fontWeight:700,color:'rgba(255,255,255,.85)',margin:0}}>{v}</p></div>
+                    ))}
+                  </div>
+                  <div style={{borderTop:'1px solid rgba(255,255,255,.1)',paddingTop:8}}>
+                    <span style={{fontSize:8,color:pending.length>0?'#AAE6C5':'rgba(255,255,255,.4)',fontWeight:700}}>
+                      {pending.length>0?`✓ ${pending.length} peça(s) disponíveis para transferir`:'✗ Nenhuma peça pendente nesta OS'}
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <button onClick={confirmStep1} disabled={!targetOSInput.trim()} className="btn-primary" style={{width:'100%',padding:13,marginTop:16}}>
               Selecionar Peças <Icon name="arrow-right" size={15}/>
             </button>
-            {targetOS&&targetItems.length===0&&<p style={{fontSize:9,fontWeight:800,textAlign:'center',color:'#F59E0B',textTransform:'uppercase'}}>Esta OS não possui peças pendentes</p>}
           </div>
         </div>
       )}
 
-      {/* Step 2 */}
+      {/* PASSO 2 — Selecionar peças */}
       {step===2&&(
         <div className="card slide-in">
           <div style={{padding:'16px 20px',borderBottom:'1px solid var(--border)',background:'var(--smoke)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
             <div>
               <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--red)',margin:'0 0 2px'}}>Passo 2 de 3</p>
-              <h4 style={{margin:0,fontSize:15,fontWeight:700}}>Quais peças transferir?</h4>
+              <h4 style={{margin:0,fontSize:15,fontWeight:800}}>Quais peças transferir?</h4>
               <p style={{margin:0,fontSize:10,color:'var(--muted)',marginTop:2}}>OS #{targetOS} — {targetRequest?.vehicleData?.modelo}</p>
             </div>
             <div style={{background:'var(--red)',color:'#fff',borderRadius:10,padding:'8px 14px',textAlign:'center'}}>
-              <p className="serif" style={{fontSize:26,lineHeight:1,margin:0}}>{selectedItems.length}</p>
+              <p style={{fontSize:24,fontWeight:800,lineHeight:1,margin:0}}>{selectedItems.length}</p>
               <p style={{fontSize:7,fontWeight:800,textTransform:'uppercase',margin:0,opacity:.8}}>selecionadas</p>
             </div>
           </div>
           <div style={{padding:20}}>
-            <div className="scroll-y space-y-2" style={{maxHeight:'50vh'}}>
+            <div className="scroll-y" style={{maxHeight:'50vh',display:'flex',flexDirection:'column',gap:8}}>
               {targetItems.map((item,idx)=>{
                 const isSel=selectedItems.includes(item.id);
                 return(
-                  <label key={item.id||idx} style={{
-                    display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderRadius:10,
-                    border:`1.5px solid ${isSel?'var(--red)':'var(--border)'}`,
-                    background:isSel?'var(--red-light)':'#fff',cursor:'pointer',transition:'all .15s'
-                  }}>
+                  <label key={item.id||idx} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderRadius:10,border:`1.5px solid ${isSel?'var(--red)':'var(--border)'}`,background:isSel?'var(--red-light)':'#fff',cursor:'pointer',transition:'all .15s'}}>
                     <input type="checkbox" checked={isSel} onChange={()=>toggleItem(item.id)} style={{width:16,height:16,accentColor:'var(--red)',flexShrink:0}}/>
                     {item.photo?<img src={item.photo} style={{width:48,height:48,borderRadius:8,objectFit:'cover',border:'1px solid var(--border)',flexShrink:0}} alt="Peça"/>
-                      :<div style={{width:48,height:48,borderRadius:8,background:'var(--smoke)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="package" size={18} className="text-muted"/></div>}
+                      :<div style={{width:48,height:48,borderRadius:8,background:'var(--smoke)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="package" size={18}/></div>}
                     <div style={{flex:1,minWidth:0}}>
                       <p style={{margin:'0 0 4px',fontWeight:700,textTransform:'uppercase',fontSize:12}}>{item.description}</p>
                       <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
@@ -647,48 +661,50 @@ function DonorSystem({requests,vehicles,loggedInUser}){
         </div>
       )}
 
-      {/* Step 3 */}
+      {/* PASSO 3 — Escolher OS doadora (do banco de veículos) */}
       {step===3&&(
         <div className="card slide-in">
           <div style={{padding:'16px 20px',borderBottom:'1px solid var(--border)',background:'var(--smoke)'}}>
             <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--red)',margin:'0 0 2px'}}>Passo 3 de 3</p>
-            <h4 style={{margin:0,fontSize:15,fontWeight:700}}>De qual OS virão as peças?</h4>
-            <p style={{margin:0,fontSize:10,color:'var(--muted)',marginTop:2}}>O pedido será transferido para este veículo</p>
+            <h4 style={{margin:0,fontSize:15,fontWeight:800}}>De qual OS virão as peças?</h4>
+            <p style={{margin:0,fontSize:10,color:'var(--muted)',marginTop:2}}>Veículos do mesmo modelo — <strong>recebidos têm prioridade</strong></p>
           </div>
-          <div style={{padding:20}} className="space-y-4">
-            {/* Resumo peças */}
-            <div style={{background:'var(--ink)',borderRadius:12,padding:14,color:'#fff'}}>
-              <p style={{fontSize:7,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'rgba(255,255,255,.3)',margin:'0 0 8px'}}>Peças da OS #{targetOS}</p>
+          <div style={{padding:20}}>
+            {/* Resumo */}
+            <div style={{background:'var(--ink)',borderRadius:12,padding:14,color:'#fff',marginBottom:16}}>
+              <p style={{fontSize:7,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'rgba(255,255,255,.3)',margin:'0 0 8px'}}>Peças a transferir da OS #{targetOS}</p>
               <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
-                {selectedItems.map(itemId=>{
-                  const it=targetRequest?.items.find(i=>i.id===itemId);
-                  return it?(<span key={itemId} style={{background:'rgba(220,31,31,.25)',border:'1px solid rgba(220,31,31,.4)',color:'#FFAAAA',padding:'3px 8px',borderRadius:6,fontSize:9,fontWeight:700,textTransform:'uppercase'}}>{it.quantity}× {it.description}</span>):null;
-                })}
+                {selectedItems.map(itemId=>{const it=targetRequest?.items.find(i=>i.id===itemId);return it?(<span key={itemId} style={{background:'rgba(220,31,31,.25)',border:'1px solid rgba(220,31,31,.4)',color:'#FFAAAA',padding:'3px 8px',borderRadius:6,fontSize:9,fontWeight:700,textTransform:'uppercase'}}>{it.quantity}× {it.description}</span>):null;})}
               </div>
             </div>
 
-            {suggestedDonors.length>0&&(
-              <div>
+            {/* MELHORIA 3: Seção RECEBIDOS */}
+            {vehicleCandidates.recebidos.length>0&&(
+              <div style={{marginBottom:16}}>
                 <div className="divider" style={{marginBottom:12}}>
-                  <span style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--red)',padding:'3px 10px',background:'var(--red-light)',borderRadius:999,border:'1px solid #FFBDBD',whiteSpace:'nowrap'}}>✦ Sugeridas — mesmo modelo + Recebido</span>
+                  <span style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'#059669',padding:'3px 10px',background:'#EDFAF3',borderRadius:999,border:'1px solid #AAE6C5',whiteSpace:'nowrap',flexShrink:0}}>
+                    ✦ Recebidos — Prioridade · Mesmo modelo
+                  </span>
                 </div>
-                <div className="space-y-2">
-                  {suggestedDonors.map((r,i)=>(
-                    <div key={r.id} onClick={()=>setSourceOS(String(r.os))} className={`donor-card ${String(r.os)===sourceOS?'selected':''}`}>
+                <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                  {vehicleCandidates.recebidos.map((v,i)=>(
+                    <div key={v.os} onClick={()=>setSourceOS(String(v.os))} className={`donor-card ${String(v.os)===sourceOS?'selected':''}`}>
                       <div style={{display:'flex',alignItems:'center',gap:12}}>
-                        <input type="radio" name="sourceOS" checked={String(r.os)===sourceOS} onChange={()=>setSourceOS(String(r.os))} style={{width:16,height:16,accentColor:'var(--red)',flexShrink:0}}/>
+                        <input type="radio" name="sourceOS" checked={String(v.os)===sourceOS} onChange={()=>setSourceOS(String(v.os))} style={{width:16,height:16,accentColor:'var(--red)',flexShrink:0}}/>
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:2}}>
-                            <span style={{fontSize:14,fontWeight:800,color:'var(--ink)'}}>OS #{r.os}</span>
+                            <span style={{fontSize:14,fontWeight:800,color:'var(--ink)'}}>OS #{v.os}</span>
                             {i===0&&<span className="badge badge-admin">Melhor opção</span>}
                             <span style={{fontSize:8,fontWeight:800,color:'#059669',background:'#EDFAF3',border:'1px solid #AAE6C5',padding:'2px 8px',borderRadius:999}}>📍 Recebido</span>
                           </div>
-                          <p style={{margin:0,fontSize:10,fontWeight:600,textTransform:'uppercase',color:'var(--muted)'}}>{r.vehicleData?.modelo}</p>
-                          <p className="mono" style={{margin:0,fontSize:9,color:'var(--muted)',marginTop:2}}>{r.vehicleData?.chassi}</p>
+                          <p style={{margin:0,fontSize:10,fontWeight:700,textTransform:'uppercase',color:'var(--muted)'}}>{v.modelo}</p>
+                          <div style={{display:'flex',gap:10,marginTop:2}}>
+                            <p className="mono" style={{margin:0,fontSize:9,color:'var(--muted)'}}>{v.chassi}</p>
+                            {v.cor&&<p style={{margin:0,fontSize:9,color:'var(--muted)'}}>{v.cor}</p>}
+                          </div>
                         </div>
                         <div style={{textAlign:'right',flexShrink:0}}>
-                          <p style={{fontSize:9,fontWeight:800,color:'var(--muted)',margin:0}}>{r.items?.length||0} peças</p>
-                          <p style={{fontSize:8,color:'var(--muted)',margin:0}}>{r.responsavel}</p>
+                          <p style={{fontSize:8,fontWeight:700,background:'var(--smoke)',color:'var(--muted)',padding:'2px 8px',borderRadius:6,margin:0}}>{v.etapa||'—'}</p>
                         </div>
                       </div>
                     </div>
@@ -697,45 +713,69 @@ function DonorSystem({requests,vehicles,loggedInUser}){
               </div>
             )}
 
-            <div>
-              <div className="divider" style={{marginBottom:12}}>
-                <span style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.08em',color:'var(--muted)',whiteSpace:'nowrap'}}>{suggestedDonors.length>0?'Outras OS':'Todas as OS disponíveis'}</span>
-              </div>
-              <div className="scroll-y space-y-2" style={{maxHeight:220}}>
-                {otherDonors.map(r=>(
-                  <div key={r.id} onClick={()=>setSourceOS(String(r.os))} className={`donor-card ${String(r.os)===sourceOS?'selected':''}`} style={{padding:'10px 14px'}}>
-                    <div style={{display:'flex',alignItems:'center',gap:10}}>
-                      <input type="radio" name="sourceOS" checked={String(r.os)===sourceOS} onChange={()=>setSourceOS(String(r.os))} style={{width:15,height:15,accentColor:'var(--red)',flexShrink:0}}/>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{display:'flex',alignItems:'center',gap:8}}>
-                          <span style={{fontSize:13,fontWeight:800}}>OS #{r.os}</span>
-                          <span style={{fontSize:8,fontWeight:700,background:'var(--smoke)',color:'var(--muted)',padding:'2px 7px',borderRadius:999,textTransform:'uppercase'}}>{r.vehicleData?.localizacao||'—'}</span>
+            {/* Outros veículos do mesmo modelo */}
+            {vehicleCandidates.outros.length>0&&(
+              <div style={{marginBottom:16}}>
+                <div className="divider" style={{marginBottom:12}}>
+                  <span style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.08em',color:'var(--muted)',whiteSpace:'nowrap',flexShrink:0}}>
+                    {vehicleCandidates.recebidos.length>0?'Outros veículos do mesmo modelo':'Todos os veículos do mesmo modelo'}
+                  </span>
+                </div>
+                <div className="scroll-y" style={{maxHeight:200,display:'flex',flexDirection:'column',gap:8}}>
+                  {vehicleCandidates.outros.map(v=>(
+                    <div key={v.os} onClick={()=>setSourceOS(String(v.os))} className={`donor-card ${String(v.os)===sourceOS?'selected':''}`} style={{padding:'10px 14px'}}>
+                      <div style={{display:'flex',alignItems:'center',gap:10}}>
+                        <input type="radio" name="sourceOS" checked={String(v.os)===sourceOS} onChange={()=>setSourceOS(String(v.os))} style={{width:15,height:15,accentColor:'var(--red)',flexShrink:0}}/>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{display:'flex',alignItems:'center',gap:8}}>
+                            <span style={{fontSize:13,fontWeight:800}}>OS #{v.os}</span>
+                            <span style={{fontSize:8,fontWeight:700,background:'var(--smoke)',color:'var(--muted)',padding:'2px 7px',borderRadius:999,textTransform:'uppercase'}}>{v.localizacao||'—'}</span>
+                          </div>
+                          <p style={{margin:0,fontSize:9,color:'var(--muted)',textTransform:'uppercase',fontWeight:600}}>{v.modelo} · <span className="mono">{v.chassi}</span></p>
                         </div>
-                        <p style={{margin:0,fontSize:9,color:'var(--muted)',textTransform:'uppercase',fontWeight:600}}>{r.vehicleData?.modelo} · <span className="mono">{r.vehicleData?.chassi}</span></p>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {vehicleCandidates.recebidos.length===0&&vehicleCandidates.outros.length===0&&(
+              <div style={{textAlign:'center',padding:'32px 0',color:'var(--muted)'}}>
+                <Icon name="search" size={28} style={{margin:'0 auto 10px',display:'block'}}/>
+                <p style={{fontSize:10,fontWeight:700,textTransform:'uppercase',margin:0}}>Nenhum veículo do mesmo modelo encontrado</p>
+                <p style={{fontSize:9,margin:'4px 0 0'}}>Modelo: {targetRequest?.vehicleData?.modelo}</p>
+              </div>
+            )}
+
+            {/* MELHORIA 2: também permite digitar uma OS manualmente */}
+            <div style={{marginBottom:16}}>
+              <div className="divider" style={{marginBottom:12}}>
+                <span style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.08em',color:'var(--muted)',whiteSpace:'nowrap',flexShrink:0}}>Ou digitar outra OS</span>
+              </div>
+              <div style={{display:'flex',gap:8}}>
+                <input type="text" inputMode="numeric" placeholder="Número da OS doadora" className="input" style={{fontSize:14,fontWeight:700}}
+                  value={sourceOS} onChange={e=>setSourceOS(sanitize(e.target.value))}/>
               </div>
             </div>
 
+            {/* Resumo */}
             {sourceOS&&(
-              <div style={{background:'var(--ink)',borderRadius:12,padding:14,color:'#fff'}}>
+              <div style={{background:'var(--ink)',borderRadius:12,padding:14,color:'#fff',marginBottom:16}}>
                 <p style={{fontSize:7,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'rgba(255,255,255,.3)',margin:'0 0 10px'}}>Resumo da operação</p>
                 <div style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',gap:8,alignItems:'center',textAlign:'center'}}>
                   <div style={{background:'rgba(255,255,255,.05)',borderRadius:10,padding:'10px 8px'}}>
                     <p style={{fontSize:7,color:'rgba(255,255,255,.3)',fontWeight:700,textTransform:'uppercase',margin:'0 0 4px'}}>OS Receptora</p>
-                    <p className="serif" style={{fontSize:24,color:'#FFAAAA',margin:0}}>#{targetOS}</p>
+                    <p style={{fontSize:22,fontWeight:800,color:'#FFAAAA',margin:0,letterSpacing:'-.01em'}}>#{targetOS}</p>
                     <p style={{fontSize:9,color:'rgba(255,255,255,.4)',margin:0}}>{targetRequest?.vehicleData?.modelo}</p>
                   </div>
                   <div style={{textAlign:'center'}}>
-                    <Icon name="arrow-right" size={18} className="" style={{color:'var(--red)'}}/>
-                    <p style={{fontSize:7,color:'rgba(255,255,255,.3)',fontWeight:700,textTransform:'uppercase',margin:'4px 0 0'}}>{selectedItems.length} peça(s)</p>
+                    <Icon name="arrow-right" size={18}/><p style={{fontSize:7,color:'rgba(255,255,255,.3)',fontWeight:700,textTransform:'uppercase',margin:'4px 0 0'}}>{selectedItems.length} peça(s)</p>
                   </div>
                   <div style={{background:'rgba(255,255,255,.05)',borderRadius:10,padding:'10px 8px'}}>
                     <p style={{fontSize:7,color:'rgba(255,255,255,.3)',fontWeight:700,textTransform:'uppercase',margin:'0 0 4px'}}>OS Doadora</p>
-                    <p className="serif" style={{fontSize:24,color:'#fff',margin:0}}>#{sourceOS}</p>
-                    <p style={{fontSize:9,color:'rgba(255,255,255,.4)',margin:0}}>{sourceRequest?.vehicleData?.modelo}</p>
+                    <p style={{fontSize:22,fontWeight:800,color:'#fff',margin:0,letterSpacing:'-.01em'}}>#{sourceOS}</p>
+                    <p style={{fontSize:9,color:'rgba(255,255,255,.4)',margin:0}}>{sourceVehicle?.modelo||'—'}</p>
                   </div>
                 </div>
               </div>
@@ -743,7 +783,7 @@ function DonorSystem({requests,vehicles,loggedInUser}){
 
             <div style={{display:'flex',gap:10}}>
               <button onClick={()=>setStep(2)} className="btn-ghost" style={{flex:1}}>← Voltar</button>
-              <button onClick={handleConfirm} disabled={!sourceOS||processing} className="btn-primary" style={{flex:2,padding:'13px'}}>
+              <button onClick={handleConfirm} disabled={!sourceOS||processing} className="btn-primary" style={{flex:2,padding:13}}>
                 {processing?<Icon name="refresh-cw" size={15} className="spin"/>:<Icon name="check" size={15}/>}
                 {processing?'Processando...':'Confirmar Transferência'}
               </button>
@@ -755,7 +795,7 @@ function DonorSystem({requests,vehicles,loggedInUser}){
   );
 }
 
-// ── Request Form ──────────────────────────────────────────────────────────
+// ── Request Form — MELHORIA 1 (exibe todas peças mescladas da OS) ──────────
 function RequestForm({user,loggedInUser,vehiclesDB,requests}){
   const[os,setOs]=useState('');const[vehicle,setVehicle]=useState(null);const[unidade,setUnidade]=useState('Unidade 1');
   const[items,setItems]=useState([{id:Date.now(),description:'',quantity:1,photo:null,status:'Pendente'}]);
@@ -766,26 +806,22 @@ function RequestForm({user,loggedInUser,vehiclesDB,requests}){
   const onOSBlur=()=>{const t=String(os).trim();if(!t)return;const f=vehiclesDB.find(v=>String(v.os).trim()===t);if(f)setVehicle(f);else{setVehicle(null);alert('OS não cadastrada.');}};
 
   const compressImage=async(file)=>{
-    return new Promise((resolve)=>{
-      const reader=new FileReader();
-      reader.onload=(e)=>{const img=new Image();img.onload=()=>{const canvas=document.createElement('canvas');const ctx=canvas.getContext('2d');let w=img.width,h=img.height;const max=1024;if(w>h&&w>max){h*=max/w;w=max;}else if(h>max){w*=max/h;h=max;}canvas.width=w;canvas.height=h;ctx.drawImage(img,0,0,w,h);resolve(canvas.toDataURL('image/jpeg',.7));};img.src=e.target.result;};reader.readAsDataURL(file);
+    return new Promise(resolve=>{
+      const r=new FileReader();r.onload=e=>{const img=new Image();img.onload=()=>{const c=document.createElement('canvas');const ctx=c.getContext('2d');let w=img.width,h=img.height;const mx=1024;if(w>h&&w>mx){h*=mx/w;w=mx;}else if(h>mx){w*=mx/h;h=mx;}c.width=w;c.height=h;ctx.drawImage(img,0,0,w,h);resolve(c.toDataURL('image/jpeg',.7));};img.src=e.target.result;};r.readAsDataURL(file);
     });
   };
-
   const handleImageUpload=async(itemId,file)=>{
     setCompressing(true);
-    try{const compressed=await compressImage(file);setItems(p=>p.map(i=>i.id===itemId?{...i,photo:compressed}:i));setSemFoto(p=>p.filter(id=>id!==itemId));}
+    try{const c=await compressImage(file);setItems(p=>p.map(i=>i.id===itemId?{...i,photo:c}:i));setSemFoto(p=>p.filter(id=>id!==itemId));}
     catch{alert('Erro ao processar imagem.');}
     setCompressing(false);
   };
-
   const salvar=async()=>{
     setSubmitting(true);
-    try{await col('requests').add({os,responsavel:loggedInUser.user,localizacaoSolicitacao:'-',vehicleData:vehicle,unidade,items,timestamp:Date.now(),status:'Pendente',userId:user?.uid||'anon'});setDone(true);setShowDup(false);}
+    try{await col('requests').add({os,responsavel:loggedInUser.user,vehicleData:vehicle,unidade,items,timestamp:Date.now(),status:'Pendente',userId:user?.uid||'anon'});setDone(true);setShowDup(false);}
     catch{alert('Erro ao salvar pedido.');}
     setSubmitting(false);
   };
-
   const submit=async e=>{
     e.preventDefault();
     if(!os.trim())return alert('OS obrigatória.');
@@ -798,26 +834,33 @@ function RequestForm({user,loggedInUser,vehiclesDB,requests}){
     await salvar();
   };
 
+  // MELHORIA 1: peças já cadastradas na mesma OS (mescladas)
+  const existingItemsForOS=useMemo(()=>{
+    if(!os.trim())return[];
+    const matching=requests.filter(r=>String(r.os).trim()===os.trim());
+    const all=[];const seen=new Set();
+    matching.forEach(r=>(r.items||[]).forEach(it=>{const k=it.id||it.description;if(!seen.has(k)){seen.add(k);all.push(it);}}));
+    return all;
+  },[requests,os]);
+
   if(done)return(
-    <div style={{maxWidth:420,margin:'0 auto',background:'#fff',borderRadius:20,border:'1.5px solid var(--border)',padding:'40px',textAlign:'center'}} className="fade-up">
-      <div style={{width:64,height:64,background:'#EDFAF3',borderRadius:18,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 20px'}}>
-        <Icon name="check-circle" size={32}/>
-      </div>
-      <h2 className="serif" style={{fontSize:28,fontWeight:400,margin:'0 0 8px'}}>Pedido Enviado!</h2>
+    <div style={{maxWidth:420,margin:'0 auto',background:'#fff',borderRadius:20,border:'1.5px solid var(--border)',padding:40,textAlign:'center'}} className="fade-up">
+      <div style={{width:64,height:64,background:'#EDFAF3',borderRadius:18,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 20px'}}><Icon name="check-circle" size={32}/></div>
+      <h2 style={{fontSize:24,fontWeight:800,margin:'0 0 8px',letterSpacing:'-.02em'}}>Pedido Enviado!</h2>
       <p style={{fontSize:12,color:'var(--muted)',marginBottom:24}}>OS #{os} — {unidade}</p>
       <button onClick={()=>{setDone(false);setOs('');setVehicle(null);setUnidade('Unidade 1');setItems([{id:Date.now(),description:'',quantity:1,photo:null,status:'Pendente'}]);}} className="btn-primary" style={{width:'100%',padding:14}}>Nova Solicitação</button>
     </div>
   );
 
   return(
-    <div className="space-y-4 fade-up">
-      {/* Foto modal */}
+    <div className="fade-up" style={{paddingBottom:16}}>
+      {/* Modal Foto */}
       {showFoto&&(
         <div style={{position:'fixed',inset:0,zIndex:600,background:'rgba(0,0,0,.8)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
           <div style={{background:'#fff',borderRadius:20,overflow:'hidden',maxWidth:360,width:'100%',boxShadow:'0 32px 64px rgba(0,0,0,.3)'}}>
             <div style={{background:'var(--red)',padding:'24px 20px',textAlign:'center',color:'#fff'}}>
               <div style={{width:52,height:52,background:'rgba(255,255,255,.2)',borderRadius:14,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 12px'}}><Icon name="camera" size={26}/></div>
-              <h3 style={{margin:0,fontSize:17,fontWeight:700}}>Foto Obrigatória</h3>
+              <h3 style={{margin:0,fontSize:17,fontWeight:800}}>Foto Obrigatória</h3>
             </div>
             <div style={{padding:20}}>
               <p style={{fontSize:12,color:'var(--muted)',textAlign:'center',marginBottom:16}}>{semFoto.length} item(s) sem foto.</p>
@@ -826,34 +869,31 @@ function RequestForm({user,loggedInUser,vehiclesDB,requests}){
           </div>
         </div>
       )}
-      {/* Dup modal */}
+      {/* Modal Duplicata */}
       {showDup&&(
         <div style={{position:'fixed',inset:0,zIndex:600,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
           <div style={{background:'#fff',borderRadius:20,overflow:'hidden',maxWidth:560,width:'100%',boxShadow:'0 32px 64px rgba(0,0,0,.3)'}}>
             <div style={{background:'var(--ink)',padding:'20px 24px',display:'flex',alignItems:'center',gap:14,color:'#fff',borderBottom:'4px solid var(--red)'}}>
               <div style={{width:44,height:44,background:'var(--red)',borderRadius:12,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="alert-triangle" size={20}/></div>
               <div>
-                <h3 style={{margin:0,fontSize:16,fontWeight:700}}>OS já possui pedido!</h3>
+                <h3 style={{margin:0,fontSize:16,fontWeight:800}}>OS já possui pedido!</h3>
                 <p style={{margin:0,fontSize:9,color:'rgba(255,255,255,.4)',textTransform:'uppercase',letterSpacing:'.08em',marginTop:2}}>OS #{os} — Será inclusão adicional</p>
               </div>
             </div>
-            <div style={{padding:16,maxHeight:'40vh',overflowY:'auto'}} className="space-y-3">
-              {dups.map((req,i)=>(
-                <div key={i} style={{background:'var(--smoke)',borderRadius:12,padding:12,border:'1px solid var(--border)'}}>
-                  <p style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',margin:'0 0 8px'}}>{new Date(req.timestamp).toLocaleDateString()} — {req.responsavel} ({req.unidade||'Unidade 1'})</p>
-                  <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
-                    {(req.items||[]).map((it,j)=>(
-                      <div key={j} style={{display:'flex',alignItems:'center',gap:6,background:'#fff',border:'1px solid var(--border)',borderRadius:8,padding:'4px 8px'}}>
-                        {it.photo&&<img src={it.photo} style={{width:28,height:28,borderRadius:6,objectFit:'cover'}}/>}
-                        <div>
-                          <p style={{fontSize:9,fontWeight:700,textTransform:'uppercase',margin:0}}>{it.description}</p>
-                          <StatusBadge status={it.status||'Pendente'} orig={it.statusOriginal}/>
-                        </div>
-                      </div>
-                    ))}
+            {/* MELHORIA 1: mostra peças já cadastradas de TODAS as solicitações mescladas */}
+            <div style={{padding:16,maxHeight:'40vh',overflowY:'auto'}}>
+              <p style={{fontSize:10,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',marginBottom:10,letterSpacing:'.08em'}}>Peças já cadastradas nesta OS:</p>
+              <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+                {existingItemsForOS.map((it,j)=>(
+                  <div key={j} style={{display:'flex',alignItems:'center',gap:6,background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:8,padding:'6px 10px'}}>
+                    {it.photo&&<img src={it.photo} style={{width:28,height:28,borderRadius:6,objectFit:'cover'}}/>}
+                    <div>
+                      <p style={{fontSize:9,fontWeight:700,textTransform:'uppercase',margin:0}}>{it.description}</p>
+                      <StatusBadge status={it.status||'Pendente'} orig={it.statusOriginal}/>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
             <div style={{padding:16,background:'var(--smoke)',borderTop:'1px solid var(--border)',display:'flex',gap:10}}>
               <button onClick={()=>{setShowDup(false);setDups([]);}} className="btn-ghost" style={{flex:1}}>Cancelar</button>
@@ -865,14 +905,14 @@ function RequestForm({user,loggedInUser,vehiclesDB,requests}){
         </div>
       )}
 
-      <div>
+      <div style={{marginBottom:20}}>
         <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.15em',color:'var(--red)',marginBottom:4}}>Operacional VRZ</p>
-        <h2 className="serif" style={{fontSize:36,fontWeight:400,margin:0,color:'var(--ink)'}}>Nova Requisição</h2>
+        <h2 style={{fontSize:32,fontWeight:800,margin:0,letterSpacing:'-.02em'}}>Nova Requisição</h2>
       </div>
 
-      <form onSubmit={submit} className="space-y-4">
+      <form onSubmit={submit} style={{display:'flex',flexDirection:'column',gap:16}}>
         <div className="card">
-          <div style={{padding:20}} className="space-y-4">
+          <div style={{padding:20,display:'flex',flexDirection:'column',gap:16}}>
             <div>
               <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',display:'block',marginBottom:6}}>Número da OS</label>
               <input type="text" inputMode="numeric" value={os} onChange={e=>setOs(sanitize(e.target.value))} onBlur={onOSBlur} placeholder="Nº da OS" className="input" style={{fontSize:22,fontWeight:800,letterSpacing:'.05em'}} required/>
@@ -885,86 +925,97 @@ function RequestForm({user,loggedInUser,vehiclesDB,requests}){
             </div>
             <div style={{display:'flex',alignItems:'center',gap:10,background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:10,padding:'10px 14px'}}>
               <div style={{width:36,height:36,borderRadius:9,background:'var(--red-light)',border:'1px solid #FFBDBD',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="user" size={15}/></div>
-              <div style={{minWidth:0,flex:1}}>
-                <p style={{fontSize:8,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',margin:0,letterSpacing:'.08em'}}>Solicitante</p>
-                <p style={{fontSize:13,fontWeight:700,textTransform:'uppercase',margin:0,color:'var(--ink)'}}>{loggedInUser.user}</p>
+              <div style={{flex:1,minWidth:0}}>
+                <p style={{fontSize:8,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',margin:0}}>Solicitante</p>
+                <p style={{fontSize:13,fontWeight:700,textTransform:'uppercase',margin:0}}>{loggedInUser.user}</p>
               </div>
               <RoleBadge role={loggedInUser.role}/>
             </div>
           </div>
-          {/* Vehicle panel */}
+          {/* Painel do veículo */}
           <div style={{borderTop:'2px solid var(--border)',background:'var(--ink)',padding:20,minHeight:100,display:'flex',alignItems:'center'}}>
             {vehicle?(
               <div style={{width:'100%'}}>
                 <p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',letterSpacing:'.12em',color:'rgba(255,255,255,.3)',margin:'0 0 4px'}}>Veículo encontrado</p>
-                <p style={{fontSize:22,fontWeight:700,textTransform:'uppercase',color:'#fff',margin:'0 0 12px'}}>{vehicle.modelo}</p>
+                <p style={{fontSize:22,fontWeight:800,textTransform:'uppercase',color:'#fff',margin:'0 0 12px'}}>{vehicle.modelo}</p>
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:10}}>
                   {[['Etapa',vehicle.etapa],['Cor',vehicle.cor],['Local',vehicle.localizacao]].map(([l,v])=>(
-                    <div key={l}>
-                      <p style={{fontSize:7,color:'rgba(255,255,255,.3)',fontWeight:700,textTransform:'uppercase',margin:'0 0 2px'}}>{l}</p>
-                      <p style={{fontSize:11,color:'rgba(255,255,255,.85)',fontWeight:600,margin:0,textTransform:'uppercase'}}>{v||'—'}</p>
-                    </div>
+                    <div key={l}><p style={{fontSize:7,color:'rgba(255,255,255,.3)',fontWeight:700,textTransform:'uppercase',margin:'0 0 2px'}}>{l}</p><p style={{fontSize:11,color:'rgba(255,255,255,.85)',fontWeight:600,margin:0,textTransform:'uppercase'}}>{v||'—'}</p></div>
                   ))}
                 </div>
                 <div style={{background:'rgba(255,255,255,.06)',borderRadius:8,padding:'8px 12px',textAlign:'center',border:'1px solid rgba(255,255,255,.08)'}}>
                   <p style={{fontSize:7,color:'rgba(255,255,255,.3)',fontWeight:700,textTransform:'uppercase',margin:'0 0 2px'}}>Chassi</p>
                   <p className="mono" style={{fontSize:13,fontWeight:700,color:'rgba(255,255,255,.9)',margin:0,letterSpacing:'.08em',userSelect:'all'}}>{vehicle.chassi}</p>
                 </div>
+                {/* MELHORIA 1: mostra peças já cadastradas na OS */}
+                {existingItemsForOS.length>0&&(
+                  <div style={{marginTop:12,paddingTop:12,borderTop:'1px solid rgba(255,255,255,.1)'}}>
+                    <p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',color:'rgba(255,255,255,.3)',marginBottom:6}}>Peças já cadastradas nesta OS:</p>
+                    <div style={{display:'flex',flexWrap:'wrap',gap:5}}>
+                      {existingItemsForOS.map((it,i)=>(
+                        <span key={i} style={{fontSize:8,fontWeight:700,textTransform:'uppercase',padding:'2px 8px',borderRadius:6,background:'rgba(255,255,255,.08)',color:'rgba(255,255,255,.6)',border:'1px solid rgba(255,255,255,.12)'}}>
+                          {it.quantity}× {it.description} · <span style={{opacity:.6}}>{it.status}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             ):(
               <div style={{width:'100%',textAlign:'center',padding:'12px 0'}}>
-                <Icon name="car" size={28} className="" style={{color:'rgba(255,255,255,.15)',margin:'0 auto 8px'}}/>
+                <Icon name="car" size={28} style={{margin:'0 auto 8px',display:'block',color:'rgba(255,255,255,.15)'}}/>
                 <p style={{fontSize:9,color:'rgba(255,255,255,.25)',fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',margin:0}}>Digite a OS para carregar o veículo</p>
               </div>
             )}
           </div>
         </div>
 
-        {/* Items */}
-        <div className="space-y-3">
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-            <h3 style={{margin:0,fontSize:13,fontWeight:700,textTransform:'uppercase',display:'flex',alignItems:'center',gap:8}}><Icon name="package" size={16}/> Peças</h3>
+        {/* Itens */}
+        <div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+            <h3 style={{margin:0,fontSize:13,fontWeight:800,textTransform:'uppercase',display:'flex',alignItems:'center',gap:8}}><Icon name="package" size={16}/> Peças</h3>
             <button type="button" onClick={()=>setItems([...items,{id:Date.now(),description:'',quantity:1,photo:null,status:'Pendente'}])} className="btn-primary" style={{padding:'8px 16px',fontSize:10}}>+ Item</button>
           </div>
-          {items.map((it,idx)=>(
-            <div key={it.id} className="card" style={{border:semFoto.includes(it.id)?'1.5px solid var(--red)':'1.5px solid var(--border)'}}>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 16px',borderBottom:'1px solid var(--border)',background:'var(--smoke)'}}>
-                <span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)'}}>Item {idx+1}</span>
-                <button type="button" onClick={()=>{if(items.length>1){setItems(items.filter(i=>i.id!==it.id));setSemFoto(p=>p.filter(id=>id!==it.id));}else{setItems([{id:Date.now(),description:'',quantity:1,photo:null,status:'Pendente'}]);setSemFoto([]);}}} style={{background:'var(--red)',color:'#fff',border:'none',borderRadius:7,padding:'5px 10px',fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}>✕ Remover</button>
-              </div>
-              <div style={{padding:16}} className="space-y-3">
-                <div>
-                  <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',display:'block',marginBottom:6}}>Descrição da Peça</label>
-                  <input type="text" value={it.description} onChange={e=>setItems(p=>p.map(i=>i.id===it.id?{...i,description:sanitize(e.target.value)}:i))} placeholder="NOME DA PEÇA" className="input" style={{fontWeight:700,textTransform:'uppercase'}} required autoCapitalize="characters"/>
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            {items.map((it,idx)=>(
+              <div key={it.id} className="card" style={{border:semFoto.includes(it.id)?'1.5px solid var(--red)':'1.5px solid var(--border)'}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 16px',borderBottom:'1px solid var(--border)',background:'var(--smoke)'}}>
+                  <span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)'}}>Item {idx+1}</span>
+                  <button type="button" onClick={()=>{if(items.length>1){setItems(items.filter(i=>i.id!==it.id));setSemFoto(p=>p.filter(id=>id!==it.id));}else{setItems([{id:Date.now(),description:'',quantity:1,photo:null,status:'Pendente'}]);setSemFoto([]);}}} style={{background:'var(--red)',color:'#fff',border:'none',borderRadius:7,padding:'5px 10px',fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}>✕ Remover</button>
                 </div>
-                <div style={{display:'flex',gap:12,alignItems:'flex-end'}}>
-                  <div style={{width:100,flexShrink:0}}>
-                    <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',display:'block',marginBottom:6}}>Qtd</label>
-                    <input type="number" min="1" inputMode="numeric" value={it.quantity} onChange={e=>setItems(p=>p.map(i=>i.id===it.id?{...i,quantity:e.target.value}:i))} className="input" style={{fontSize:18,fontWeight:800,textAlign:'center'}}/>
+                <div style={{padding:16,display:'flex',flexDirection:'column',gap:12}}>
+                  <div>
+                    <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',display:'block',marginBottom:6}}>Descrição da Peça</label>
+                    <input type="text" value={it.description} onChange={e=>setItems(p=>p.map(i=>i.id===it.id?{...i,description:sanitize(e.target.value)}:i))} placeholder="NOME DA PEÇA" className="input" style={{fontWeight:700,textTransform:'uppercase'}} required autoCapitalize="characters"/>
                   </div>
-                  <div style={{flex:1}}>
-                    <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--red)',display:'block',marginBottom:6}}>📷 Foto (Obrigatória)</label>
-                    {it.photo?(
-                      <div style={{position:'relative',borderRadius:10,overflow:'hidden',border:'1.5px solid #AAE6C5',height:80}}>
-                        <img src={it.photo} style={{height:'100%',width:'100%',objectFit:'cover'}} alt="Peça"/>
-                        <button type="button" onClick={()=>setItems(p=>p.map(i=>i.id===it.id?{...i,photo:null}:i))} style={{position:'absolute',inset:0,background:'rgba(0,0,0,.5)',display:'flex',alignItems:'center',justifyContent:'center',border:'none',cursor:'pointer',color:'#fff',fontSize:10,fontWeight:700,opacity:0,transition:'opacity .2s'}} onMouseEnter={e=>e.currentTarget.style.opacity=1} onMouseLeave={e=>e.currentTarget.style.opacity=0}>✕ Trocar</button>
-                        <div style={{position:'absolute',top:6,right:6,background:'#059669',color:'#fff',fontSize:7,fontWeight:800,padding:'2px 7px',borderRadius:999}}>✓ OK</div>
-                      </div>
-                    ):(
-                      <label style={{height:80,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:6,border:`1.5px dashed ${semFoto.includes(it.id)?'var(--red)':'var(--border)'}`,borderRadius:10,cursor:'pointer',background:semFoto.includes(it.id)?'var(--red-light)':'var(--smoke)'}}>
-                        <Icon name="camera" size={24} className={semFoto.includes(it.id)?'text-red':'text-muted'}/>
-                        <span style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:semFoto.includes(it.id)?'var(--red)':'var(--muted)'}}>{compressing?'Comprimindo...':'Toque para fotografar'}</span>
-                        <input type="file" accept="image/*" capture="environment" onChange={e=>{if(e.target.files[0])handleImageUpload(it.id,e.target.files[0]);}} style={{display:'none'}} disabled={compressing}/>
-                      </label>
-                    )}
+                  <div style={{display:'flex',gap:12,alignItems:'flex-end'}}>
+                    <div style={{width:100,flexShrink:0}}>
+                      <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',display:'block',marginBottom:6}}>Qtd</label>
+                      <input type="number" min="1" inputMode="numeric" value={it.quantity} onChange={e=>setItems(p=>p.map(i=>i.id===it.id?{...i,quantity:e.target.value}:i))} className="input" style={{fontSize:18,fontWeight:800,textAlign:'center'}}/>
+                    </div>
+                    <div style={{flex:1}}>
+                      <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--red)',display:'block',marginBottom:6}}>📷 Foto (Obrigatória)</label>
+                      {it.photo?(
+                        <div style={{position:'relative',borderRadius:10,overflow:'hidden',border:'1.5px solid #AAE6C5',height:80}}>
+                          <img src={it.photo} style={{height:'100%',width:'100%',objectFit:'cover'}} alt="Peça"/>
+                          <button type="button" onClick={()=>setItems(p=>p.map(i=>i.id===it.id?{...i,photo:null}:i))} style={{position:'absolute',inset:0,background:'rgba(0,0,0,.5)',display:'flex',alignItems:'center',justifyContent:'center',border:'none',cursor:'pointer',color:'#fff',fontSize:10,fontWeight:700,opacity:0,transition:'opacity .2s'}} onMouseEnter={e=>e.currentTarget.style.opacity=1} onMouseLeave={e=>e.currentTarget.style.opacity=0}>✕ Trocar</button>
+                          <div style={{position:'absolute',top:6,right:6,background:'#059669',color:'#fff',fontSize:7,fontWeight:800,padding:'2px 7px',borderRadius:999}}>✓ OK</div>
+                        </div>
+                      ):(
+                        <label style={{height:80,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:6,border:`1.5px dashed ${semFoto.includes(it.id)?'var(--red)':'var(--border)'}`,borderRadius:10,cursor:'pointer',background:semFoto.includes(it.id)?'var(--red-light)':'var(--smoke)'}}>
+                          <Icon name="camera" size={24}/>
+                          <span style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:semFoto.includes(it.id)?'var(--red)':'var(--muted)'}}>{compressing?'Comprimindo...':'Toque para fotografar'}</span>
+                          <input type="file" accept="image/*" capture="environment" onChange={e=>{if(e.target.files[0])handleImageUpload(it.id,e.target.files[0]);}} style={{display:'none'}} disabled={compressing}/>
+                        </label>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-
-        <button disabled={submitting||!vehicle||compressing} className="btn-primary" style={{width:'100%',padding:'16px',fontSize:12}}>
+        <button disabled={submitting||!vehicle||compressing} className="btn-primary" style={{width:'100%',padding:16,fontSize:12}}>
           {submitting?<Icon name="refresh-cw" size={18} className="spin"/>:<><Icon name="send" size={16}/> Enviar Pedido</>}
         </button>
       </form>
@@ -972,48 +1023,27 @@ function RequestForm({user,loggedInUser,vehiclesDB,requests}){
   );
 }
 
-// ── Status View (SEM FILTRO DE PLANILHA) ──────────────────────────────────
+// ── Status View ───────────────────────────────────────────────────────────
 function StatusView({requests,isAdmin}){
   const[search,setSearch]=useState('');
   const[unidadeFilter,setUnidadeFilter]=useState('todas');
   const[toDelete,setToDelete]=useState(null);
 
-  // Exibe APENAS registros do portal (sem importados)
-  const filtered=useMemo(()=>requests.filter(r=>{
-    if(r.importado)return false; // remove importados
+  // MELHORIA 1: mescla pedidos da mesma OS antes de exibir
+  const merged=useMemo(()=>mergeByOS(requests.filter(r=>!r.importado)),[requests]);
+
+  const filtered=useMemo(()=>merged.filter(r=>{
     const t=search.toLowerCase();
     const mb=String(r.os||'').toLowerCase().includes(t)||String(r.responsavel||'').toLowerCase().includes(t)||String(r.vehicleData?.modelo||'').toLowerCase().includes(t)||String(r.vehicleData?.chassi||'').toLowerCase().includes(t);
     const mu=unidadeFilter==='todas'||r.unidade===unidadeFilter;
     return mb&&mu;
-  }),[requests,search,unidadeFilter]);
+  }),[merged,search,unidadeFilter]);
 
   const exportCSV=()=>{
     const rows=[['Data','OS','Unidade','Chassi','Veiculo','Peca','Qtd','Status','Valor','Loja','Prazo','Entrega'].join(';')];
     filtered.forEach(r=>(r.items||[]).forEach(it=>rows.push([r.timestamp?new Date(r.timestamp).toLocaleDateString():'',r.os,r.unidade||'Unidade 1',r.vehicleData?.chassi||'-',r.vehicleData?.modelo||'-',it.description||'-',it.quantity||1,it.statusOriginal||it.status||'Pendente',it.price||0,it.supplier||'-',it.deliveryDate||'-',it.actualDeliveryDate||'-'].join(';'))));
     const blob=new Blob(['\uFEFF'+rows.join('\n')],{type:'text/csv;charset=utf-8;'});
     const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`Relatorio_VRZ_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.csv`;a.click();
-  };
-
-  const exportControle=()=>{
-    const byOS={};
-    filtered.forEach(r=>{
-      const k=String(r.os||'').trim();if(!k)return;
-      if(!byOS[k]){byOS[k]={os:k,unidade:r.unidade||'Unidade 1',modelo:r.vehicleData?.modelo||'-',chassi:r.vehicleData?.chassi||'-',fabricante:r.vehicleData?.fabricante||'-',itens:[],ts:r.timestamp||0};}
-      (r.items||[]).forEach(it=>byOS[k].itens.push({desc:it.description||'-',qty:it.quantity||1,status:it.status||'Pendente',orig:it.statusOriginal||''}));
-      if((r.timestamp||0)>byOS[k].ts)byOS[k].ts=r.timestamp;
-    });
-    const header=['OS','Unidade','Modelo','Fabricante','Chassi','Peças Solicitadas','Status Geral','Última Atualização'].join(';');
-    const rows=[header];
-    Object.values(byOS).sort((a,b)=>{const na=parseInt(a.os)||0,nb=parseInt(b.os)||0;return na-nb||a.os.localeCompare(b.os);}).forEach(r=>{
-      const pecas=r.itens.map(it=>`${it.qty}x ${it.desc}`).join(' | ');
-      let sg='Concluído';
-      if(r.itens.some(it=>it.status==='Pendente'))sg='Pendente';
-      else if(r.itens.some(it=>it.status==='Em Cotação'))sg='Em Cotação';
-      else if(r.itens.some(it=>it.status==='Doado'))sg='Doado';
-      rows.push([r.os,r.unidade,r.modelo,r.fabricante,r.chassi,`"${pecas}"`,sg,r.ts?new Date(r.ts).toLocaleDateString('pt-BR'):''].join(';'));
-    });
-    const blob=new Blob(['\uFEFF'+rows.join('\n')],{type:'text/csv;charset=utf-8;'});
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`VRZ_Controle_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.csv`;a.click();
   };
 
   const exportPDF=async req=>{
@@ -1027,52 +1057,45 @@ function StatusView({requests,isAdmin}){
     (req.items||[]).forEach((it,i)=>{
       if(y>250){doc.addPage();y=15;}
       doc.setFontSize(9);
-      const statusText=it.status==='Doado'?`[DOADO → OS ${it.donatedTo||'?'}]`:`[${it.status||'Pendente'}]`;
-      doc.text(`${i+1}. Qtd:${it.quantity} - ${it.description} ${statusText}`,14,y);y+=7;
+      const st=it.status==='Doado'?`[DOADO → OS ${it.donatedTo||'?'}]`:`[${it.status||'Pendente'}]`;
+      doc.text(`${i+1}. Qtd:${it.quantity} - ${it.description} ${st}`,14,y);y+=7;
       if(it.photo){try{doc.addImage(it.photo,'JPEG',14,y,45,28);y+=32;}catch{}}
     });
     doc.save('OS_'+req.os+'_VRZ.pdf');
   };
 
   return(
-    <div className="space-y-4 fade-up">
+    <div className="fade-up" style={{paddingBottom:16}}>
       {toDelete&&(
         <div style={{position:'fixed',inset:0,zIndex:500,background:'rgba(0,0,0,.8)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
           <div style={{background:'#fff',borderRadius:20,overflow:'hidden',maxWidth:360,width:'100%',boxShadow:'0 32px 64px rgba(0,0,0,.3)'}}>
             <div style={{background:'var(--red)',padding:'24px 20px',textAlign:'center',color:'#fff'}}>
               <div style={{width:48,height:48,background:'rgba(255,255,255,.2)',borderRadius:14,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 12px'}}><Icon name="trash-2" size={22}/></div>
-              <h3 style={{margin:0,fontSize:16,fontWeight:700}}>Excluir Registro</h3>
+              <h3 style={{margin:0,fontSize:16,fontWeight:800}}>Excluir Registro</h3>
             </div>
             <div style={{padding:20}}>
               <p style={{fontSize:11,color:'var(--muted)',textAlign:'center',marginBottom:16}}>Confirmar exclusão permanente?</p>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
                 <button onClick={()=>setToDelete(null)} className="btn-ghost">Cancelar</button>
-                <button onClick={async()=>{try{await col('requests').doc(toDelete).delete();setToDelete(null);}catch{alert('Erro ao excluir.');}}} className="btn-primary">Confirmar</button>
+                <button onClick={async()=>{try{await col('requests').doc(toDelete).delete();setToDelete(null);}catch{alert('Erro.');}}} className="btn-primary">Confirmar</button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      <div style={{display:'flex',flexDirection:'column',gap:12}}>
-        <div>
-          <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.15em',color:'var(--red)',marginBottom:4}}>Registros do Portal</p>
-          <h2 className="serif" style={{fontSize:36,fontWeight:400,margin:0}}>Histórico de OS</h2>
-        </div>
+      <div style={{marginBottom:16}}>
+        <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.15em',color:'var(--red)',marginBottom:4}}>Registros do Portal</p>
+        <h2 style={{fontSize:32,fontWeight:800,margin:'0 0 14px',letterSpacing:'-.02em'}}>Histórico de OS</h2>
         <div style={{display:'flex',flexWrap:'wrap',gap:8,alignItems:'center'}}>
           <select value={unidadeFilter} onChange={e=>setUnidadeFilter(e.target.value)} className="input" style={{width:'auto',padding:'8px 14px',fontSize:10,fontWeight:700,appearance:'auto'}}>
             <option value="todas">Todas as Unidades</option>
             {UNIDADES.map(u=><option key={u} value={u}>{u}</option>)}
           </select>
           {isAdmin&&(
-            <>
-              <button onClick={exportCSV} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 14px',background:'#059669',color:'#fff',border:'none',borderRadius:8,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',letterSpacing:'.06em'}}>
-                <Icon name="file-text" size={13}/> Excel
-              </button>
-              <button onClick={exportControle} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 14px',background:'var(--ink)',color:'#fff',border:'none',borderRadius:8,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',letterSpacing:'.06em'}}>
-                <Icon name="table-2" size={13}/> PROCV
-              </button>
-            </>
+            <button onClick={exportCSV} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 14px',background:'#059669',color:'#fff',border:'none',borderRadius:8,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}>
+              <Icon name="file-text" size={13}/> Excel
+            </button>
           )}
           <div style={{position:'relative',flex:1,minWidth:200}}>
             <input type="text" placeholder="Buscar OS / Chassi / Nome..." value={search} onChange={e=>setSearch(e.target.value)} className="input" style={{paddingLeft:36,fontSize:11}}/>
@@ -1081,19 +1104,20 @@ function StatusView({requests,isAdmin}){
         </div>
       </div>
 
-      <div className="scroll-y space-y-3" style={{maxHeight:'72vh'}}>
+      <div className="scroll-y" style={{maxHeight:'72vh',display:'flex',flexDirection:'column',gap:12}}>
         {filtered.length===0?(
           <div style={{padding:'64px 20px',textAlign:'center',background:'#fff',borderRadius:16,border:'1.5px dashed var(--border)'}}>
-            <Icon name="inbox" size={32} className="text-muted" style={{margin:'0 auto 10px',display:'block'}}/>
+            <Icon name="inbox" size={32} style={{margin:'0 auto 10px',display:'block',color:'var(--muted)'}}/>
             <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',margin:0}}>Nenhum resultado encontrado</p>
           </div>
         ):filtered.map(r=>(
-          <div key={r.id} className="card" style={{borderLeft:'3px solid var(--red)',transition:'border-color .2s'}}>
+          <div key={r.os} className="card" style={{borderLeft:'3px solid var(--red)'}}>
             <div style={{padding:'14px 16px'}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8,marginBottom:10}}>
                 <div style={{display:'flex',alignItems:'center',gap:8}}>
-                  <span style={{fontSize:15,fontWeight:800,color:'var(--ink)'}}>OS #{r.os}</span>
+                  <span style={{fontSize:15,fontWeight:800}}>OS #{r.os}</span>
                   <span className="pill">{r.unidade||'Unidade 1'}</span>
+                  {r._merged&&<span style={{fontSize:7,fontWeight:800,padding:'2px 7px',borderRadius:999,background:'#EAF0FF',color:'#1A4EC2',border:'1px solid #C0D0F5'}}>Mesclado</span>}
                 </div>
                 <div style={{display:'flex',gap:8}}>
                   <button onClick={()=>exportPDF(r)} style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',background:'#2563EB',color:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}>
@@ -1105,11 +1129,8 @@ function StatusView({requests,isAdmin}){
                 </div>
               </div>
               <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(100px,1fr))',gap:'6px 16px',marginBottom:12}}>
-                {[['Solicitante',r.responsavel||'—',true],['Veículo',r.vehicleData?.modelo||'—'],['Chassi',r.vehicleData?.chassi||'—',false,true],['Data',r.timestamp?new Date(r.timestamp).toLocaleDateString():'—']].map(([l,v,bold,mono])=>(
-                  <div key={l}>
-                    <p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',margin:'0 0 2px'}}>{l}</p>
-                    <p className={mono?'mono':''} style={{fontSize:10,fontWeight:bold?700:600,color:'var(--ink)',margin:0}}>{v}</p>
-                  </div>
+                {[['Solicitante',r.responsavel||'—'],['Veículo',r.vehicleData?.modelo||'—'],['Chassi',r.vehicleData?.chassi||'—'],['Data',r.timestamp?new Date(r.timestamp).toLocaleDateString():'—']].map(([l,v])=>(
+                  <div key={l}><p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',margin:'0 0 2px'}}>{l}</p><p style={{fontSize:10,fontWeight:600,color:'var(--ink)',margin:0}}>{v}</p></div>
                 ))}
               </div>
               <div style={{display:'flex',gap:8,overflowX:'auto',paddingBottom:4}}>
@@ -1140,8 +1161,8 @@ function StatusView({requests,isAdmin}){
 function UserManagement({users,onAdd,onDelete,onToggle,onRole}){
   const[nu,setNu]=useState('');const[np,setNp]=useState('');const[nr,setNr]=useState('solicitante');const[showP,setShowP]=useState(false);
   return(
-    <div className="space-y-5 fade-in">
-      <div className="grid grid-cols-3 gap-3">
+    <div className="fade-in" style={{display:'flex',flexDirection:'column',gap:20}}>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12}}>
         {[
           {role:'admin',items:['✓ Nova Req.','✓ Histórico','✓ Doações','✓ Excluir','✓ Gestão','✓ Usuários']},
           {role:'solicitante',items:['✓ Nova Req.','✓ Histórico','✗ Doações','✗ Excluir','✗ Gestão','✗ Usuários']},
@@ -1155,28 +1176,14 @@ function UserManagement({users,onAdd,onDelete,onToggle,onRole}){
           </div>
         ))}
       </div>
-      <div className="card p-5 space-y-4">
+      <div className="card" style={{padding:20,display:'flex',flexDirection:'column',gap:16}}>
         <h3 style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--red)',margin:0}}>Cadastrar Novo Acesso</h3>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12}}>
-          <div>
-            <label style={{fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',display:'block',marginBottom:6}}>Usuário</label>
-            <input type="text" value={nu} onChange={e=>setNu(e.target.value)} className="input" placeholder="Nome.Sobrenome" style={{fontSize:12}}/>
-          </div>
-          <div>
-            <label style={{fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',display:'block',marginBottom:6}}>Senha</label>
-            <div style={{position:'relative'}}>
-              <input type={showP?'text':'password'} value={np} onChange={e=>setNp(e.target.value)} className="input" placeholder="Senha" style={{fontSize:12,paddingRight:36}}/>
-              <button type="button" onClick={()=>setShowP(!showP)} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',fontSize:12}}>{showP?'👁':'👁‍🗨'}</button>
-            </div>
-          </div>
-          <div>
-            <label style={{fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',display:'block',marginBottom:6}}>Categoria</label>
-            <select value={nr} onChange={e=>setNr(e.target.value)} className="input" style={{fontSize:12,appearance:'auto'}}>
-              <option value="solicitante">Solicitante</option>
-              <option value="leitor">Leitor</option>
-              <option value="admin">Admin</option>
-            </select>
-          </div>
+          <div><label style={{fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',display:'block',marginBottom:6}}>Usuário</label><input type="text" value={nu} onChange={e=>setNu(e.target.value)} className="input" placeholder="Nome.Sobrenome" style={{fontSize:12}}/></div>
+          <div><label style={{fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',display:'block',marginBottom:6}}>Senha</label>
+            <div style={{position:'relative'}}><input type={showP?'text':'password'} value={np} onChange={e=>setNp(e.target.value)} className="input" placeholder="Senha" style={{fontSize:12,paddingRight:36}}/><button type="button" onClick={()=>setShowP(!showP)} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',fontSize:12}}>{showP?'👁':'👁‍🗨'}</button></div></div>
+          <div><label style={{fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',display:'block',marginBottom:6}}>Categoria</label>
+            <select value={nr} onChange={e=>setNr(e.target.value)} className="input" style={{fontSize:12,appearance:'auto'}}><option value="solicitante">Solicitante</option><option value="leitor">Leitor</option><option value="admin">Admin</option></select></div>
         </div>
         <button onClick={()=>{if(!nu||!np)return alert('Preencha todos os campos.');onAdd(nu,np,nr);setNu('');setNp('');setNr('solicitante');}} className="btn-primary" style={{width:'100%'}}>+ Criar Conta</button>
       </div>
@@ -1187,23 +1194,9 @@ function UserManagement({users,onAdd,onDelete,onToggle,onRole}){
             {users.map((u,i)=>(
               <tr key={i}>
                 <td style={{fontWeight:700,textTransform:'uppercase',fontSize:12}}>{u.user}</td>
-                <td>
-                  <select value={u.role||'solicitante'} onChange={e=>onRole(u,e.target.value)} className="badge" style={{cursor:'pointer',border:'none',outline:'none',background:u.role==='admin'?'var(--red)':u.role==='leitor'?'var(--muted)':'#1A4EC2',color:'#fff'}}>
-                    <option value="admin">Admin</option>
-                    <option value="solicitante">Solicitante</option>
-                    <option value="leitor">Leitor</option>
-                  </select>
-                </td>
-                <td>
-                  <button onClick={()=>onToggle(u)} style={{fontSize:9,fontWeight:800,textTransform:'uppercase',padding:'3px 10px',borderRadius:999,cursor:'pointer',border:'1px solid',background:u.active!==false?'#EDFAF3':'#FFF0F0',color:u.active!==false?'#0A6B34':'var(--red)',borderColor:u.active!==false?'#AAE6C5':'#FFBDBD',transition:'all .15s'}}>
-                    {u.active!==false?'Ativo':'Desativado'}
-                  </button>
-                </td>
-                <td style={{textAlign:'right'}}>
-                  <button onClick={()=>onDelete(u.id||u.user)} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'5px 12px',background:'var(--red)',color:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}>
-                    <Icon name="trash-2" size={12}/> Excluir
-                  </button>
-                </td>
+                <td><select value={u.role||'solicitante'} onChange={e=>onRole(u,e.target.value)} className="badge" style={{cursor:'pointer',border:'none',outline:'none',background:u.role==='admin'?'var(--red)':u.role==='leitor'?'var(--muted)':'#1A4EC2',color:'#fff'}}><option value="admin">Admin</option><option value="solicitante">Solicitante</option><option value="leitor">Leitor</option></select></td>
+                <td><button onClick={()=>onToggle(u)} style={{fontSize:9,fontWeight:800,textTransform:'uppercase',padding:'3px 10px',borderRadius:999,cursor:'pointer',border:'1px solid',background:u.active!==false?'#EDFAF3':'#FFF0F0',color:u.active!==false?'#0A6B34':'var(--red)',borderColor:u.active!==false?'#AAE6C5':'#FFBDBD'}}>{u.active!==false?'Ativo':'Desativado'}</button></td>
+                <td style={{textAlign:'right'}}><button onClick={()=>onDelete(u.id||u.user)} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'5px 12px',background:'var(--red)',color:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}><Icon name="trash-2" size={12}/> Excluir</button></td>
               </tr>
             ))}
           </tbody>
@@ -1218,19 +1211,16 @@ function StorageView({requests}){
   const LIM=1000;
   const[sel,setSel]=useState({});const[exportando,setExportando]=useState(false);const[excluindo,setExcluindo]=useState(false);const[confirmar,setConfirmar]=useState(false);
   const[prog,setProg]=useState({atual:0,total:0,msg:''});
-  const concluidos=useMemo(()=>requests.filter(r=>r.items?.length>0&&r.items.every(it=>it.status==='Concluído')).sort((a,b)=>a.timestamp-b.timestamp),[requests]);
+  const concluidos=useMemo(()=>requests.filter(r=>r.items?.length>0&&r.items.every(it=>it.status==='Concluído'||it.status==='Doado')).sort((a,b)=>a.timestamp-b.timestamp),[requests]);
   const total=requests.length,totalConc=concluidos.length,ativos=total-totalConc;
-  const pctPed=Math.min(total/LIM*100,100);
-  const bytesU=estimarBytes(requests);const pctSt=Math.min(bytesU/1073741824*100,100);
-  const restam=Math.max(LIM-total,0);
-  const corB=pctPed>=85?'var(--red)':pctPed>=60?'#F59E0B':'#059669';
+  const pctPed=Math.min(total/LIM*100,100);const bytesU=estimarBytes(requests);const pctSt=Math.min(bytesU/1073741824*100,100);
+  const restam=Math.max(LIM-total,0);const corB=pctPed>=85?'var(--red)':pctPed>=60?'#F59E0B':'#059669';
   const alerta=pctPed>=85?'⚠ Próximo do limite!':pctPed>=60?'Uso moderado':'Uso saudável';
   const todosSel=concluidos.length>0&&concluidos.every(r=>sel[r.id]);
   const qtdSel=Object.values(sel).filter(Boolean).length;
   const idsSel=Object.entries(sel).filter(([,v])=>v).map(([id])=>id);
   const pedSel=concluidos.filter(r=>idsSel.includes(r.id));
   const toggleTodos=()=>{if(todosSel)setSel({});else{const n={};concluidos.forEach(r=>{n[r.id]=true;});setSel(n);}};
-
   const exportCSV=()=>{
     if(!pedSel.length)return;
     const rows=[['Data','OS','Unidade','Modelo','Fabricante','Chassi','Solicitante','Peça','Qtd','Status','Fornecedor','Valor','Entrega Real'].join(';')];
@@ -1238,27 +1228,21 @@ function StorageView({requests}){
     const blob=new Blob(['\uFEFF'+rows.join('\n')],{type:'text/csv;charset=utf-8;'});
     const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`VRZ_Concluidos_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.csv`;a.click();
   };
-
   const exportPDF=async()=>{
     if(!pedSel.length)return;setExportando(true);
     try{
       const{jsPDF}=window.jspdf;const doc=new jsPDF();const hoje=new Date().toLocaleDateString('pt-BR');
-      doc.setFillColor(13,13,13);doc.rect(0,0,210,38,'F');
-      doc.setTextColor(255,255,255);doc.setFontSize(16);doc.setFont('helvetica','bold');
-      doc.text('VRZ COMPRAS — ARQUIVO DE CONCLUÍDOS',10,16);
-      doc.setFontSize(8);doc.setFont('helvetica','normal');doc.text(`Gerado: ${hoje}  |  Pedidos: ${pedSel.length}`,10,28);
+      doc.setFillColor(13,13,13);doc.rect(0,0,210,38,'F');doc.setTextColor(255,255,255);doc.setFontSize(16);doc.setFont('helvetica','bold');
+      doc.text('VRZ COMPRAS — ARQUIVO DE CONCLUÍDOS',10,16);doc.setFontSize(8);doc.setFont('helvetica','normal');doc.text(`Gerado: ${hoje}  |  Pedidos: ${pedSel.length}`,10,28);
       doc.setTextColor(0,0,0);let y=50;
       pedSel.forEach(req=>{
         if(y>250){doc.addPage();y=15;}
         doc.setFillColor(245,242,240);doc.rect(8,y-4,194,13,'F');
-        doc.setFont('helvetica','bold');doc.setFontSize(9);
-        doc.text(`OS #${req.os} (${req.unidade||'Unidade 1'}) — ${req.vehicleData?.modelo||''}`,12,y+3);
-        doc.setFont('helvetica','normal');doc.setFontSize(7);
-        doc.text(`Solicitante: ${req.responsavel||'—'}  |  ${req.timestamp?new Date(req.timestamp).toLocaleDateString('pt-BR'):''}  |  Chassi: ${req.vehicleData?.chassi||'—'}`,12,y+9);y+=16;
+        doc.setFont('helvetica','bold');doc.setFontSize(9);doc.text(`OS #${req.os} (${req.unidade||'Unidade 1'}) — ${req.vehicleData?.modelo||''}`,12,y+3);
+        doc.setFont('helvetica','normal');doc.setFontSize(7);doc.text(`Solicitante: ${req.responsavel||'—'}  |  ${req.timestamp?new Date(req.timestamp).toLocaleDateString('pt-BR'):''}`,12,y+9);y+=16;
         (req.items||[]).forEach((it,ii)=>{
           if(y>265){doc.addPage();y=15;}
-          doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(0,0,0);
-          doc.text(`${ii+1}. ${it.description||''}`,14,y);
+          doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(0,0,0);doc.text(`${ii+1}. ${it.description||''}`,14,y);
           doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(80,80,80);
           const det=`Qtd:${it.quantity||1}  Fornecedor:${it.supplier||'—'}  Valor:${it.price?'R$'+Number(it.price).toLocaleString('pt-BR',{minimumFractionDigits:2}):'—'}  Entrega:${it.actualDeliveryDate||'—'}`;
           const ls=doc.splitTextToSize(det,180);doc.text(ls,16,y+5);doc.setTextColor(0,0,0);y+=5+ls.length*4+2;
@@ -1269,168 +1253,104 @@ function StorageView({requests}){
     }catch(e){alert('Erro PDF: '+e.message);}
     setExportando(false);
   };
-
   const executarExclusao=async()=>{
-    setConfirmar(false);setExcluindo(true);
-    const tot=idsSel.length;setProg({atual:0,total:tot,msg:'Iniciando...'});let ok=0;
-    for(const id of idsSel){try{await col('requests').doc(id).delete();ok++;setProg({atual:ok,total:tot,msg:`Excluindo ${ok} de ${tot}...`});}catch(e){console.error(e);}
-      if(ok%5===0)await new Promise(r=>setTimeout(r,100));}
-    setProg({atual:tot,total:tot,msg:'Concluído!'});setSel({});
-    await new Promise(r=>setTimeout(r,1200));setExcluindo(false);setProg({atual:0,total:0,msg:''});
+    setConfirmar(false);setExcluindo(true);const tot=idsSel.length;setProg({atual:0,total:tot,msg:'Iniciando...'});let ok=0;
+    for(const id of idsSel){try{await col('requests').doc(id).delete();ok++;setProg({atual:ok,total:tot,msg:`Excluindo ${ok}/${tot}...`});}catch(e){console.error(e);}if(ok%5===0)await new Promise(r=>setTimeout(r,100));}
+    setProg({atual:tot,total:tot,msg:'Concluído!'});setSel({});await new Promise(r=>setTimeout(r,1200));setExcluindo(false);setProg({atual:0,total:0,msg:''});
   };
-
-  const kpiRow=[{l:'Ativos',v:ativos,c:'#2563EB'},{l:'Concluídos',v:totalConc,c:'#059669'},{l:'Restam',v:restam,c:'#7C3AED'}];
-
   return(
-    <div className="space-y-5 fade-in pb-10">
+    <div className="fade-in" style={{display:'flex',flexDirection:'column',gap:20,paddingBottom:40}}>
       {confirmar&&(
         <div style={{position:'fixed',inset:0,zIndex:600,background:'rgba(0,0,0,.9)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
-          <div style={{background:'#fff',borderRadius:20,overflow:'hidden',maxWidth:400,width:'100%',boxShadow:'0 32px 64px rgba(0,0,0,.3)'}}>
-            <div style={{background:'var(--red)',padding:'24px 20px',textAlign:'center',color:'#fff'}}>
-              <div style={{width:52,height:52,background:'rgba(255,255,255,.2)',borderRadius:14,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 12px'}}><Icon name="trash-2" size={26}/></div>
-              <h3 style={{margin:0,fontSize:18,fontWeight:700}}>Confirmar Exclusão</h3>
-              <p style={{margin:0,fontSize:9,opacity:.8,textTransform:'uppercase',letterSpacing:'.08em',marginTop:4}}>Ação irreversível</p>
-            </div>
-            <div style={{padding:20}} className="space-y-4">
-              <div style={{background:'var(--red-light)',border:'1px solid #FFBDBD',borderRadius:12,padding:16,textAlign:'center'}}>
-                <p className="serif" style={{fontSize:36,color:'var(--red)',margin:0}}>{qtdSel}</p>
-                <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--red)',margin:0,letterSpacing:'.08em'}}>pedidos serão excluídos</p>
-              </div>
+          <div style={{background:'#fff',borderRadius:20,overflow:'hidden',maxWidth:400,width:'100%'}}>
+            <div style={{background:'var(--red)',padding:'24px 20px',textAlign:'center',color:'#fff'}}><div style={{width:52,height:52,background:'rgba(255,255,255,.2)',borderRadius:14,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 12px'}}><Icon name="trash-2" size={26}/></div><h3 style={{margin:0,fontSize:18,fontWeight:800}}>Confirmar Exclusão</h3><p style={{margin:0,fontSize:9,opacity:.8,textTransform:'uppercase',letterSpacing:'.08em',marginTop:4}}>Ação irreversível</p></div>
+            <div style={{padding:20,display:'flex',flexDirection:'column',gap:14}}>
+              <div style={{background:'var(--red-light)',border:'1px solid #FFBDBD',borderRadius:12,padding:16,textAlign:'center'}}><p style={{fontSize:36,fontWeight:800,color:'var(--red)',margin:0}}>{qtdSel}</p><p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--red)',margin:0}}>pedidos serão excluídos</p></div>
               <p style={{fontSize:10,color:'var(--muted)',textAlign:'center'}}>Certifique-se de ter exportado antes.</p>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-                <button onClick={()=>setConfirmar(false)} className="btn-ghost">Cancelar</button>
-                <button onClick={executarExclusao} className="btn-primary">Excluir definitivamente</button>
-              </div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}><button onClick={()=>setConfirmar(false)} className="btn-ghost">Cancelar</button><button onClick={executarExclusao} className="btn-primary">Excluir definitivamente</button></div>
             </div>
           </div>
         </div>
       )}
       {excluindo&&(
         <div style={{position:'fixed',inset:0,zIndex:600,background:'rgba(0,0,0,.95)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
-          <div style={{background:'#fff',borderRadius:20,boxShadow:'0 32px 64px rgba(0,0,0,.3)',padding:36,textAlign:'center',maxWidth:320,width:'100%'}} className="space-y-4">
+          <div style={{background:'#fff',borderRadius:20,padding:36,textAlign:'center',maxWidth:320,width:'100%',display:'flex',flexDirection:'column',gap:16}}>
             <div style={{width:52,height:52,background:'var(--red-light)',borderRadius:14,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto'}}><Icon name="loader" size={26} className="spin"/></div>
-            <h3 style={{fontSize:18,fontWeight:700,margin:0}}>Excluindo...</h3>
+            <h3 style={{fontSize:18,fontWeight:800,margin:0}}>Excluindo...</h3>
             <div className="progress-track"><div className="progress-fill" style={{width:prog.total>0?`${prog.atual/prog.total*100}%`:'0%',background:'var(--red)'}}/></div>
-            <p style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',margin:0,letterSpacing:'.08em'}}>{prog.msg}</p>
+            <p style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',margin:0}}>{prog.msg}</p>
           </div>
         </div>
       )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
         <div style={{background:'var(--ink)',borderRadius:16,padding:24,color:'#fff'}}>
           <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20}}>
             <div style={{width:40,height:40,background:'#7C3AED',borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="database" size={18}/></div>
-            <div>
-              <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'rgba(255,255,255,.35)',margin:0}}>Pedidos no Firebase</p>
-              <p style={{fontSize:9,color:'rgba(255,255,255,.2)',margin:0}}>Plano Spark — limite ~{LIM.toLocaleString()}</p>
-            </div>
+            <div><p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'rgba(255,255,255,.35)',margin:0}}>Pedidos no Firebase</p><p style={{fontSize:9,color:'rgba(255,255,255,.2)',margin:0}}>Limite ~{LIM.toLocaleString()}</p></div>
           </div>
           <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',marginBottom:8}}>
-            <span className="serif" style={{fontSize:44,lineHeight:1}}>{total.toLocaleString()}</span>
+            <span style={{fontSize:44,fontWeight:800,lineHeight:1}}>{total.toLocaleString()}</span>
             <span style={{fontSize:10,color:'rgba(255,255,255,.4)',fontWeight:600}}>de ~{LIM.toLocaleString()}</span>
           </div>
-          <div className="progress-track" style={{background:'rgba(255,255,255,.08)',marginBottom:6}}>
-            <div className="progress-fill" style={{width:`${pctPed}%`,background:corB}}/>
-          </div>
-          <div style={{display:'flex',justifyContent:'space-between',marginBottom:16}}>
-            <span style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.08em',color:corB}}>{alerta}</span>
-            <span style={{fontSize:9,fontWeight:700,color:'rgba(255,255,255,.35)'}}>{pctPed.toFixed(1)}%</span>
-          </div>
+          <div className="progress-track" style={{background:'rgba(255,255,255,.08)',marginBottom:6}}><div className="progress-fill" style={{width:`${pctPed}%`,background:corB}}/></div>
+          <div style={{display:'flex',justifyContent:'space-between',marginBottom:16}}><span style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:corB}}>{alerta}</span><span style={{fontSize:9,fontWeight:700,color:'rgba(255,255,255,.35)'}}>{pctPed.toFixed(1)}%</span></div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,borderTop:'1px solid rgba(255,255,255,.08)',paddingTop:14}}>
-            {kpiRow.map((m,i)=>(
+            {[{l:'Ativos',v:ativos,c:'#2563EB'},{l:'Concluídos',v:totalConc,c:'#059669'},{l:'Restam',v:restam,c:'#7C3AED'}].map((m,i)=>(
               <div key={i} style={{textAlign:'center',background:'rgba(255,255,255,.05)',borderRadius:10,padding:'10px 8px'}}>
-                <p className="serif" style={{fontSize:26,lineHeight:1,margin:0,color:m.c}}>{m.v}</p>
-                <p style={{fontSize:7,fontWeight:800,textTransform:'uppercase',color:'rgba(255,255,255,.3)',margin:'4px 0 0',letterSpacing:'.06em'}}>{m.l}</p>
+                <p style={{fontSize:26,fontWeight:800,lineHeight:1,margin:0,color:m.c}}>{m.v}</p>
+                <p style={{fontSize:7,fontWeight:800,textTransform:'uppercase',color:'rgba(255,255,255,.3)',margin:'4px 0 0'}}>{m.l}</p>
               </div>
             ))}
           </div>
         </div>
-
-        <div className="card p-5">
-          <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20}}>
-            <div style={{width:40,height:40,background:'var(--ink)',borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="hard-drive" size={18} className="" style={{color:'#fff'}}/></div>
-            <div>
-              <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',margin:0}}>Storage Estimado</p>
-              <p style={{fontSize:9,color:'var(--muted)',margin:0}}>Com foto ~800KB · Sem foto ~30KB</p>
-            </div>
+        <div className="card" style={{padding:20}}>
+          <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16}}>
+            <div style={{width:40,height:40,background:'var(--ink)',borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="hard-drive" size={18} style={{color:'#fff'}}/></div>
+            <div><p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',margin:0}}>Storage Estimado</p><p style={{fontSize:9,color:'var(--muted)',margin:0}}>Foto ~800KB · Sem foto ~30KB</p></div>
           </div>
-          <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',marginBottom:8}}>
-            <span className="serif" style={{fontSize:36,lineHeight:1,color:'var(--ink)'}}>{fmtBytes(bytesU)}</span>
-            <span style={{fontSize:10,color:'var(--muted)',fontWeight:600}}>de 1 GB</span>
-          </div>
-          <div className="progress-track" style={{marginBottom:6}}>
-            <div className="progress-fill" style={{width:`${pctSt}%`,background:pctSt>=85?'var(--red)':pctSt>=60?'#F59E0B':'#7C3AED'}}/>
-          </div>
-          <p style={{fontSize:9,color:'var(--muted)',fontWeight:600,marginBottom:16}}>{pctSt.toFixed(1)}% do armazenamento usado</p>
-          <div style={{background:'#FFFBE6',border:'1px solid #FFE680',borderRadius:10,padding:12}}>
-            <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'#856A00',margin:'0 0 4px',letterSpacing:'.08em'}}>💡 Dica</p>
-            <p style={{fontSize:9,color:'#856A00',fontWeight:600,lineHeight:1.5,margin:0}}>Arquive e exclua concluídos regularmente para manter o sistema dentro do plano gratuito.</p>
-          </div>
+          <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',marginBottom:8}}><span style={{fontSize:36,fontWeight:800,lineHeight:1}}>{fmtBytes(bytesU)}</span><span style={{fontSize:10,color:'var(--muted)',fontWeight:600}}>de 1 GB</span></div>
+          <div className="progress-track" style={{marginBottom:6}}><div className="progress-fill" style={{width:`${pctSt}%`,background:pctSt>=85?'var(--red)':pctSt>=60?'#F59E0B':'#7C3AED'}}/></div>
+          <p style={{fontSize:9,color:'var(--muted)',fontWeight:600,marginBottom:14}}>{pctSt.toFixed(1)}% usado</p>
+          <div style={{background:'#FFFBE6',border:'1px solid #FFE680',borderRadius:10,padding:12}}><p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'#856A00',margin:'0 0 4px'}}>💡 Dica</p><p style={{fontSize:9,color:'#856A00',fontWeight:600,lineHeight:1.5,margin:0}}>Arquive e exclua concluídos regularmente.</p></div>
         </div>
       </div>
-
-      {/* Concluidos table */}
       <div className="card" style={{overflow:'hidden'}}>
         <div style={{padding:'14px 16px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:10}}>
-          <div>
-            <p style={{fontSize:12,fontWeight:700,textTransform:'uppercase',margin:0,color:'var(--ink)'}}>Arquivar Pedidos Concluídos</p>
-            <p style={{fontSize:9,color:'var(--muted)',fontWeight:600,margin:0,marginTop:2}}>Exporte e exclua para liberar capacidade</p>
-          </div>
+          <div><p style={{fontSize:12,fontWeight:800,textTransform:'uppercase',margin:0}}>Arquivar Pedidos Concluídos</p><p style={{fontSize:9,color:'var(--muted)',fontWeight:600,margin:0,marginTop:2}}>Exporte e exclua para liberar capacidade</p></div>
           <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-            {[
-              {label:'Excel',icon:'file-spreadsheet',cb:exportCSV,bg:'#059669',disabled:!qtdSel},
-              {label:'PDF',icon:'file-down',cb:exportPDF,bg:'#2563EB',disabled:!qtdSel||exportando,spin:exportando},
-              {label:'Excluir',icon:'trash-2',cb:()=>qtdSel&&setConfirmar(true),bg:'var(--red)',disabled:!qtdSel||excluindo}
-            ].map((b,i)=>(
-              <button key={i} onClick={b.cb} disabled={b.disabled} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 14px',background:b.disabled?'var(--smoke)':b.bg,color:b.disabled?'var(--muted)':'#fff',border:'none',borderRadius:8,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:b.disabled?'not-allowed':'pointer',transition:'opacity .2s'}}>
-                {b.spin?<Icon name="loader" size={13} className="spin"/>:<Icon name={b.icon} size={13}/>} {b.label} ({qtdSel})
+            {[{label:'Excel',icon:'file-spreadsheet',cb:exportCSV,bg:'#059669',disabled:!qtdSel},{label:'PDF',icon:'file-down',cb:exportPDF,bg:'#2563EB',disabled:!qtdSel||exportando,sp:exportando},{label:'Excluir',icon:'trash-2',cb:()=>qtdSel&&setConfirmar(true),bg:'var(--red)',disabled:!qtdSel||excluindo}].map((b,i)=>(
+              <button key={i} onClick={b.cb} disabled={b.disabled} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 14px',background:b.disabled?'var(--smoke)':b.bg,color:b.disabled?'var(--muted)':'#fff',border:'none',borderRadius:8,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:b.disabled?'not-allowed':'pointer'}}>
+                {b.sp?<Icon name="loader" size={13} className="spin"/>:<Icon name={b.icon} size={13}/>} {b.label} ({qtdSel})
               </button>
             ))}
           </div>
         </div>
         {concluidos.length===0?(
-          <div style={{padding:'48px 20px',textAlign:'center'}}>
-            <Icon name="check-circle" size={30} className="text-muted" style={{margin:'0 auto 10px',display:'block'}}/>
-            <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',margin:0}}>Nenhum pedido totalmente concluído</p>
-          </div>
+          <div style={{padding:'48px 20px',textAlign:'center'}}><p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',margin:0}}>Nenhum pedido totalmente concluído</p></div>
         ):(
           <>
             <div style={{overflowX:'auto'}}>
-              <table className="vtable w-full" style={{minWidth:800}}>
-                <thead>
-                  <tr>
-                    <th style={{width:40}}><input type="checkbox" checked={todosSel} onChange={toggleTodos} style={{width:15,height:15,accentColor:'var(--red)',cursor:'pointer'}}/></th>
-                    {['OS','Unidade','Veículo / Chassi','Solicitante','Data','Itens','Valor Total'].map(h=><th key={h}>{h}</th>)}
-                  </tr>
-                </thead>
+              <table className="vtable w-full" style={{minWidth:750}}>
+                <thead><tr><th style={{width:40}}><input type="checkbox" checked={todosSel} onChange={toggleTodos} style={{width:15,height:15,accentColor:'var(--red)',cursor:'pointer'}}/></th>{['OS','Unidade','Veículo','Solicitante','Data','Itens','Valor'].map(h=><th key={h}>{h}</th>)}</tr></thead>
                 <tbody>
                   {concluidos.map(r=>{
                     const vT=(r.items||[]).reduce((a,it)=>a+parseFloat(it.price||0),0);
-                    return(
-                      <tr key={r.id} onClick={()=>setSel(p=>({...p,[r.id]:!p[r.id]}))} style={{cursor:'pointer',background:sel[r.id]?'var(--red-light)':'transparent',transition:'background .15s'}}>
-                        <td onClick={e=>e.stopPropagation()}><input type="checkbox" checked={!!sel[r.id]} onChange={()=>setSel(p=>({...p,[r.id]:!p[r.id]}))} style={{width:15,height:15,accentColor:'var(--red)',cursor:'pointer'}}/></td>
-                        <td style={{fontWeight:800,fontSize:13}}>#{r.os}</td>
-                        <td><span className="pill" style={{fontSize:8}}>{r.unidade||'Unidade 1'}</span></td>
-                        <td><p style={{fontSize:10,fontWeight:700,textTransform:'uppercase',margin:0}}>{r.vehicleData?.modelo||'—'}</p><p className="mono" style={{fontSize:8,color:'var(--muted)',margin:0}}>{r.vehicleData?.chassi||''}</p></td>
-                        <td style={{fontSize:10,fontWeight:600,textTransform:'uppercase',color:'var(--muted)'}}>{r.responsavel||'—'}</td>
-                        <td style={{fontSize:10,color:'var(--muted)'}}>{r.timestamp?new Date(r.timestamp).toLocaleDateString('pt-BR'):'—'}</td>
-                        <td style={{textAlign:'center'}}><span className="badge" style={{background:'var(--ink)',color:'#fff'}}>{r.items?.length||0}</span></td>
-                        <td style={{fontSize:10,fontWeight:800,color:'#059669'}}>{vT>0?fmtBRL(vT):'—'}</td>
-                      </tr>
-                    );
+                    return(<tr key={r.id} onClick={()=>setSel(p=>({...p,[r.id]:!p[r.id]}))} style={{cursor:'pointer',background:sel[r.id]?'var(--red-light)':'transparent'}}>
+                      <td onClick={e=>e.stopPropagation()}><input type="checkbox" checked={!!sel[r.id]} onChange={()=>setSel(p=>({...p,[r.id]:!p[r.id]}))} style={{width:15,height:15,accentColor:'var(--red)',cursor:'pointer'}}/></td>
+                      <td style={{fontWeight:800,fontSize:13}}>#{r.os}</td><td><span className="pill" style={{fontSize:8}}>{r.unidade||'Unidade 1'}</span></td>
+                      <td><p style={{fontSize:10,fontWeight:700,textTransform:'uppercase',margin:0}}>{r.vehicleData?.modelo||'—'}</p><p className="mono" style={{fontSize:8,color:'var(--muted)',margin:0}}>{r.vehicleData?.chassi||''}</p></td>
+                      <td style={{fontSize:10,fontWeight:600,textTransform:'uppercase',color:'var(--muted)'}}>{r.responsavel||'—'}</td>
+                      <td style={{fontSize:10,color:'var(--muted)'}}>{r.timestamp?new Date(r.timestamp).toLocaleDateString('pt-BR'):'—'}</td>
+                      <td style={{textAlign:'center'}}><span className="badge" style={{background:'var(--ink)',color:'#fff'}}>{r.items?.length||0}</span></td>
+                      <td style={{fontSize:10,fontWeight:800,color:'#059669'}}>{vT>0?fmtBRL(vT):'—'}</td>
+                    </tr>);
                   })}
                 </tbody>
               </table>
             </div>
             <div style={{padding:'10px 16px',background:'var(--ink)',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:10}}>
-              <div style={{display:'flex',alignItems:'center',gap:16}}>
-                <p style={{fontSize:8,fontWeight:700,textTransform:'uppercase',color:'rgba(255,255,255,.4)',margin:0}}>{qtdSel} de {concluidos.length} selecionados</p>
-                {qtdSel>0&&<p style={{fontSize:8,fontWeight:700,color:'#059669',margin:0}}>Libera ~{fmtBytes(estimarBytes(pedSel))}</p>}
-              </div>
-              <div style={{display:'flex',gap:8}}>
-                <button onClick={()=>setSel({})} style={{fontSize:8,fontWeight:700,textTransform:'uppercase',color:'rgba(255,255,255,.4)',background:'none',border:'none',cursor:'pointer',padding:'5px 10px',borderRadius:7}}>Limpar</button>
-                <button onClick={toggleTodos} style={{fontSize:8,fontWeight:700,textTransform:'uppercase',color:'rgba(255,255,255,.6)',background:'rgba(255,255,255,.06)',border:'none',cursor:'pointer',padding:'5px 12px',borderRadius:7}}>{todosSel?'Desmarcar todos':'Selecionar todos'}</button>
-              </div>
+              <div style={{display:'flex',alignItems:'center',gap:16}}><p style={{fontSize:8,fontWeight:700,textTransform:'uppercase',color:'rgba(255,255,255,.4)',margin:0}}>{qtdSel} de {concluidos.length} selecionados</p>{qtdSel>0&&<p style={{fontSize:8,fontWeight:700,color:'#059669',margin:0}}>Libera ~{fmtBytes(estimarBytes(pedSel))}</p>}</div>
+              <div style={{display:'flex',gap:8}}><button onClick={()=>setSel({})} style={{fontSize:8,fontWeight:700,textTransform:'uppercase',color:'rgba(255,255,255,.4)',background:'none',border:'none',cursor:'pointer',padding:'5px 10px',borderRadius:7}}>Limpar</button><button onClick={toggleTodos} style={{fontSize:8,fontWeight:700,textTransform:'uppercase',color:'rgba(255,255,255,.6)',background:'rgba(255,255,255,.06)',border:'none',cursor:'pointer',padding:'5px 12px',borderRadius:7}}>{todosSel?'Desmarcar todos':'Selecionar todos'}</button></div>
             </div>
           </>
         )}
@@ -1452,39 +1372,23 @@ function LoginView({onLogin,usersList}){
     <div className="login-bg" style={{height:'100vh',width:'100%',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
       <div style={{background:'#fff',width:'100%',maxWidth:380,borderRadius:24,overflow:'hidden',boxShadow:'0 40px 80px rgba(0,0,0,.4)',borderBottom:'6px solid var(--red)'}} className="fade-in">
         <div style={{background:'var(--ink)',padding:'40px 32px',textAlign:'center',color:'#fff'}}>
-          <div style={{width:56,height:56,background:'var(--red)',borderRadius:16,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 16px',boxShadow:'0 8px 24px rgba(220,31,31,.4)'}}>
-            <Icon name="shopping-cart" size={28}/>
-          </div>
-          <h1 className="serif" style={{fontSize:38,fontWeight:400,margin:0,letterSpacing:'-.01em',color:'#fff'}}>VRZ Compras</h1>
+          <div style={{width:56,height:56,background:'var(--red)',borderRadius:16,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 16px',boxShadow:'0 8px 24px rgba(220,31,31,.4)'}}><Icon name="shopping-cart" size={28}/></div>
+          <h1 style={{fontSize:36,fontWeight:800,margin:0,letterSpacing:'-.02em',color:'#fff'}}>VRZ Compras</h1>
           <p style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:'.18em',color:'rgba(255,255,255,.3)',margin:'8px 0 0'}}>Acesso Restrito ao Sistema</p>
         </div>
-        <form onSubmit={submit} style={{padding:'32px'}}>
-          {err&&(
-            <div className="shake" style={{background:'var(--red-light)',border:'1px solid #FFBDBD',borderRadius:10,padding:'10px 14px',display:'flex',alignItems:'center',gap:8,marginBottom:20}}>
-              <Icon name="alert-circle" size={14} style={{color:'var(--red)',flexShrink:0}}/>
-              <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',color:'var(--red)'}}>{err}</span>
-            </div>
-          )}
-          <div className="space-y-4" style={{marginBottom:24}}>
+        <form onSubmit={submit} style={{padding:32,display:'flex',flexDirection:'column',gap:20}}>
+          {err&&(<div className="shake" style={{background:'var(--red-light)',border:'1px solid #FFBDBD',borderRadius:10,padding:'10px 14px',display:'flex',alignItems:'center',gap:8}}><Icon name="alert-circle" size={14}/><span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',color:'var(--red)'}}>{err}</span></div>)}
+          <div style={{display:'flex',flexDirection:'column',gap:14}}>
             <div>
               <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.14em',color:'var(--muted)',display:'block',marginBottom:6}}>Usuário</label>
-              <div style={{position:'relative'}}>
-                <div style={{position:'absolute',left:12,top:'50%',transform:'translateY(-50%)',color:'var(--muted)'}}><Icon name="user" size={15}/></div>
-                <input type="text" value={u} onChange={e=>setU(e.target.value)} className="input" style={{paddingLeft:38}} placeholder="USUÁRIO" required/>
-              </div>
+              <div style={{position:'relative'}}><div style={{position:'absolute',left:12,top:'50%',transform:'translateY(-50%)',color:'var(--muted)'}}><Icon name="user" size={15}/></div><input type="text" value={u} onChange={e=>setU(e.target.value)} className="input" style={{paddingLeft:38}} placeholder="USUÁRIO" required/></div>
             </div>
             <div>
               <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.14em',color:'var(--muted)',display:'block',marginBottom:6}}>Senha</label>
-              <div style={{position:'relative'}}>
-                <div style={{position:'absolute',left:12,top:'50%',transform:'translateY(-50%)',color:'var(--muted)'}}><Icon name="lock" size={15}/></div>
-                <input type={showP?'text':'password'} value={p} onChange={e=>setP(e.target.value)} className="input" style={{paddingLeft:38,paddingRight:40,letterSpacing:showP?'normal':'.2em'}} placeholder="••••••••" required/>
-                <button type="button" onClick={()=>setShowP(!showP)} style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--muted)',padding:2}}>
-                  {showP?<Icon name="eye-off" size={15}/>:<Icon name="eye" size={15}/>}
-                </button>
-              </div>
+              <div style={{position:'relative'}}><div style={{position:'absolute',left:12,top:'50%',transform:'translateY(-50%)',color:'var(--muted)'}}><Icon name="lock" size={15}/></div><input type={showP?'text':'password'} value={p} onChange={e=>setP(e.target.value)} className="input" style={{paddingLeft:38,paddingRight:40,letterSpacing:showP?'normal':'.2em'}} placeholder="••••••••" required/><button type="button" onClick={()=>setShowP(!showP)} style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--muted)',padding:2}}>{showP?<Icon name="eye-off" size={15}/>:<Icon name="eye" size={15}/>}</button></div>
             </div>
           </div>
-          <button type="submit" className="btn-primary" style={{width:'100%',padding:'15px',fontSize:11,letterSpacing:'.1em'}}>Entrar no Portal</button>
+          <button type="submit" className="btn-primary" style={{width:'100%',padding:15,fontSize:11,letterSpacing:'.1em'}}>Entrar no Portal</button>
         </form>
       </div>
     </div>
@@ -1493,9 +1397,13 @@ function LoginView({onLogin,usersList}){
 
 // ── App Principal ─────────────────────────────────────────────────────────
 function App(){
-  const[user,setUser]=useState(null);const[loggedIn,setLoggedIn]=useState(null);
-  const[view,setView]=useState('request');const[subView,setSubView]=useState('pending');
+  const[user,setUser]=useState(null);
+  const[loggedIn,setLoggedIn]=useState(null);
+  // MELHORIA 4: sempre abre em 'request'
+  const[view,setView]=useState('request');
+  const[subView,setSubView]=useState('pending');
   const[importData,setImportData]=useState([]);const[showImport,setShowImport]=useState(false);const[editing,setEditing]=useState(null);
+
   const{data:requests,loading:reqLoad}=useFirestore('requests');
   const{data:vehicles,loading:vehLoad}=useFirestore('vehicles');
   const{data:usersData,loading:usrLoad}=useFirestore('users');
@@ -1504,11 +1412,16 @@ function App(){
   useEffect(()=>{const u=auth.onAuthStateChanged(u=>{if(u)setUser(u);else auth.signInAnonymously();});return u;},[]);
 
   const isAdmin=loggedIn?.role==='admin';const isSol=loggedIn?.role==='solicitante'||isAdmin;
-  const addUser=async(u,p,role='solicitante')=>{try{await col('users').add({user:u,pass:p,active:true,role});}catch{alert('Erro ao criar usuário.');}};
+  const addUser=async(u,p,role='solicitante')=>{try{await col('users').add({user:u,pass:p,active:true,role});}catch{alert('Erro.');}};
   const deleteUser=async id=>{if(!window.confirm('Remover usuário?'))return;try{if(id&&id.length>15)await col('users').doc(id).delete();else setUsers(p=>p.filter(u=>u.user!==id));}catch{setUsers(p=>p.filter(u=>u.id!==id&&u.user!==id));}};
   const toggleUser=async u=>{const s=!(u.active!==false);try{if(u.id)await col('users').doc(u.id).update({active:s});else await col('users').add({...u,active:s});}catch{alert('Erro.');}};
   const changeRole=async(u,role)=>{try{if(u.id)await col('users').doc(u.id).update({role});else await col('users').add({...u,role});}catch{alert('Erro.');}};
-  const login=async u=>{const found=users.find(x=>x.user.toLowerCase()===u.user.toLowerCase()&&x.pass===u.pass);if(found){setLoggedIn(found);setView(found.role==='leitor'?'status':found.role==='admin'?'dashboard':'request');}};
+
+  // MELHORIA 4: login sempre abre em 'request' (ou status para leitor)
+  const login=u=>{
+    const found=users.find(x=>x.user.toLowerCase()===u.user.toLowerCase()&&x.pass===u.pass);
+    if(found){setLoggedIn(found);setView(found.role==='leitor'?'status':'request');}
+  };
   const logout=()=>{setLoggedIn(null);setView('request');};
 
   const handlePaste=e=>{
@@ -1524,15 +1437,23 @@ function App(){
     importData.forEach(v=>batch.set(col('vehicles').doc(v.os),v));
     await batch.commit();alert('Sucesso! '+importData.length+' veículos importados.');setImportData([]);setShowImport(false);
   };
+
+  // MELHORIA 5: updateItem agora reconhece 'Comprado'
+  // Regras: Valor+Loja+Prazo → Em Cotação; botão Comprado → Comprado; Data Real → Concluído
   const updateItem=async(reqId,idx,fields)=>{
     const req=requests.find(r=>r.id===reqId);if(!req)return;
     const newItems=[...req.items];const item={...newItems[idx],...fields};
-    if(item.price&&item.supplier&&item.deliveryDate&&!item.actualDeliveryDate)item.status='Em Cotação';
-    if(item.actualDeliveryDate)item.status='Concluído';
+    // Só muda status automaticamente se não foi definido explicitamente pelo campo 'status'
+    if(!fields.status){
+      if(item.actualDeliveryDate)item.status='Concluído';
+      else if(item.boughtAt)item.status='Comprado';
+      else if(item.price&&item.supplier&&item.deliveryDate)item.status='Em Cotação';
+    }
     newItems[idx]=item;
     let gs='Concluído';
     if(newItems.some(it=>it.status==='Pendente'))gs='Pendente';
     else if(newItems.some(it=>it.status==='Em Cotação'))gs='Em Cotação';
+    else if(newItems.some(it=>it.status==='Comprado'))gs='Comprado';
     else if(newItems.some(it=>it.status==='Doado'))gs='Doado';
     setEditing(p=>p?.id===reqId?{...p,items:newItems}:p);
     try{await col('requests').doc(reqId).update({items:newItems,status:gs});}catch{console.error('Erro ao atualizar item.');}
@@ -1540,10 +1461,12 @@ function App(){
 
   if(!loggedIn)return <LoginView onLogin={login} usersList={users}/>;
 
+  // MELHORIA 5: tabCounts inclui 'comprado'
   const tabCounts={
     pending:requests.filter(r=>r.items?.some(it=>it.status==='Pendente')).length,
     quoting:requests.filter(r=>r.items?.some(it=>it.status==='Em Cotação')).length,
-    completed:requests.filter(r=>r.items?.every(it=>it.status==='Concluído')).length,
+    bought:requests.filter(r=>r.items?.some(it=>it.status==='Comprado')).length,  // NOVO
+    completed:requests.filter(r=>r.items?.every(it=>it.status==='Concluído'||it.status==='Doado')).length,
     donated:requests.filter(r=>r.items?.some(it=>it.status==='Doado')).length,
   };
 
@@ -1557,82 +1480,55 @@ function App(){
 
   const loading=reqLoad||vehLoad||usrLoad;
 
-  // Sidebar color accent line
-  const navAccentBg={request:'var(--red)',status:'var(--ink)',donor:'var(--red)',admin:'var(--ink)',dashboard:'var(--red)'};
-
   return(
     <div style={{height:'100vh',display:'flex',flexDirection:'row',background:'#FAFAF9',overflow:'hidden'}}>
       <NetworkStatus/>
 
       {/* Desktop Sidebar */}
-      <nav style={{display:'none',width:220,background:'#0D0D0D',borderRight:'none',padding:'20px 14px',flexDirection:'column',gap:4,flexShrink:0}} className="md:flex-col" id="desktop-nav">
+      <nav style={{display:'none',width:220,background:'#0D0D0D',padding:'20px 14px',flexDirection:'column',gap:4,flexShrink:0}} id="desktop-nav">
         <style>{`@media(min-width:768px){#desktop-nav{display:flex!important}}`}</style>
-        {/* Logo */}
         <div style={{display:'flex',alignItems:'center',gap:10,padding:'6px 6px 20px',borderBottom:'1px solid rgba(255,255,255,.08)',marginBottom:8}}>
-          <div style={{width:36,height:36,background:'var(--red)',borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,boxShadow:'0 4px 12px rgba(220,31,31,.3)'}}>
-            <Icon name="shopping-cart" size={18} className="" style={{color:'#fff'}}/>
-          </div>
-          <div>
-            <p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',letterSpacing:'.14em',color:'rgba(255,255,255,.3)',margin:0,lineHeight:1}}>Portal Compras</p>
-            <h1 className="serif" style={{fontSize:20,fontWeight:800,margin:0,lineHeight:1.1,color:'#fff'}}>VRZ</h1>
-          </div>
+          <div style={{width:36,height:36,background:'var(--red)',borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,boxShadow:'0 4px 12px rgba(220,31,31,.3)'}}><Icon name="shopping-cart" size={18}/></div>
+          <div><p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',letterSpacing:'.14em',color:'rgba(255,255,255,.3)',margin:0,lineHeight:1}}>Portal Compras</p><h1 style={{fontSize:20,fontWeight:800,margin:0,lineHeight:1.1,color:'#fff',letterSpacing:'-.01em'}}>VRZ</h1></div>
         </div>
-
         <div style={{flex:1,display:'flex',flexDirection:'column',gap:2}}>
           {navItems.map(n=>(
             <button key={n.key} onClick={()=>setView(n.key)} className={`nav-item ${view===n.key?'active':''}`}>
-              <div className="nav-icon"><Icon name={n.icon} size={15}/></div>
-              {n.label}
+              <div className="nav-icon"><Icon name={n.icon} size={15}/></div>{n.label}
             </button>
           ))}
         </div>
-
-        {/* User card */}
-        <div style={{background:'rgba(255,255,255,.06)',borderRadius:12,padding:'12px',border:'1px solid rgba(255,255,255,.1)'}}>
+        <div style={{background:'rgba(255,255,255,.06)',borderRadius:12,padding:12,border:'1px solid rgba(255,255,255,.1)'}}>
           <p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',color:'rgba(255,255,255,.3)',margin:'0 0 4px'}}>Logado como</p>
           <p style={{fontSize:11,fontWeight:800,textTransform:'uppercase',color:'var(--red)',margin:'0 0 6px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{loggedIn.user}</p>
           <div style={{marginBottom:10}}><RoleBadge role={loggedIn.role}/></div>
-          <button onClick={logout} style={{width:'100%',padding:'7px',background:'rgba(255,255,255,.08)',border:'1px solid rgba(255,255,255,.12)',borderRadius:8,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',color:'rgba(255,255,255,.5)',transition:'all .15s',letterSpacing:'.06em'}} onMouseEnter={e=>{e.currentTarget.style.background='var(--red)';e.currentTarget.style.color='#fff';e.currentTarget.style.borderColor='var(--red)';}} onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,.08)';e.currentTarget.style.color='rgba(255,255,255,.5)';e.currentTarget.style.borderColor='rgba(255,255,255,.12)';}}>
-            Sair
-          </button>
+          <button onClick={logout} style={{width:'100%',padding:7,background:'rgba(255,255,255,.08)',border:'1px solid rgba(255,255,255,.12)',borderRadius:8,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',color:'rgba(255,255,255,.5)',transition:'all .15s',fontFamily:'Plus Jakarta Sans,sans-serif'}} onMouseEnter={e=>{e.currentTarget.style.background='var(--red)';e.currentTarget.style.color='#fff';e.currentTarget.style.borderColor='var(--red)';}} onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,.08)';e.currentTarget.style.color='rgba(255,255,255,.5)';e.currentTarget.style.borderColor='rgba(255,255,255,.12)';}}>Sair</button>
         </div>
-
         <div style={{textAlign:'center',paddingTop:6}}>
-          <span style={{fontSize:8,fontWeight:700,letterSpacing:'.1em',color:user?'var(--red)':'rgba(255,255,255,.25)',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>
+          <span style={{fontSize:8,fontWeight:700,color:user?'var(--red)':'rgba(255,255,255,.25)',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>
             <span className="pulse-beacon" style={{width:6,height:6,borderRadius:'50%',background:user?'var(--red)':'var(--muted)',display:'inline-block'}}/>{user?'ONLINE':'RECONECTANDO...'}
           </span>
         </div>
       </nav>
 
       {/* Mobile Header */}
-      <div style={{display:'flex'}} id="mobile-header">
-        <style>{`@media(min-width:768px){#mobile-header{display:none!important}}`}</style>
+      <div id="mobile-header"><style>{`@media(min-width:768px){#mobile-header{display:none!important}}`}</style>
         <div style={{position:'fixed',top:0,left:0,right:0,zIndex:100,background:'#fff',borderBottom:'1px solid var(--border)',padding:'10px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',boxShadow:'0 2px 16px rgba(0,0,0,.06)'}}>
           <div style={{display:'flex',alignItems:'center',gap:10}}>
-            <div style={{width:32,height:32,background:'var(--red)',borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center'}}>
-              <Icon name="shopping-cart" size={15}/>
-            </div>
-            <h1 className="serif" style={{fontSize:20,fontWeight:400,margin:0,color:'var(--ink)'}}>VRZ</h1>
+            <div style={{width:32,height:32,background:'var(--red)',borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="shopping-cart" size={15}/></div>
+            <h1 style={{fontSize:20,fontWeight:800,margin:0,letterSpacing:'-.01em'}}>VRZ</h1>
           </div>
           <div style={{display:'flex',alignItems:'center',gap:10}}>
-            <div style={{textAlign:'right'}}>
-              <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--red)',margin:0,maxWidth:100,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{loggedIn.user}</p>
-              <RoleBadge role={loggedIn.role}/>
-            </div>
-            <button onClick={logout} style={{width:34,height:34,background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
-              <Icon name="log-out" size={15}/>
-            </button>
+            <div style={{textAlign:'right'}}><p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--red)',margin:0,maxWidth:100,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{loggedIn.user}</p><RoleBadge role={loggedIn.role}/></div>
+            <button onClick={logout} style={{width:34,height:34,background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}><Icon name="log-out" size={15}/></button>
           </div>
         </div>
       </div>
 
-      {/* Main content */}
+      {/* Main */}
       <main style={{flex:1,overflowY:'auto',minWidth:0}} className="scroll-y">
-        <div style={{padding:'16px',paddingTop:0}} id="main-pad">
-          <style>{`
-            @media(min-width:768px){#main-pad{padding:28px!important}}
-            @media(max-width:767px){#main-pad{padding-top:64px!important;padding-bottom:80px!important}}
-          `}</style>
+        <div style={{padding:16,paddingTop:0}} id="main-pad">
+          <style>{`@media(min-width:768px){#main-pad{padding:28px!important}}@media(max-width:767px){#main-pad{padding-top:64px!important;padding-bottom:80px!important}}`}</style>
           <div style={{maxWidth:1100,margin:'0 auto'}}>
             {loading?<Skeleton/>:(
               <>
@@ -1641,60 +1537,47 @@ function App(){
                 {view==='status'&&<StatusView requests={requests} isAdmin={isAdmin}/>}
                 {view==='donor'&&isAdmin&&<DonorSystem requests={requests} vehicles={vehicles} loggedInUser={loggedIn}/>}
                 {view==='admin'&&isAdmin&&(
-                  <div className="space-y-5 fade-up pb-10">
-                    <div>
+                  <div className="fade-up" style={{paddingBottom:40}}>
+                    <div style={{marginBottom:16}}>
                       <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.15em',color:'var(--red)',marginBottom:4}}>Administração</p>
-                      <h2 className="serif" style={{fontSize:36,fontWeight:400,margin:'0 0 16px'}}>Gestão de Compras</h2>
+                      <h2 style={{fontSize:32,fontWeight:800,margin:'0 0 16px',letterSpacing:'-.02em'}}>Gestão de Compras</h2>
                     </div>
-
-                    {/* Import button */}
-                    <div style={{display:'flex',justifyContent:'flex-end'}}>
+                    <div style={{display:'flex',justifyContent:'flex-end',marginBottom:16}}>
                       <button onClick={()=>setShowImport(true)} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 18px',background:'var(--ink)',color:'#fff',border:'none',borderRadius:10,fontSize:10,fontWeight:800,textTransform:'uppercase',cursor:'pointer',letterSpacing:'.08em',borderBottom:'3px solid var(--red)'}}>
                         <Icon name="file-up" size={14}/> Importar Planilha
                       </button>
                     </div>
-
-                    {/* Tab bar */}
-                    <div style={{display:'flex',gap:4,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)',overflowX:'auto'}}>
+                    {/* Tab bar — MELHORIA 5: inclui "Comprado" */}
+                    <div style={{display:'flex',gap:4,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)',overflowX:'auto',marginBottom:20}}>
                       {[
-                        {key:'pending',label:`Pendentes (${tabCounts.pending})`,color:'var(--red)'},
-                        {key:'quoting',label:`Em Cotação (${tabCounts.quoting})`,color:'#2563EB'},
-                        {key:'completed',label:`Concluídos (${tabCounts.completed})`,color:'#059669'},
+                        {key:'pending',label:`Pendentes (${tabCounts.pending})`,color:'#C45E00'},
+                        {key:'quoting',label:`Em Cotação (${tabCounts.quoting})`,color:'#1A4EC2'},
+                        {key:'bought',label:`Comprado (${tabCounts.bought})`,color:'#6B21A8'},  // NOVO
+                        {key:'completed',label:`Concluídos (${tabCounts.completed})`,color:'#0A6B34'},
                         {key:'donated',label:`Doados (${tabCounts.donated})`,color:'#A81515'},
                         {key:'vehicles',label:`Veículos (${vehicles.length})`,color:'var(--ink)'},
                         {key:'users',label:'Usuários',color:'var(--red)'},
                         {key:'storage',label:'Capacidade',color:'#7C3AED'},
                       ].map(t=>(
-                        <button key={t.key} onClick={()=>setSubView(t.key)} style={{
-                          padding:'8px 14px',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',whiteSpace:'nowrap',
-                          border:'none',cursor:'pointer',letterSpacing:'.06em',transition:'all .15s',
-                          background:subView===t.key?'#fff':'transparent',
-                          color:subView===t.key?t.color:'var(--muted)',
-                          boxShadow:subView===t.key?'0 2px 8px rgba(0,0,0,.08)':'none'
-                        }}>{t.label}</button>
+                        <button key={t.key} onClick={()=>setSubView(t.key)} style={{padding:'8px 14px',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',whiteSpace:'nowrap',border:'none',cursor:'pointer',letterSpacing:'.06em',transition:'all .15s',background:subView===t.key?'#fff':'transparent',color:subView===t.key?t.color:'var(--muted)',boxShadow:subView===t.key?'0 2px 8px rgba(0,0,0,.08)':'none',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
+                          {t.label}
+                        </button>
                       ))}
                     </div>
 
-                    {/* Sub views */}
                     {subView==='users'&&<UserManagement users={users} onAdd={addUser} onDelete={deleteUser} onToggle={toggleUser} onRole={changeRole}/>}
                     {subView==='storage'&&<StorageView requests={requests}/>}
                     {subView==='vehicles'&&(
                       <div className="card" style={{overflow:'hidden'}}>
                         <div style={{overflowX:'auto',maxHeight:'60vh'}} className="scroll-y">
                           <table className="vtable w-full" style={{minWidth:900}}>
-                            <thead className="sticky-head" style={{position:'sticky',top:0}}>
-                              <tr>{['OS','Modelo','Fabricante','Cor','Chassi','Etapa','Localização'].map(h=><th key={h}>{h}</th>)}</tr>
-                            </thead>
+                            <thead style={{position:'sticky',top:0}}><tr>{['OS','Modelo','Fabricante','Cor','Chassi','Etapa','Localização'].map(h=><th key={h}>{h}</th>)}</tr></thead>
                             <tbody>
-                              {vehicles.length===0?<tr><td colSpan="7" style={{padding:'40px',textAlign:'center',fontSize:10,fontWeight:700,textTransform:'uppercase',color:'var(--muted)'}}>Nenhum veículo cadastrado</td></tr>:vehicles.map((v,i)=>(
+                              {vehicles.length===0?<tr><td colSpan="7" style={{padding:40,textAlign:'center',fontSize:10,fontWeight:700,textTransform:'uppercase',color:'var(--muted)'}}>Nenhum veículo cadastrado</td></tr>:vehicles.map((v,i)=>(
                                 <tr key={i}>
-                                  <td style={{fontWeight:800,fontSize:13}}>#{v.os}</td>
-                                  <td style={{fontWeight:600,textTransform:'uppercase'}}>{v.modelo}</td>
-                                  <td style={{textTransform:'uppercase'}}>{v.fabricante}</td>
-                                  <td style={{textTransform:'uppercase'}}>{v.cor}</td>
+                                  <td style={{fontWeight:800,fontSize:13}}>#{v.os}</td><td style={{fontWeight:600,textTransform:'uppercase'}}>{v.modelo}</td><td style={{textTransform:'uppercase'}}>{v.fabricante}</td><td style={{textTransform:'uppercase'}}>{v.cor}</td>
                                   <td className="mono" style={{fontSize:10,fontWeight:700,letterSpacing:'.06em'}}>{v.chassi}</td>
-                                  <td><span className="badge badge-donated">{v.etapa}</span></td>
-                                  <td style={{textTransform:'uppercase'}}>{v.localizacao}</td>
+                                  <td><span className="badge badge-pending">{v.etapa}</span></td><td style={{textTransform:'uppercase'}}>{v.localizacao}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -1702,54 +1585,42 @@ function App(){
                         </div>
                       </div>
                     )}
-                    {['pending','quoting','completed','donated'].includes(subView)&&(
-                      <div className="space-y-3 fade-in">
+
+                    {/* MELHORIA 5: filtros incluem 'bought' */}
+                    {['pending','quoting','bought','completed','donated'].includes(subView)&&(
+                      <div className="fade-in" style={{display:'flex',flexDirection:'column',gap:12}}>
                         {requests.filter(r=>{
                           if(subView==='pending')return r.items?.some(it=>it.status==='Pendente');
                           if(subView==='quoting')return r.items?.some(it=>it.status==='Em Cotação');
+                          if(subView==='bought')return r.items?.some(it=>it.status==='Comprado');
                           if(subView==='donated')return r.items?.some(it=>it.status==='Doado');
-                          return r.items?.every(it=>it.status==='Concluído');
+                          return r.items?.every(it=>it.status==='Concluído'||it.status==='Doado');
                         }).map(req=>{
-                          const accentCol=subView==='pending'?'var(--red)':subView==='quoting'?'#2563EB':subView==='donated'?'#A81515':'#059669';
+                          const accentCol=subView==='pending'?'#C45E00':subView==='quoting'?'#1A4EC2':subView==='bought'?'#6B21A8':subView==='donated'?'#A81515':'#0A6B34';
                           return(
                             <div key={req.id} className="card" style={{display:'flex',alignItems:'center',gap:16,padding:'14px 16px',borderLeft:`3px solid ${accentCol}`}}>
                               <div style={{textAlign:'center',flexShrink:0}}>
-                                <p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',margin:0,letterSpacing:'.08em'}}>OS</p>
+                                <p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',margin:0}}>OS</p>
                                 <p style={{fontSize:16,fontWeight:800,margin:0}}>#{req.os}</p>
                                 <p style={{fontSize:8,color:'var(--muted)',fontWeight:600,margin:0}}>{req.unidade||'Unidade 1'}</p>
                               </div>
-                              <div style={{flexShrink:0,display:'none'}} className="sm-show">
-                                <style>{`@media(min-width:640px){.sm-show{display:block!important}}`}</style>
-                                <p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',margin:'0 0 2px',letterSpacing:'.08em'}}>Veículo</p>
-                                <p style={{fontSize:10,fontWeight:700,textTransform:'uppercase',margin:0}}>{req.vehicleData?.modelo||'—'}</p>
-                                <p className="mono" style={{fontSize:8,color:'var(--muted)',margin:0}}>{req.vehicleData?.chassi||''}</p>
-                              </div>
                               <div style={{flex:1,minWidth:0}}>
-                                <p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',margin:'0 0 6px',letterSpacing:'.08em'}}>Itens ({req.items?.length||0})</p>
+                                <p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',margin:'0 0 4px'}}>Itens ({req.items?.length||0})</p>
                                 <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
                                   {req.items?.map((it,i)=>(
-                                    <span key={i} className="badge" style={{background:it.status==='Concluído'?'var(--ink)':it.status==='Doado'?'var(--red-light)':it.status==='Em Cotação'?'#EAF0FF':'#FFF4E6',color:it.status==='Concluído'?'#fff':it.status==='Doado'?'var(--red)':it.status==='Em Cotação'?'#1A4EC2':'#C45E00'}}>
-                                      {it.description}
-                                    </span>
+                                    <span key={i} className="badge" style={{
+                                      background:it.status==='Concluído'?'var(--ink)':it.status==='Doado'?'#FFF0F0':it.status==='Comprado'?'#F3E8FF':it.status==='Em Cotação'?'#EAF0FF':'#FFF4E6',
+                                      color:it.status==='Concluído'?'#fff':it.status==='Doado'?'var(--red)':it.status==='Comprado'?'#6B21A8':it.status==='Em Cotação'?'#1A4EC2':'#C45E00'
+                                    }}>{it.description}</span>
                                   ))}
                                 </div>
                               </div>
-                              <button onClick={()=>setEditing(req)} style={{display:'flex',alignItems:'center',gap:6,padding:'9px 16px',background:'var(--ink)',color:'#fff',border:'none',borderBottom:'3px solid var(--red)',borderRadius:10,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',flexShrink:0,letterSpacing:'.06em'}}>
+                              <button onClick={()=>setEditing(req)} style={{display:'flex',alignItems:'center',gap:6,padding:'9px 16px',background:'var(--ink)',color:'#fff',border:'none',borderBottom:'3px solid var(--red)',borderRadius:10,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',flexShrink:0,fontFamily:'Plus Jakarta Sans,sans-serif'}}>
                                 <Icon name="edit-2" size={13}/> Gerenciar
                               </button>
                             </div>
                           );
                         })}
-                        {requests.filter(r=>{
-                          if(subView==='pending')return r.items?.some(it=>it.status==='Pendente');
-                          if(subView==='quoting')return r.items?.some(it=>it.status==='Em Cotação');
-                          if(subView==='donated')return r.items?.some(it=>it.status==='Doado');
-                          return r.items?.every(it=>it.status==='Concluído');
-                        }).length===0&&(
-                          <div style={{padding:'48px',textAlign:'center',background:'#fff',borderRadius:16,border:'1.5px dashed var(--border)'}}>
-                            <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',letterSpacing:'.1em'}}>Nenhum pedido nesta categoria</p>
-                          </div>
-                        )}
                       </div>
                     )}
                   </div>
@@ -1761,13 +1632,11 @@ function App(){
       </main>
 
       {/* Mobile Bottom Nav */}
-      <div id="mobile-bottom" style={{display:'flex'}}>
-        <style>{`@media(min-width:768px){#mobile-bottom{display:none!important}}`}</style>
+      <div id="mobile-bottom"><style>{`@media(min-width:768px){#mobile-bottom{display:none!important}}`}</style>
         <div className="bottom-nav">
           {navItems.map(n=>(
             <button key={n.key} onClick={()=>setView(n.key)} className={`bottom-nav-btn ${view===n.key?'active':''}`}>
-              <Icon name={n.icon} size={21}/>
-              <span>{n.label}</span>
+              <Icon name={n.icon} size={21}/><span>{n.label}</span>
             </button>
           ))}
         </div>
@@ -1778,18 +1647,13 @@ function App(){
         <div style={{position:'fixed',inset:0,zIndex:300,background:'rgba(0,0,0,.9)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
           <div style={{background:'#fff',width:'100%',maxWidth:1000,height:'82vh',borderRadius:24,overflow:'hidden',boxShadow:'0 40px 80px rgba(0,0,0,.5)',display:'flex',flexDirection:'column'}}>
             <div style={{padding:'20px 28px',background:'var(--ink)',display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:'4px solid var(--red)',flexShrink:0}}>
-              <div>
-                <h3 style={{margin:0,fontSize:20,fontWeight:700,color:'#fff'}}>Importar Planilha</h3>
-                <p style={{margin:0,fontSize:9,color:'rgba(255,255,255,.35)',textTransform:'uppercase',letterSpacing:'.1em',marginTop:2}}>Cole os dados do Excel (Ctrl+V)</p>
-              </div>
-              <button onClick={()=>{setShowImport(false);setImportData([]);}} style={{width:38,height:38,background:'rgba(255,255,255,.08)',border:'none',borderRadius:10,cursor:'pointer',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center'}}>
-                <Icon name="x" size={20}/>
-              </button>
+              <div><h3 style={{margin:0,fontSize:20,fontWeight:800,color:'#fff'}}>Importar Planilha</h3><p style={{margin:0,fontSize:9,color:'rgba(255,255,255,.35)',textTransform:'uppercase',letterSpacing:'.1em',marginTop:2}}>Cole os dados do Excel (Ctrl+V)</p></div>
+              <button onClick={()=>{setShowImport(false);setImportData([]);}} style={{width:38,height:38,background:'rgba(255,255,255,.08)',border:'none',borderRadius:10,cursor:'pointer',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="x" size={20}/></button>
             </div>
             <div style={{flex:1,overflow:'hidden',display:'flex',flexDirection:'column',padding:20,gap:16}}>
               {importData.length===0?(
                 <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',border:'2px dashed var(--border)',borderRadius:16,background:'var(--smoke)',position:'relative'}}>
-                  <Icon name="file-spreadsheet" size={52} className="" style={{color:'var(--border)',marginBottom:12}}/>
+                  <Icon name="file-spreadsheet" size={52} style={{color:'var(--border)',marginBottom:12}}/>
                   <p style={{fontSize:12,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',margin:0}}>Pronto para importar</p>
                   <p style={{fontSize:10,color:'var(--muted)',margin:'4px 0 0'}}>Selecione no Excel e CTRL+V</p>
                   <textarea onPaste={handlePaste} style={{position:'absolute',inset:0,opacity:0,cursor:'pointer',resize:'none'}} autoFocus/>
@@ -1799,15 +1663,13 @@ function App(){
                   <div style={{flex:1,overflow:'auto',border:'1px solid var(--border)',borderRadius:12}} className="scroll-y">
                     <table style={{width:'100%',borderCollapse:'collapse',minWidth:900}}>
                       <thead style={{background:'var(--smoke)',position:'sticky',top:0}}>
-                        <tr>{['OS','Modelo','Fabricante','Cor','Chassi','Etapa','Localização'].map(h=><th key={h} style={{padding:'10px',fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.08em',color:'var(--muted)',textAlign:'left',borderBottom:'1px solid var(--border)'}}>{h}</th>)}</tr>
+                        <tr>{['OS','Modelo','Fabricante','Cor','Chassi','Etapa','Localização'].map(h=><th key={h} style={{padding:10,fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.08em',color:'var(--muted)',textAlign:'left',borderBottom:'1px solid var(--border)'}}>{h}</th>)}</tr>
                       </thead>
                       <tbody>
                         {importData.map((row,rIdx)=>(
                           <tr key={rIdx} style={{borderBottom:'1px solid var(--smoke)'}}>
                             {['os','modelo','fabricante','cor','chassi','etapa','localizacao'].map(k=>(
-                              <td key={k} style={{border:'none',padding:0,height:36}}>
-                                <input className="excel-input" value={row[k]} onChange={e=>{const d=[...importData];d[rIdx][k]=sanitize(e.target.value);setImportData(d);}}/>
-                              </td>
+                              <td key={k} style={{border:'none',padding:0,height:36}}><input className="excel-input" value={row[k]} onChange={e=>{const d=[...importData];d[rIdx][k]=sanitize(e.target.value);setImportData(d);}}/></td>
                             ))}
                           </tr>
                         ))}
@@ -1816,10 +1678,7 @@ function App(){
                   </div>
                   <div style={{paddingTop:14,display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
                     <p style={{fontSize:10,color:'var(--muted)',fontWeight:600}}>{importData.length} registros</p>
-                    <div style={{display:'flex',gap:10}}>
-                      <button onClick={()=>setImportData([])} className="btn-ghost">Limpar</button>
-                      <button onClick={commitImport} className="btn-primary" style={{padding:'11px 28px'}}>Sincronizar</button>
-                    </div>
+                    <div style={{display:'flex',gap:10}}><button onClick={()=>setImportData([])} className="btn-ghost">Limpar</button><button onClick={commitImport} className="btn-primary" style={{padding:'11px 28px'}}>Sincronizar</button></div>
                   </div>
                 </div>
               )}
@@ -1828,33 +1687,25 @@ function App(){
         </div>
       )}
 
-      {/* Editing Modal */}
+      {/* Editing Modal — MELHORIA 5: botão "Já foi comprado?" em itens Em Cotação */}
       {editing&&isAdmin&&(
         <div style={{position:'fixed',inset:0,zIndex:200,background:'rgba(0,0,0,.9)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center',padding:16,overflowY:'auto'}}>
           <div style={{background:'#fff',width:'100%',maxWidth:1000,borderRadius:24,boxShadow:'0 40px 80px rgba(0,0,0,.5)',display:'flex',flexDirection:'column',margin:'auto',borderBottom:'5px solid var(--red)'}}>
             <div style={{padding:'20px 28px',background:'var(--ink)',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
               <div>
                 <div style={{display:'flex',alignItems:'center',gap:10}}>
-                  <h3 style={{margin:0,fontSize:18,fontWeight:700,color:'#fff'}}>OS #{editing.os}</h3>
-                  <span className="pill" style={{background:'rgba(255,255,255,.08)',color:'rgba(255,255,255,.5)',border:'1px solid rgba(255,255,255,.12)',fontSize:8}}>{editing.unidade||'Unidade 1'}</span>
+                  <h3 style={{margin:0,fontSize:18,fontWeight:800,color:'#fff'}}>OS #{editing.os}</h3>
+                  <span style={{padding:'3px 10px',borderRadius:999,background:'rgba(255,255,255,.08)',color:'rgba(255,255,255,.5)',border:'1px solid rgba(255,255,255,.12)',fontSize:8,fontWeight:800}}>{editing.unidade||'Unidade 1'}</span>
                 </div>
-                <p style={{margin:0,fontSize:9,color:'var(--red)',fontWeight:700,textTransform:'uppercase',marginTop:4,letterSpacing:'.06em'}}>{editing.vehicleData?.modelo||''}{editing.vehicleData?.chassi?' · '+editing.vehicleData.chassi:''}</p>
+                <p style={{margin:0,fontSize:9,color:'var(--red)',fontWeight:700,textTransform:'uppercase',marginTop:4}}>{editing.vehicleData?.modelo||''}{editing.vehicleData?.chassi?' · '+editing.vehicleData.chassi:''}</p>
               </div>
-              <button onClick={()=>setEditing(null)} style={{width:38,height:38,background:'rgba(255,255,255,.08)',border:'none',borderRadius:10,cursor:'pointer',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center'}}>
-                <Icon name="x" size={20}/>
-              </button>
+              <button onClick={()=>setEditing(null)} style={{width:38,height:38,background:'rgba(255,255,255,.08)',border:'none',borderRadius:10,cursor:'pointer',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="x" size={20}/></button>
             </div>
-            <div style={{padding:24,overflowY:'auto',maxHeight:'68vh'}} className="scroll-y space-y-3">
+            <div style={{padding:24,overflowY:'auto',maxHeight:'68vh'}} className="scroll-y">
               {editing.items?.map((it,idx)=>(
-                <div key={idx} style={{
-                  background:it.status==='Doado'?'var(--red-light)':'var(--smoke)',
-                  borderRadius:14,padding:18,
-                  border:`1.5px solid ${it.status==='Doado'?'#FFBDBD':'var(--border)'}`,
-                  display:'grid',gridTemplateColumns:'1fr',gap:14
-                }}>
-                  <div style={{display:'flex',alignItems:'flex-start',gap:12}}>
-                    {it.photo?<img src={it.photo} style={{width:48,height:48,borderRadius:10,objectFit:'cover',border:'1px solid var(--border)',flexShrink:0}} alt="Peça"/>
-                      :<div style={{width:48,height:48,borderRadius:10,background:'var(--border)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="package" size={18}/></div>}
+                <div key={idx} style={{background:it.status==='Doado'?'var(--red-light)':it.status==='Comprado'?'#F5F0FF':'var(--smoke)',borderRadius:14,padding:18,border:`1.5px solid ${it.status==='Doado'?'#FFBDBD':it.status==='Comprado'?'#D8B4FE':'var(--border)'}`,marginBottom:12}}>
+                  <div style={{display:'flex',alignItems:'flex-start',gap:12,marginBottom:14}}>
+                    {it.photo?<img src={it.photo} style={{width:48,height:48,borderRadius:10,objectFit:'cover',border:'1px solid var(--border)',flexShrink:0}} alt="Peça"/>:<div style={{width:48,height:48,borderRadius:10,background:'var(--border)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="package" size={18}/></div>}
                     <div style={{minWidth:0,flex:1}}>
                       <p style={{fontSize:12,fontWeight:700,textTransform:'uppercase',margin:'0 0 6px',lineHeight:1.2}}>{it.description}</p>
                       <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
@@ -1862,7 +1713,20 @@ function App(){
                         <StatusBadge status={it.status||'Pendente'} orig={it.statusOriginal}/>
                         {it.status==='Doado'&&it.donatedTo&&<span style={{fontSize:8,color:'var(--red)',fontWeight:700}}>→ OS #{it.donatedTo}</span>}
                         {it.status==='Doado'&&it.donatedFrom&&<span style={{fontSize:8,color:'#C45E00',fontWeight:700}}>← de OS #{it.donatedFrom}</span>}
+                        {/* MELHORIA 5: botão "Já foi comprado?" aparece em Em Cotação */}
+                        {it.status==='Em Cotação'&&(
+                          <button onClick={()=>updateItem(editing.id,idx,{status:'Comprado',boughtAt:new Date().toISOString().slice(0,10)})} className="btn-bought">
+                            <Icon name="shopping-bag" size={12}/> Já foi comprado?
+                          </button>
+                        )}
+                        {/* Volta para Em Cotação se quiser */}
+                        {it.status==='Comprado'&&(
+                          <button onClick={()=>updateItem(editing.id,idx,{status:'Em Cotação',boughtAt:null})} style={{fontSize:8,fontWeight:700,padding:'3px 8px',borderRadius:6,border:'1px solid #D8B4FE',background:'#F5F0FF',color:'#6B21A8',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
+                            ↩ Desfazer
+                          </button>
+                        )}
                       </div>
+                      {it.boughtAt&&<p style={{fontSize:8,color:'#6B21A8',fontWeight:700,margin:'4px 0 0'}}>🛍 Comprado em {it.boughtAt}</p>}
                     </div>
                   </div>
                   <div style={{display:'grid',gridTemplateColumns:'repeat(2,1fr)',gap:10}} className="md-4col">
@@ -1883,7 +1747,7 @@ function App(){
               ))}
             </div>
             <div style={{padding:'16px 24px',background:'var(--smoke)',borderTop:'1px solid var(--border)',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
-              <p style={{fontSize:8,color:'var(--muted)',fontWeight:600,fontStyle:'italic',margin:0}}>* Valor + Loja + Prazo → Em Cotação · Data Real → Concluído</p>
+              <p style={{fontSize:8,color:'var(--muted)',fontWeight:600,fontStyle:'italic',margin:0}}>* Valor + Loja + Prazo → Em Cotação · "Já foi comprado?" → Comprado · Data Real → Concluído</p>
               <button onClick={()=>setEditing(null)} className="btn-primary" style={{padding:'11px 28px'}}>Fechar e Sincronizar</button>
             </div>
           </div>
