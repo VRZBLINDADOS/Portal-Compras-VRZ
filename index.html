@@ -131,6 +131,17 @@ const useFirestore=(collectionName)=>{
 
 const sanitize=(v)=>typeof v!=='string'?v:DOMPurify.sanitize(v);
 
+// Remove campos undefined recursivamente — Firestore não aceita undefined
+function stripUndefined(obj){
+  if(Array.isArray(obj))return obj.map(stripUndefined);
+  if(obj!==null&&typeof obj==='object'){
+    const out={};
+    Object.entries(obj).forEach(([k,v])=>{if(v!==undefined)out[k]=stripUndefined(v);});
+    return out;
+  }
+  return obj;
+}
+
 const INIT_USERS=[
   {user:"Lucas.Sabino",pass:"29623298",active:true,role:"admin"},
   {user:"Eduardo.Rocha",pass:"Helito@1313",active:true,role:"solicitante"},
@@ -417,6 +428,7 @@ function DonorSystem({requests,vehicles,loggedInUser}){
   const[sourceOS,setSourceOS]=useState('');
   const[processing,setProcessing]=useState(false);
   const[done,setDone]=useState(false);
+  const[showConfirm,setShowConfirm]=useState(false);
 
   // OS receptora: encontrar o pedido de compra pela OS digitada
   const targetRequest=useMemo(()=>{
@@ -482,52 +494,161 @@ function DonorSystem({requests,vehicles,loggedInUser}){
     setTargetOS(t);setStep(2);
   };
 
-  const handleConfirm=async()=>{
-    if(!targetRequest||!sourceOS||selectedItems.length===0)return;
-    if(!window.confirm(`Transferir ${selectedItems.length} peça(s) da OS #${targetOS} para a OS #${sourceOS}?`))return;
+  const executeTransfer=async()=>{
+    setShowConfirm(false);
     setProcessing(true);
     try{
-      const batch=db.batch();
-      // Atualiza itens na OS receptora — marca como Doado em TODOS os docs com essa OS
-      const matchingDocs=requests.filter(r=>String(r.os).trim()===targetOS.trim());
-      matchingDocs.forEach(req=>{
+      // ── PASSO 1: Marca itens da OS RECEPTORA (targetOS) como "Doado"
+      // com receivedFrom:sourceOS — ela vai RECEBER as peças da sourceOS
+      const receptoraDocs=requests.filter(r=>String(r.os).trim()===targetOS.trim());
+      for(const req of receptoraDocs){
         const newItems=[...req.items];let changed=false;
         selectedItems.forEach(itemId=>{
-          const idx=newItems.findIndex(it=>it.id===itemId);
-          if(idx!==-1){newItems[idx]={...newItems[idx],status:'Doado',statusOriginal:'Doado',donatedTo:sourceOS,donatedAt:Date.now()};changed=true;}
+          const idx=newItems.findIndex(it=>String(it.id)===String(itemId));
+          if(idx!==-1){
+            newItems[idx]={
+              ...newItems[idx],
+              status:'Doado',
+              statusOriginal:'Doado',
+              receivedFrom:sourceOS,   // ← RECEPTORA recebeu DA doadora
+              donatedTo:undefined,     // não doou para ninguém
+              donatedAt:Date.now()
+            };
+            changed=true;
+          }
         });
-        if(changed)batch.update(col('requests').doc(req.id),{items:newItems});
-      });
-      // Cria novos pedidos na OS doadora — encontra ou cria request
-      const existingDonorReqs=requests.filter(r=>String(r.os).trim()===sourceOS.trim());
-      const toTransfer=selectedItems.map(itemId=>{
-        const orig=targetRequest.items.find(it=>it.id===itemId);
-        return{...orig,id:Date.now()+Math.random(),status:'Pendente',statusOriginal:undefined,donatedFrom:targetOS,price:undefined,supplier:undefined,deliveryDate:undefined,actualDeliveryDate:undefined};
-      });
-      if(existingDonorReqs.length>0){
-        const donorReq=existingDonorReqs[0];
-        batch.update(col('requests').doc(donorReq.id),{items:[...(donorReq.items||[]),...toTransfer]});
-      } else {
-        // Cria novo pedido para a OS doadora com dados do veículo
-        const newRef=col('requests').doc();
-        batch.set(newRef,{os:sourceOS,responsavel:loggedInUser?.user||'Sistema',vehicleData:sourceVehicle||{os:sourceOS},unidade:'Unidade 1',items:toTransfer,timestamp:Date.now(),status:'Pendente'});
+        if(changed)await col('requests').doc(req.id).update({items:stripUndefined(newItems)});
       }
-      await col('donations').add({targetOS,sourceOS,itemIds:selectedItems,donatedBy:loggedInUser?.user||'Sistema',timestamp:Date.now()});
-      await batch.commit();
+
+      // ── PASSO 2: Cria pedido de compra na OS DOADORA (sourceOS)
+      // com donatedTo:targetOS — ela vai COMPRAR/CEDER para a receptora
+      const toTransfer=selectedItems.map(itemId=>{
+        const orig=targetRequest.items.find(it=>String(it.id)===String(itemId));
+        if(!orig)return null;
+        const base=stripUndefined({...orig});
+        // Limpa campos de cotação — é um pedido novo
+        delete base.price; delete base.supplier; delete base.deliveryDate;
+        delete base.actualDeliveryDate; delete base.boughtAt; delete base.statusOriginal;
+        delete base.receivedFrom; delete base.donatedTo;
+        return{
+          ...base,
+          id:String(Date.now())+String(Math.floor(Math.random()*9999)),
+          status:'Pendente',
+          donatedTo:targetOS    // ← DOADORA vai ceder PARA a receptora
+        };
+      }).filter(Boolean);
+
+      const doadoraDocs=requests.filter(r=>String(r.os).trim()===sourceOS.trim());
+      if(doadoraDocs.length>0){
+        const donorReq=doadoraDocs[0];
+        await col('requests').doc(donorReq.id).update({
+          items:stripUndefined([...(donorReq.items||[]),...toTransfer])
+        });
+      } else {
+        const vData=sourceVehicle||{os:sourceOS};
+        const cleanVData={};
+        Object.entries(vData).forEach(([k,v])=>{if(v!==undefined)cleanVData[k]=v;});
+        await col('requests').add({
+          os:sourceOS,
+          responsavel:loggedInUser?.user||'Sistema',
+          vehicleData:cleanVData,
+          unidade:'Unidade 1',
+          items:toTransfer,
+          timestamp:Date.now(),
+          status:'Pendente'
+        });
+      }
+      col('donations').add(stripUndefined({
+        receptoraOS:targetOS,
+        doadoraOS:sourceOS,
+        itemIds:selectedItems.map(String),
+        executadoPor:loggedInUser?.user||'Sistema',
+        timestamp:Date.now()
+      })).catch(e=>console.warn('Log doação:',e));
       setDone(true);
-    }catch(err){console.error(err);alert('Erro ao processar. Tente novamente.');}
+    }catch(err){
+      console.error('Erro na transferência:',err);
+      alert('Erro ao processar: '+err.message);
+    }
     setProcessing(false);
   };
+
+  const handleConfirm=()=>{
+    if(!targetRequest||!sourceOS||selectedItems.length===0)return;
+    setShowConfirm(true);
+  };
+
+  // ── Modal de confirmação elegante ──────────────────────────────────────────
+  if(processing)return(
+    <div style={{maxWidth:440,margin:'0 auto',background:'#fff',borderRadius:20,border:'1.5px solid var(--border)',padding:48,textAlign:'center'}} className="fade-in">
+      <div style={{width:72,height:72,borderRadius:999,background:'var(--red-light)',border:'2px solid #FFBDBD',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 20px'}}>
+        <Icon name="refresh-cw" size={32} className="spin" style={{color:'var(--red)'}}/>
+      </div>
+      <h3 style={{fontSize:18,fontWeight:800,margin:'0 0 8px',letterSpacing:'-.01em'}}>Processando...</h3>
+      <p style={{fontSize:11,color:'var(--muted)',margin:0}}>Aguarde enquanto a transferência é registrada</p>
+    </div>
+  );
+
+  if(showConfirm)return(
+    <div style={{position:'fixed',inset:0,zIndex:700,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}} className="fade-in">
+      <div style={{background:'#fff',borderRadius:24,overflow:'hidden',maxWidth:460,width:'100%',boxShadow:'0 40px 80px rgba(0,0,0,.4)'}}>
+        <div style={{background:'var(--ink)',padding:'28px 28px 24px',color:'#fff'}}>
+          <div style={{display:'flex',alignItems:'center',gap:14,marginBottom:16}}>
+            <div style={{width:48,height:48,background:'var(--red)',borderRadius:14,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,boxShadow:'0 6px 16px rgba(220,31,31,.4)'}}><Icon name="git-merge" size={22}/></div>
+            <div><h3 style={{margin:0,fontSize:18,fontWeight:800,color:'#fff'}}>Confirmar Transferência</h3><p style={{margin:0,fontSize:10,color:'rgba(255,255,255,.4)',marginTop:2}}>Esta ação moverá o pedido de compra entre OS</p></div>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',gap:10,alignItems:'center',background:'rgba(255,255,255,.04)',borderRadius:14,padding:'14px 16px',border:'1px solid rgba(255,255,255,.08)'}}>
+            <div>
+              <p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',letterSpacing:'.12em',color:'rgba(255,255,255,.3)',margin:'0 0 4px'}}>OS Receptora</p>
+              <p style={{fontSize:22,fontWeight:800,color:'#FFAAAA',margin:0,letterSpacing:'-.01em'}}>#{targetOS}</p>
+              <p style={{fontSize:9,color:'rgba(255,255,255,.4)',margin:'2px 0 0',textTransform:'uppercase'}}>{targetRequest?.vehicleData?.modelo||'—'}</p>
+            </div>
+            <div style={{textAlign:'center',padding:'0 4px'}}>
+              <div style={{width:32,height:32,borderRadius:999,background:'rgba(220,31,31,.2)',border:'1px solid rgba(220,31,31,.4)',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto'}}><Icon name="arrow-right" size={16}/></div>
+              <p style={{fontSize:7,fontWeight:800,textTransform:'uppercase',color:'rgba(255,255,255,.3)',margin:'5px 0 0',letterSpacing:'.08em'}}>{selectedItems.length} peça(s)</p>
+            </div>
+            <div>
+              <p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',letterSpacing:'.12em',color:'rgba(255,255,255,.3)',margin:'0 0 4px'}}>OS Doadora</p>
+              <p style={{fontSize:22,fontWeight:800,color:'#fff',margin:0,letterSpacing:'-.01em'}}>#{sourceOS}</p>
+              <p style={{fontSize:9,color:'rgba(255,255,255,.4)',margin:'2px 0 0',textTransform:'uppercase'}}>{sourceVehicle?.modelo||'—'}</p>
+            </div>
+          </div>
+        </div>
+        <div style={{padding:'20px 28px'}}>
+          <p style={{fontSize:10,fontWeight:700,color:'var(--muted)',marginBottom:14,margin:'0 0 16px'}}>Peças que serão transferidas:</p>
+          <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:20}}>
+            {selectedItems.map(itemId=>{
+              const it=targetRequest?.items.find(i=>String(i.id)===String(itemId));
+              return it?(<span key={itemId} style={{display:'inline-flex',alignItems:'center',gap:5,background:'var(--smoke)',border:'1px solid var(--border)',padding:'5px 10px',borderRadius:8,fontSize:10,fontWeight:700,textTransform:'uppercase'}}>
+                <span style={{width:18,height:18,borderRadius:5,background:'var(--red)',color:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:8,fontWeight:800,flexShrink:0}}>{it.quantity}</span>
+                {it.description}
+              </span>):null;
+            })}
+          </div>
+          <div style={{background:'#FFFBE6',border:'1px solid #FFE680',borderRadius:10,padding:'10px 14px',marginBottom:20}}>
+            <p style={{fontSize:9,fontWeight:800,color:'#856A00',margin:'0 0 2px',textTransform:'uppercase',letterSpacing:'.06em'}}>⚠ O que acontecerá</p>
+            <p style={{fontSize:10,color:'#856A00',margin:0,lineHeight:1.5}}>A OS <strong>#{targetOS}</strong> (receptora) terá os itens marcados como recebidos. A OS <strong>#{sourceOS}</strong> (doadora) receberá um pedido de compra para fornecer as peças.</p>
+          </div>
+          <div style={{display:'flex',gap:10}}>
+            <button onClick={()=>setShowConfirm(false)} className="btn-ghost" style={{flex:1}}>Cancelar</button>
+            <button onClick={executeTransfer} className="btn-primary" style={{flex:2,padding:14}}>
+              <Icon name="check" size={16}/> Confirmar Transferência
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   if(done)return(
     <div style={{maxWidth:440,margin:'0 auto',background:'#fff',borderRadius:20,border:'1.5px solid var(--border)',padding:40,textAlign:'center'}} className="fade-up">
       <div style={{width:64,height:64,background:'#EDFAF3',borderRadius:18,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 20px'}}><Icon name="check-circle" size={32}/></div>
       <h2 style={{fontSize:24,fontWeight:800,margin:'0 0 8px',letterSpacing:'-.02em'}}>Transferência Concluída</h2>
-      <p style={{fontSize:12,color:'var(--muted)',marginBottom:20}}>{selectedItems.length} peça(s) da OS <strong>#{targetOS}</strong> → OS <strong>#{sourceOS}</strong></p>
+      <p style={{fontSize:12,color:'var(--muted)',marginBottom:20}}>OS <strong>#{targetOS}</strong> vai receber {selectedItems.length} peça(s) compradas pela OS <strong>#{sourceOS}</strong></p>
       <div style={{background:'var(--smoke)',borderRadius:12,padding:'14px 16px',textAlign:'left',marginBottom:24}}>
         <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--red)',marginBottom:6}}>Resultado</p>
-        <p style={{fontSize:11,color:'var(--ink)',margin:'0 0 4px'}}>• Itens marcados como <strong>Doado</strong> na OS #{targetOS}</p>
-        <p style={{fontSize:11,color:'var(--ink)',margin:0}}>• Pedido de compra criado/atualizado na OS #{sourceOS}</p>
+        <p style={{fontSize:11,color:'var(--ink)',margin:'0 0 4px'}}>• OS <strong>#{targetOS}</strong> — itens marcados como "Recebido" (receivedFrom: {sourceOS})</p>
+        <p style={{fontSize:11,color:'var(--ink)',margin:0}}>• OS <strong>#{sourceOS}</strong> — pedido de compra criado para entregar à OS #{targetOS}</p>
       </div>
       <button onClick={reset} className="btn-primary" style={{width:'100%',padding:14}}>Nova Transferência</button>
     </div>
@@ -1151,7 +1272,18 @@ function StatusView({requests,isAdmin}){
                         <span style={{fontSize:8,color:'var(--red)',fontWeight:700}}>QTD:{it.quantity}</span>
                         <StatusBadge status={it.status||'Pendente'} orig={it.statusOriginal}/>
                       </div>
-                      {it.status==='Doado'&&it.donatedTo&&<p style={{fontSize:7,color:'var(--red)',fontWeight:700,margin:'2px 0 0'}}>→ OS {it.donatedTo}</p>}
+                        {it.receivedFrom&&(
+                        <div style={{display:'flex',alignItems:'center',gap:4,marginTop:3,padding:'2px 6px',background:'#EDFAF3',borderRadius:5,border:'1px solid #AAE6C5'}}>
+                          <Icon name="arrow-left" size={9}/>
+                          <span style={{fontSize:7,color:'#0A6B34',fontWeight:800}}>Recebida da OS #{it.receivedFrom}</span>
+                        </div>
+                      )}
+                      {it.donatedTo&&!it.receivedFrom&&(
+                        <div style={{display:'flex',alignItems:'center',gap:4,marginTop:3,padding:'2px 6px',background:'#FFF0F0',borderRadius:5,border:'1px solid #FFBDBD'}}>
+                          <Icon name="arrow-right" size={9}/>
+                          <span style={{fontSize:7,color:'var(--red)',fontWeight:800}}>Doada para OS #{it.donatedTo}</span>
+                        </div>
+                      )}
                       {it.price>0&&<p style={{fontSize:8,color:'#059669',fontWeight:800,margin:'2px 0 0'}}>{fmtBRL(it.price)}</p>}
                     </div>
                   </div>
@@ -1425,10 +1557,14 @@ function App(){
   const toggleUser=async u=>{const s=!(u.active!==false);try{if(u.id)await col('users').doc(u.id).update({active:s});else await col('users').add({...u,active:s});}catch{alert('Erro.');}};
   const changeRole=async(u,role)=>{try{if(u.id)await col('users').doc(u.id).update({role});else await col('users').add({...u,role});}catch{alert('Erro.');}};
 
-  // MELHORIA 4: login sempre abre em 'request' (ou status para leitor)
+  // Permissões de rota por role
+  const defaultViewForRole=(role)=>{
+    if(role==='leitor')return 'status';
+    return 'request'; // solicitante e admin
+  };
   const login=u=>{
     const found=users.find(x=>x.user.toLowerCase()===u.user.toLowerCase()&&x.pass===u.pass);
-    if(found){setLoggedIn(found);setView(found.role==='leitor'?'status':'request');}
+    if(found){setLoggedIn(found);setView(defaultViewForRole(found.role));}
   };
   const logout=()=>{setLoggedIn(null);setView('request');};
 
@@ -1594,32 +1730,37 @@ function App(){
                       </div>
                     )}
 
-                    {/* MELHORIA 5: filtros incluem 'bought' */}
-                    {['pending','quoting','bought','completed','donated'].includes(subView)&&(
-                      <div className="fade-in" style={{display:'flex',flexDirection:'column',gap:12}}>
-                        {requests.filter(r=>{
-                          if(subView==='pending')return r.items?.some(it=>it.status==='Pendente');
-                          if(subView==='quoting')return r.items?.some(it=>it.status==='Em Cotação');
-                          if(subView==='bought')return r.items?.some(it=>it.status==='Comprado');
-                          if(subView==='donated')return r.items?.some(it=>it.status==='Doado');
-                          return r.items?.every(it=>it.status==='Concluído'||it.status==='Doado');
-                        }).map(req=>{
-                          const accentCol=subView==='pending'?'#C45E00':subView==='quoting'?'#1A4EC2':subView==='bought'?'#6B21A8':subView==='donated'?'#A81515':'#0A6B34';
-                          return(
-                            <div key={req.id} className="card" style={{display:'flex',alignItems:'center',gap:16,padding:'14px 16px',borderLeft:`3px solid ${accentCol}`}}>
+                    {/* Lista de pedidos — mesclada por OS */}
+                    {['pending','quoting','bought','completed','donated'].includes(subView)&&(()=>{
+                      const merged=mergeByOS(requests);
+                      const filtered=merged.filter(req=>{
+                        if(subView==='pending')return req.items?.some(it=>it.status==='Pendente');
+                        if(subView==='quoting')return req.items?.some(it=>it.status==='Em Cotação');
+                        if(subView==='bought')return req.items?.some(it=>it.status==='Comprado');
+                        if(subView==='donated')return req.items?.some(it=>it.status==='Doado');
+                        return req.items?.every(it=>it.status==='Concluído'||it.status==='Doado');
+                      });
+                      const accentCol=subView==='pending'?'#C45E00':subView==='quoting'?'#1A4EC2':subView==='bought'?'#6B21A8':subView==='donated'?'#A81515':'#0A6B34';
+                      return(
+                        <div className="fade-in" style={{display:'flex',flexDirection:'column',gap:12}}>
+                          {filtered.length===0&&<div style={{padding:'48px 20px',textAlign:'center',background:'#fff',borderRadius:14,border:'1.5px dashed var(--border)'}}><p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',margin:0}}>Nenhum pedido nesta categoria</p></div>}
+                          {filtered.map(req=>(
+                            <div key={req.os} className="card" style={{display:'flex',alignItems:'center',gap:16,padding:'14px 16px',borderLeft:`3px solid ${accentCol}`}}>
                               <div style={{textAlign:'center',flexShrink:0}}>
                                 <p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',margin:0}}>OS</p>
                                 <p style={{fontSize:16,fontWeight:800,margin:0}}>#{req.os}</p>
                                 <p style={{fontSize:8,color:'var(--muted)',fontWeight:600,margin:0}}>{req.unidade||'Unidade 1'}</p>
+                                {req._merged&&<span style={{fontSize:7,fontWeight:800,padding:'1px 5px',borderRadius:999,background:'#EAF0FF',color:'#1A4EC2',border:'1px solid #C0D0F5',display:'inline-block',marginTop:3}}>Mesclado</span>}
                               </div>
                               <div style={{flex:1,minWidth:0}}>
-                                <p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',margin:'0 0 4px'}}>Itens ({req.items?.length||0})</p>
-                                <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                                <p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',margin:'0 0 6px'}}>Itens ({req.items?.length||0}) · {req.vehicleData?.modelo||'—'}</p>
+                                <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
                                   {req.items?.map((it,i)=>(
-                                    <span key={i} className="badge" style={{
-                                      background:it.status==='Concluído'?'var(--ink)':it.status==='Doado'?'#FFF0F0':it.status==='Comprado'?'#F3E8FF':it.status==='Em Cotação'?'#EAF0FF':'#FFF4E6',
-                                      color:it.status==='Concluído'?'#fff':it.status==='Doado'?'var(--red)':it.status==='Comprado'?'#6B21A8':it.status==='Em Cotação'?'#1A4EC2':'#C45E00'
-                                    }}>{it.description}</span>
+                                    <span key={i} style={{display:'inline-flex',flexDirection:'column',gap:2,background:it.status==='Concluído'?'#0A6B3410':it.status==='Doado'?'#FFF0F0':it.status==='Comprado'?'#F3E8FF':it.status==='Em Cotação'?'#EAF0FF':'#FFF4E6',border:`1px solid ${it.status==='Concluído'?'#AAE6C5':it.status==='Doado'?'#FFBDBD':it.status==='Comprado'?'#D8B4FE':it.status==='Em Cotação'?'#C0D0F5':'#FFD9A8'}`,borderRadius:7,padding:'4px 8px',fontSize:9,fontWeight:700,textTransform:'uppercase',color:it.status==='Concluído'?'#0A6B34':it.status==='Doado'?'var(--red)':it.status==='Comprado'?'#6B21A8':it.status==='Em Cotação'?'#1A4EC2':'#C45E00'}}>
+                                      <span>{it.description}</span>
+                                      {it.receivedFrom&&<span style={{fontSize:7,fontWeight:700,opacity:.8}}>← Recebida da OS #{it.receivedFrom}</span>}
+                                      {it.donatedTo&&!it.receivedFrom&&<span style={{fontSize:7,fontWeight:700,opacity:.8}}>→ Doada p/ OS #{it.donatedTo}</span>}
+                                    </span>
                                   ))}
                                 </div>
                               </div>
@@ -1627,10 +1768,10 @@ function App(){
                                 <Icon name="edit-2" size={13}/> Gerenciar
                               </button>
                             </div>
-                          );
-                        })}
-                      </div>
-                    )}
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
               </>
@@ -1719,8 +1860,16 @@ function App(){
                       <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
                         <span style={{fontSize:9,color:'var(--muted)',fontWeight:600}}>QTD:{it.quantity}</span>
                         <StatusBadge status={it.status||'Pendente'} orig={it.statusOriginal}/>
-                        {it.status==='Doado'&&it.donatedTo&&<span style={{fontSize:8,color:'var(--red)',fontWeight:700}}>→ OS #{it.donatedTo}</span>}
-                        {it.status==='Doado'&&it.donatedFrom&&<span style={{fontSize:8,color:'#C45E00',fontWeight:700}}>← de OS #{it.donatedFrom}</span>}
+                        {it.receivedFrom&&(
+                          <span style={{display:'inline-flex',alignItems:'center',gap:3,padding:'2px 7px',background:'#EDFAF3',border:'1px solid #AAE6C5',borderRadius:6,fontSize:8,fontWeight:800,color:'#0A6B34'}}>
+                            <Icon name="arrow-left" size={10}/> Recebida da OS #{it.receivedFrom}
+                          </span>
+                        )}
+                        {it.donatedTo&&!it.receivedFrom&&(
+                          <span style={{display:'inline-flex',alignItems:'center',gap:3,padding:'2px 7px',background:'#FFF0F0',border:'1px solid #FFBDBD',borderRadius:6,fontSize:8,fontWeight:800,color:'var(--red)'}}>
+                            <Icon name="arrow-right" size={10}/> Doada para OS #{it.donatedTo}
+                          </span>
+                        )}
                         {/* MELHORIA 5: botão "Já foi comprado?" aparece em Em Cotação */}
                         {it.status==='Em Cotação'&&(
                           <button onClick={()=>updateItem(editing.id,idx,{status:'Comprado',boughtAt:new Date().toISOString().slice(0,10)})} className="btn-bought">
