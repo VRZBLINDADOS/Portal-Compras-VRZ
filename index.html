@@ -304,10 +304,17 @@ function DashboardView({requests}){
     requests.forEach(r=>porDia[new Date(r.timestamp).getDay()]++);
     const pedDia=diasSem.map((l,i)=>({l,v:porDia[i]}));
     const agora=Date.now();
+    // Encontra a última segunda-feira (início da semana atual)
+    const hoje=new Date();const diaSem=hoje.getDay();
+    const diasDesdeSegunda=(diaSem===0?6:diaSem-1); // 0=Dom→6, 1=Seg→0, etc
+    const inicioSemanaAtual=new Date(hoje);
+    inicioSemanaAtual.setHours(0,0,0,0);
+    inicioSemanaAtual.setDate(hoje.getDate()-diasDesdeSegunda);
     const semanas=Array.from({length:8},(_,i)=>{
-      const ini=agora-(8-i)*7*864e5,fim=agora-(7-i)*7*864e5;
-      const cnt=requests.filter(r=>r.timestamp>=ini&&r.timestamp<fim).length;
-      const d=new Date(ini);return{l:`${d.getDate()}/${d.getMonth()+1}`,v:cnt};
+      const ini=new Date(inicioSemanaAtual);ini.setDate(inicioSemanaAtual.getDate()-(7-i)*7);
+      const fim=new Date(ini);fim.setDate(ini.getDate()+7);
+      const cnt=requests.filter(r=>r.timestamp>=ini.getTime()&&r.timestamp<fim.getTime()).length;
+      return{l:`${ini.getDate()}/${ini.getMonth()+1}`,v:cnt};
     });
     const porMod={};requests.forEach(r=>{const m=r.vehicleData?.modelo||'N/D';porMod[m]=(porMod[m]||0)+1;});
     const rankMod=Object.entries(porMod).sort((a,b)=>b[1]-a[1]).slice(0,5);
@@ -429,6 +436,7 @@ function DonorSystem({requests,vehicles,loggedInUser}){
   const[processing,setProcessing]=useState(false);
   const[done,setDone]=useState(false);
   const[showConfirm,setShowConfirm]=useState(false);
+  const[etapaFilter,setEtapaFilter]=useState('');
 
   // OS receptora: encontrar o pedido de compra pela OS digitada
   const targetRequest=useMemo(()=>{
@@ -477,6 +485,21 @@ function DonorSystem({requests,vehicles,loggedInUser}){
 
   // Encontra o request da OS doadora (se existir) para exibir info extra
   const sourceVehicle=useMemo(()=>vehicles.find(v=>String(v.os).trim()===sourceOS.trim()),[vehicles,sourceOS]);
+
+  // Etapas únicas dos candidatos (para filtro)
+  const etapasUnicas=useMemo(()=>{
+    const all=[...vehicleCandidates.recebidos,...vehicleCandidates.outros];
+    const set=new Set(all.map(v=>(v.etapa||'').trim()).filter(Boolean));
+    return Array.from(set).sort();
+  },[vehicleCandidates]);
+
+  // Candidatos filtrados por etapa
+  const filteredRecebidos=useMemo(()=>
+    etapaFilter?vehicleCandidates.recebidos.filter(v=>(v.etapa||'').trim()===etapaFilter):vehicleCandidates.recebidos
+  ,[vehicleCandidates.recebidos,etapaFilter]);
+  const filteredOutros=useMemo(()=>
+    etapaFilter?vehicleCandidates.outros.filter(v=>(v.etapa||'').trim()===etapaFilter):vehicleCandidates.outros
+  ,[vehicleCandidates.outros,etapaFilter]);
 
   const toggleItem=(id)=>setSelectedItems(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
   const reset=()=>{setStep(1);setTargetOSInput('');setTargetOS('');setSelectedItems([]);setSourceOS('');setDone(false);};
@@ -753,7 +776,7 @@ function DonorSystem({requests,vehicles,loggedInUser}){
           <div style={{padding:'16px 20px',borderBottom:'1px solid var(--border)',background:'var(--smoke)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
             <div>
               <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--red)',margin:'0 0 2px'}}>Passo 2 de 3</p>
-              <h4 style={{margin:0,fontSize:15,fontWeight:800}}>Quais peças transferir?</h4>
+              <h4 style={{margin:0,fontSize:15,fontWeight:800}}>Quais peças deseja receber?</h4>
               <p style={{margin:0,fontSize:10,color:'var(--muted)',marginTop:2}}>OS #{targetOS} — {targetRequest?.vehicleData?.modelo}</p>
             </div>
             <div style={{background:'var(--red)',color:'#fff',borderRadius:10,padding:'8px 14px',textAlign:'center'}}>
@@ -807,8 +830,25 @@ function DonorSystem({requests,vehicles,loggedInUser}){
               </div>
             </div>
 
-            {/* MELHORIA 3: Seção RECEBIDOS */}
-            {vehicleCandidates.recebidos.length>0&&(
+            {/* Filtro por etapa */}
+            {etapasUnicas.length>0&&(
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14}}>
+                <Icon name="filter" size={14} style={{color:'var(--muted)',flexShrink:0}}/>
+                <div style={{display:'flex',gap:6,flexWrap:'wrap',flex:1}}>
+                  <button onClick={()=>setEtapaFilter('')} style={{padding:'4px 12px',borderRadius:999,fontSize:8,fontWeight:800,textTransform:'uppercase',border:'1.5px solid',cursor:'pointer',transition:'all .15s',background:etapaFilter===''?'var(--ink)':'transparent',color:etapaFilter===''?'#fff':'var(--muted)',borderColor:etapaFilter===''?'var(--ink)':'var(--border)',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
+                    Todas
+                  </button>
+                  {etapasUnicas.map(e=>(
+                    <button key={e} onClick={()=>setEtapaFilter(etapaFilter===e?'':e)} style={{padding:'4px 12px',borderRadius:999,fontSize:8,fontWeight:800,textTransform:'uppercase',border:'1.5px solid',cursor:'pointer',transition:'all .15s',background:etapaFilter===e?'var(--red)':'transparent',color:etapaFilter===e?'#fff':'var(--muted)',borderColor:etapaFilter===e?'var(--red)':'var(--border)',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
+                      {e}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Seção RECEBIDOS */}
+            {filteredRecebidos.length>0&&(
               <div style={{marginBottom:16}}>
                 <div className="divider" style={{marginBottom:12}}>
                   <span style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'#059669',padding:'3px 10px',background:'#EDFAF3',borderRadius:999,border:'1px solid #AAE6C5',whiteSpace:'nowrap',flexShrink:0}}>
@@ -816,7 +856,7 @@ function DonorSystem({requests,vehicles,loggedInUser}){
                   </span>
                 </div>
                 <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                  {vehicleCandidates.recebidos.map((v,i)=>(
+                  {filteredRecebidos.map((v,i)=>(
                     <div key={v.os} onClick={()=>setSourceOS(String(v.os))} className={`donor-card ${String(v.os)===sourceOS?'selected':''}`}>
                       <div style={{display:'flex',alignItems:'center',gap:12}}>
                         <input type="radio" name="sourceOS" checked={String(v.os)===sourceOS} onChange={()=>setSourceOS(String(v.os))} style={{width:16,height:16,accentColor:'var(--red)',flexShrink:0}}/>
@@ -843,7 +883,7 @@ function DonorSystem({requests,vehicles,loggedInUser}){
             )}
 
             {/* Outros veículos do mesmo modelo */}
-            {vehicleCandidates.outros.length>0&&(
+            {filteredOutros.length>0&&(
               <div style={{marginBottom:16}}>
                 <div className="divider" style={{marginBottom:12}}>
                   <span style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.08em',color:'var(--muted)',whiteSpace:'nowrap',flexShrink:0}}>
@@ -851,14 +891,14 @@ function DonorSystem({requests,vehicles,loggedInUser}){
                   </span>
                 </div>
                 <div className="scroll-y" style={{maxHeight:200,display:'flex',flexDirection:'column',gap:8}}>
-                  {vehicleCandidates.outros.map(v=>(
+                  {filteredOutros.map(v=>(
                     <div key={v.os} onClick={()=>setSourceOS(String(v.os))} className={`donor-card ${String(v.os)===sourceOS?'selected':''}`} style={{padding:'10px 14px'}}>
                       <div style={{display:'flex',alignItems:'center',gap:10}}>
                         <input type="radio" name="sourceOS" checked={String(v.os)===sourceOS} onChange={()=>setSourceOS(String(v.os))} style={{width:15,height:15,accentColor:'var(--red)',flexShrink:0}}/>
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{display:'flex',alignItems:'center',gap:8}}>
                             <span style={{fontSize:13,fontWeight:800}}>OS #{v.os}</span>
-                            <span style={{fontSize:8,fontWeight:700,background:'var(--smoke)',color:'var(--muted)',padding:'2px 7px',borderRadius:999,textTransform:'uppercase'}}>{v.localizacao||'—'}</span>
+                            <span style={{fontSize:8,fontWeight:700,background:'var(--smoke)',color:'var(--muted)',padding:'2px 7px',borderRadius:999,textTransform:'uppercase'}}>{v.etapa||v.localizacao||'—'}</span>
                           </div>
                           <p style={{margin:0,fontSize:9,color:'var(--muted)',textTransform:'uppercase',fontWeight:600}}>{v.modelo} · <span className="mono">{v.chassi}</span></p>
                         </div>
@@ -869,7 +909,7 @@ function DonorSystem({requests,vehicles,loggedInUser}){
               </div>
             )}
 
-            {vehicleCandidates.recebidos.length===0&&vehicleCandidates.outros.length===0&&(
+            {filteredRecebidos.length===0&&filteredOutros.length===0&&(
               <div style={{textAlign:'center',padding:'32px 0',color:'var(--muted)'}}>
                 <Icon name="search" size={28} style={{margin:'0 auto 10px',display:'block'}}/>
                 <p style={{fontSize:10,fontWeight:700,textTransform:'uppercase',margin:0}}>Nenhum veículo do mesmo modelo encontrado</p>
@@ -1156,17 +1196,33 @@ function RequestForm({user,loggedInUser,vehiclesDB,requests}){
 function StatusView({requests,isAdmin}){
   const[search,setSearch]=useState('');
   const[unidadeFilter,setUnidadeFilter]=useState('todas');
+  const[statusTab,setStatusTab]=useState('geral');
   const[toDelete,setToDelete]=useState(null);
 
-  // MELHORIA 1: mescla pedidos da mesma OS antes de exibir
+  // Mescla pedidos da mesma OS antes de exibir
   const merged=useMemo(()=>mergeByOS(requests.filter(r=>!r.importado)),[requests]);
 
   const filtered=useMemo(()=>merged.filter(r=>{
     const t=search.toLowerCase();
     const mb=String(r.os||'').toLowerCase().includes(t)||String(r.responsavel||'').toLowerCase().includes(t)||String(r.vehicleData?.modelo||'').toLowerCase().includes(t)||String(r.vehicleData?.chassi||'').toLowerCase().includes(t);
     const mu=unidadeFilter==='todas'||r.unidade===unidadeFilter;
-    return mb&&mu;
-  }),[merged,search,unidadeFilter]);
+    // Filtro por aba de status
+    let ms=true;
+    if(statusTab==='pendente') ms=r.items?.some(it=>it.status==='Pendente');
+    else if(statusTab==='cotacao') ms=r.items?.some(it=>it.status==='Em Cotação'||it.status==='Comprado');
+    else if(statusTab==='concluido') ms=r.items?.every(it=>it.status==='Concluído'||it.status==='Doado');
+    else if(statusTab==='doado') ms=r.items?.some(it=>it.status==='Doado'||it.receivedFrom||it.donatedTo);
+    return mb&&mu&&ms;
+  }),[merged,search,unidadeFilter,statusTab]);
+
+  // Contadores para as abas
+  const counts=useMemo(()=>({
+    geral:merged.length,
+    pendente:merged.filter(r=>r.items?.some(it=>it.status==='Pendente')).length,
+    cotacao:merged.filter(r=>r.items?.some(it=>it.status==='Em Cotação'||it.status==='Comprado')).length,
+    concluido:merged.filter(r=>r.items?.every(it=>it.status==='Concluído'||it.status==='Doado')).length,
+    doado:merged.filter(r=>r.items?.some(it=>it.status==='Doado'||it.receivedFrom||it.donatedTo)).length,
+  }),[merged]);
 
   const exportCSV=()=>{
     const rows=[['Data','OS','Unidade','Chassi','Veiculo','Peca','Qtd','Status','Valor','Loja','Prazo','Entrega'].join(';')];
@@ -1215,7 +1271,21 @@ function StatusView({requests,isAdmin}){
 
       <div style={{marginBottom:16}}>
         <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.15em',color:'var(--red)',marginBottom:4}}>Registros do Portal</p>
-        <h2 style={{fontSize:32,fontWeight:800,margin:'0 0 14px',letterSpacing:'-.02em'}}>Histórico de OS</h2>
+        <h2 style={{fontSize:32,fontWeight:800,margin:'0 0 12px',letterSpacing:'-.02em'}}>Histórico de OS</h2>
+        {/* Abas de status */}
+        <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)',overflowX:'auto',marginBottom:12}}>
+          {[
+            {key:'geral',label:`Todos (${counts.geral})`,color:'var(--ink)'},
+            {key:'pendente',label:`Pendentes (${counts.pendente})`,color:'#C45E00'},
+            {key:'cotacao',label:`Em Cotação (${counts.cotacao})`,color:'#1A4EC2'},
+            {key:'concluido',label:`Concluídos (${counts.concluido})`,color:'#0A6B34'},
+            {key:'doado',label:`Doações (${counts.doado})`,color:'#A81515'},
+          ].map(t=>(
+            <button key={t.key} onClick={()=>setStatusTab(t.key)} style={{padding:'7px 14px',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',whiteSpace:'nowrap',border:'none',cursor:'pointer',letterSpacing:'.06em',transition:'all .15s',fontFamily:'Plus Jakarta Sans,sans-serif',background:statusTab===t.key?'#fff':'transparent',color:statusTab===t.key?t.color:'var(--muted)',boxShadow:statusTab===t.key?'0 2px 8px rgba(0,0,0,.08)':'none'}}>
+              {t.label}
+            </button>
+          ))}
+        </div>
         <div style={{display:'flex',flexWrap:'wrap',gap:8,alignItems:'center'}}>
           <select value={unidadeFilter} onChange={e=>setUnidadeFilter(e.target.value)} className="input" style={{width:'auto',padding:'8px 14px',fontSize:10,fontWeight:700,appearance:'auto'}}>
             <option value="todas">Todas as Unidades</option>
@@ -1336,7 +1406,7 @@ function UserManagement({users,onAdd,onDelete,onToggle,onRole}){
                 <td style={{fontWeight:700,textTransform:'uppercase',fontSize:12}}>{u.user}</td>
                 <td><select value={u.role||'solicitante'} onChange={e=>onRole(u,e.target.value)} className="badge" style={{cursor:'pointer',border:'none',outline:'none',background:u.role==='admin'?'var(--red)':u.role==='leitor'?'var(--muted)':'#1A4EC2',color:'#fff'}}><option value="admin">Admin</option><option value="solicitante">Solicitante</option><option value="leitor">Leitor</option></select></td>
                 <td><button onClick={()=>onToggle(u)} style={{fontSize:9,fontWeight:800,textTransform:'uppercase',padding:'3px 10px',borderRadius:999,cursor:'pointer',border:'1px solid',background:u.active!==false?'#EDFAF3':'#FFF0F0',color:u.active!==false?'#0A6B34':'var(--red)',borderColor:u.active!==false?'#AAE6C5':'#FFBDBD'}}>{u.active!==false?'Ativo':'Desativado'}</button></td>
-                <td style={{textAlign:'right'}}><button onClick={()=>onDelete(u.id||u.user)} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'5px 12px',background:'var(--red)',color:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}><Icon name="trash-2" size={12}/> Excluir</button></td>
+                <td style={{textAlign:'right'}}><button onClick={()=>onDelete(u.id||u.user,u)} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'5px 12px',background:'var(--red)',color:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}><Icon name="trash-2" size={12}/> Excluir</button></td>
               </tr>
             ))}
           </tbody>
@@ -1548,14 +1618,55 @@ function App(){
   const{data:vehicles,loading:vehLoad}=useFirestore('vehicles');
   const{data:usersData,loading:usrLoad}=useFirestore('users');
   const[users,setUsers]=useState([]);
-  useEffect(()=>{const c=[...usersData];INIT_USERS.forEach(u=>{if(!c.find(d=>d.user.toLowerCase()===u.user.toLowerCase()))c.push(u);});setUsers(c);},[usersData]);
+  const[initDone,setInitDone]=useState(false);
+
+  // Sincroniza: usa APENAS dados do Firestore após seed inicial
+  useEffect(()=>{
+    if(usrLoad)return; // espera carregar
+    if(!initDone){
+      // Seed: cria no Firestore os usuários init que ainda não existem
+      INIT_USERS.forEach(async iu=>{
+        const exists=usersData.find(d=>d.user.toLowerCase()===iu.user.toLowerCase());
+        if(!exists){
+          try{await col('users').add(iu);}catch(e){console.warn('seed user:',e);}
+        }
+      });
+      setInitDone(true);
+    }
+    // users é SEMPRE o que vem do Firestore — nada mais
+    setUsers(usersData);
+  },[usersData,usrLoad]);
   useEffect(()=>{const u=auth.onAuthStateChanged(u=>{if(u)setUser(u);else auth.signInAnonymously();});return u;},[]);
 
   const isAdmin=loggedIn?.role==='admin';const isSol=loggedIn?.role==='solicitante'||isAdmin;
   const addUser=async(u,p,role='solicitante')=>{try{await col('users').add({user:u,pass:p,active:true,role});}catch{alert('Erro.');}};
-  const deleteUser=async id=>{if(!window.confirm('Remover usuário?'))return;try{if(id&&id.length>15)await col('users').doc(id).delete();else setUsers(p=>p.filter(u=>u.user!==id));}catch{setUsers(p=>p.filter(u=>u.id!==id&&u.user!==id));}};
-  const toggleUser=async u=>{const s=!(u.active!==false);try{if(u.id)await col('users').doc(u.id).update({active:s});else await col('users').add({...u,active:s});}catch{alert('Erro.');}};
-  const changeRole=async(u,role)=>{try{if(u.id)await col('users').doc(u.id).update({role});else await col('users').add({...u,role});}catch{alert('Erro.');}};
+  const deleteUser=async(id,userObj)=>{
+    if(!window.confirm('Remover usuário?'))return;
+    const docId=userObj?.id||id;
+    if(!docId||docId===userObj?.user){
+      // Ainda não tem id do Firestore (improvável após seed) — remove só local
+      setUsers(p=>p.filter(u=>u.id!==id&&u.user!==id));
+      return;
+    }
+    try{
+      await col('users').doc(docId).delete();
+      // Firestore onSnapshot vai atualizar automaticamente
+    }catch(e){
+      console.error('deleteUser:',e);
+      alert('Erro ao excluir: '+e.message);
+    }
+  };
+  const toggleUser=async u=>{
+    const s=!(u.active!==false);
+    if(!u.id){setUsers(p=>p.map(x=>x.user===u.user?{...x,active:s}:x));return;}
+    try{await col('users').doc(u.id).update({active:s});}
+    catch(e){console.error(e);alert('Erro ao alterar status.');}
+  };
+  const changeRole=async(u,role)=>{
+    if(!u.id){setUsers(p=>p.map(x=>x.user===u.user?{...x,role}:x));return;}
+    try{await col('users').doc(u.id).update({role});}
+    catch(e){console.error(e);alert('Erro ao alterar categoria.');}
+  };
 
   // Permissões de rota por role
   const defaultViewForRole=(role)=>{
