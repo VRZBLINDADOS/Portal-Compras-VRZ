@@ -66,10 +66,11 @@ body{font-family:'Plus Jakarta Sans',sans-serif;margin:0;background:#fff;overflo
 .badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:6px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.06em}
 .badge-pending{background:#FFF4E6;color:#C45E00;border:1px solid #FFD9A8}
 .badge-quoting{background:#EAF0FF;color:#1A4EC2;border:1px solid #C0D0F5}
-/* NEW: Comprado badge */
 .badge-bought{background:#F3E8FF;color:#6B21A8;border:1px solid #D8B4FE}
 .badge-done{background:#EDFAF3;color:#0A6B34;border:1px solid #AAE6C5}
 .badge-donated{background:#FFF0F0;color:var(--red);border:1px solid #FFBDBD}
+/* Role badges */
+.badge-master{background:#0D0D0D;color:#FFD700;border:1px solid #8B7500}
 .badge-admin{background:var(--red);color:#fff}
 .badge-sol{background:#1A4EC2;color:#fff}
 .badge-reader{background:var(--muted);color:#fff}
@@ -95,7 +96,6 @@ canvas{display:block}
 .step-dot{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;transition:all .25s}
 .progress-track{height:5px;background:var(--smoke);border-radius:999px;overflow:hidden}
 .progress-fill{height:100%;border-radius:999px;transition:width .7s cubic-bezier(.22,1,.36,1)}
-/* Bought button inline */
 .btn-bought{background:#F3E8FF;color:#6B21A8;border:1px solid #D8B4FE;border-radius:8px;padding:6px 12px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;cursor:pointer;transition:all .18s;display:flex;align-items:center;gap:5px;font-family:'Plus Jakarta Sans',sans-serif}
 .btn-bought:hover{background:#6B21A8;color:#fff;border-color:#6B21A8}
 </style>
@@ -119,6 +119,8 @@ const AID='portal-compras-vrz';
 const col=(c)=>db.collection('artifacts').doc(AID).collection('public').doc('data').collection(c);
 const{useState,useEffect,useMemo,useRef,useCallback}=React;
 
+const MASTER_USER='Lucas.Sabino'; // único usuário que pode ser master
+
 const useFirestore=(collectionName)=>{
   const[data,setData]=useState([]);const[loading,setLoading]=useState(true);
   useEffect(()=>{
@@ -131,7 +133,6 @@ const useFirestore=(collectionName)=>{
 
 const sanitize=(v)=>typeof v!=='string'?v:DOMPurify.sanitize(v);
 
-// Remove campos undefined recursivamente — Firestore não aceita undefined
 function stripUndefined(obj){
   if(Array.isArray(obj))return obj.map(stripUndefined);
   if(obj!==null&&typeof obj==='object'){
@@ -143,7 +144,7 @@ function stripUndefined(obj){
 }
 
 const INIT_USERS=[
-  {user:"Lucas.Sabino",pass:"29623298",active:true,role:"admin"},
+  {user:"Lucas.Sabino",pass:"29623298",active:true,role:"master"},
   {user:"Eduardo.Rocha",pass:"Helito@1313",active:true,role:"solicitante"},
   {user:"Gabriela.Bueno",pass:"Dani123",active:true,role:"solicitante"},
   {user:"Josmar.Valentini",pass:"Josa123",active:true,role:"solicitante"},
@@ -156,8 +157,6 @@ function fmtBRL(v){return v>0?'R$ '+Number(v).toLocaleString('pt-BR',{minimumFra
 function fmtBytes(b){return b>=1073741824?(b/1073741824).toFixed(2)+'GB':b>=1048576?(b/1048576).toFixed(1)+'MB':(b/1024).toFixed(0)+'KB';}
 function estimarBytes(r){return r.reduce((a,x)=>a+(x.items?.some(i=>i.photo)?800000:30000),0);}
 
-// ── MESCLAR pedidos da mesma OS ────────────────────────────────────────────
-// Retorna um array onde cada OS aparece UMA vez, com todos os itens mesclados
 function mergeByOS(requests){
   const map={};
   const order=[];
@@ -168,10 +167,8 @@ function mergeByOS(requests){
       map[k]={...r,_merged:false};
       order.push(map[k]);
     } else {
-      // Mescla itens, mantém dados do veículo/responsável mais recente
       const existing=map[k];
       const allItems=[...(existing.items||[]),...(r.items||[])];
-      // Remove duplicados por id
       const seen=new Set();
       const deduped=allItems.filter(it=>{
         const key=it.id||it.description;
@@ -180,7 +177,6 @@ function mergeByOS(requests){
       });
       existing.items=deduped;
       existing._merged=true;
-      // Mantém o timestamp mais recente para exibição
       if((r.timestamp||0)>(existing.timestamp||0)){
         existing.vehicleData=r.vehicleData||existing.vehicleData;
         existing.responsavel=r.responsavel||existing.responsavel;
@@ -210,16 +206,17 @@ const StatusBadge=({status,orig})=>{
   const map={
     'Pendente':'badge-pending',
     'Em Cotação':'badge-quoting',
-    'Comprado':'badge-bought',      // NOVO
+    'Comprado':'badge-bought',
     'Concluído':'badge-done',
     'Doado':'badge-donated'
   };
   return <span className={`badge ${map[status]||'badge-pending'}`}>{orig||status}</span>;
 };
+
 const RoleBadge=({role})=>{
   const r=role||'solicitante';
-  const map={admin:'badge-admin',solicitante:'badge-sol',leitor:'badge-reader'};
-  const labels={admin:'Admin',solicitante:'Solicitante',leitor:'Leitor'};
+  const map={master:'badge-master',admin:'badge-admin',solicitante:'badge-sol',leitor:'badge-reader'};
+  const labels={master:'Master',admin:'Admin',solicitante:'Solicitante',leitor:'Leitor'};
   return <span className={`badge ${map[r]||'badge-sol'}`}>{labels[r]||r}</span>;
 };
 
@@ -303,10 +300,8 @@ function DashboardView({requests}){
     const diasSem=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];const porDia=[0,0,0,0,0,0,0];
     requests.forEach(r=>porDia[new Date(r.timestamp).getDay()]++);
     const pedDia=diasSem.map((l,i)=>({l,v:porDia[i]}));
-    const agora=Date.now();
-    // Encontra a última segunda-feira (início da semana atual)
     const hoje=new Date();const diaSem=hoje.getDay();
-    const diasDesdeSegunda=(diaSem===0?6:diaSem-1); // 0=Dom→6, 1=Seg→0, etc
+    const diasDesdeSegunda=(diaSem===0?6:diaSem-1);
     const inicioSemanaAtual=new Date(hoje);
     inicioSemanaAtual.setHours(0,0,0,0);
     inicioSemanaAtual.setDate(hoje.getDate()-diasDesdeSegunda);
@@ -423,10 +418,140 @@ function DashboardView({requests}){
   );
 }
 
-// ── Donor System — MELHORIAS 2 e 3 ────────────────────────────────────────
-// Melhoria 2: digitar OS diretamente
-// Melhoria 3: busca no banco de veículos (vehicles), não em requests;
-//             todos do mesmo modelo exceto os entregues; recebidos primeiro
+// ── Change Password View ──────────────────────────────────────────────────
+function ChangePasswordView({loggedInUser,users,onPasswordChanged}){
+  const[currentPass,setCurrentPass]=useState('');
+  const[newPass,setNewPass]=useState('');
+  const[confirmPass,setConfirmPass]=useState('');
+  const[showCurrent,setShowCurrent]=useState(false);
+  const[showNew,setShowNew]=useState(false);
+  const[showConfirm,setShowConfirm]=useState(false);
+  const[saving,setSaving]=useState(false);
+  const[success,setSuccess]=useState(false);
+  const[error,setError]=useState('');
+
+  const submit=async e=>{
+    e.preventDefault();
+    setError('');
+    if(currentPass!==loggedInUser.pass){setError('Senha atual incorreta.');return;}
+    if(newPass.length<6){setError('A nova senha deve ter pelo menos 6 caracteres.');return;}
+    if(newPass!==confirmPass){setError('As senhas não coincidem.');return;}
+    setSaving(true);
+    try{
+      const userDoc=users.find(u=>u.user.toLowerCase()===loggedInUser.user.toLowerCase());
+      if(userDoc?.id){
+        await col('users').doc(userDoc.id).update({pass:newPass});
+        onPasswordChanged(newPass);
+        setSuccess(true);
+        setCurrentPass('');setNewPass('');setConfirmPass('');
+      } else {
+        setError('Usuário não encontrado no banco de dados.');
+      }
+    }catch(err){
+      setError('Erro ao salvar: '+err.message);
+    }
+    setSaving(false);
+  };
+
+  return(
+    <div className="fade-up" style={{paddingBottom:16}}>
+      <div style={{marginBottom:20}}>
+        <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.15em',color:'var(--red)',marginBottom:4}}>Segurança</p>
+        <h2 style={{fontSize:32,fontWeight:800,margin:0,letterSpacing:'-.02em'}}>Alterar Senha</h2>
+      </div>
+
+      <div style={{maxWidth:460}}>
+        {/* User info card */}
+        <div style={{background:'var(--ink)',borderRadius:14,padding:18,display:'flex',alignItems:'center',gap:14,marginBottom:20,color:'#fff'}}>
+          <div style={{width:48,height:48,background:'var(--red)',borderRadius:13,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+            <Icon name="user" size={22}/>
+          </div>
+          <div>
+            <p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',letterSpacing:'.12em',color:'rgba(255,255,255,.35)',margin:'0 0 3px'}}>Conta logada</p>
+            <p style={{fontSize:16,fontWeight:800,margin:'0 0 4px',textTransform:'uppercase'}}>{loggedInUser.user}</p>
+            <RoleBadge role={loggedInUser.role}/>
+          </div>
+        </div>
+
+        {success&&(
+          <div className="fade-in" style={{background:'#EDFAF3',border:'1.5px solid #AAE6C5',borderRadius:12,padding:'14px 18px',display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
+            <Icon name="check-circle" size={18} style={{color:'#059669',flexShrink:0}}/>
+            <div>
+              <p style={{fontSize:11,fontWeight:800,color:'#0A6B34',margin:0}}>Senha alterada com sucesso!</p>
+              <p style={{fontSize:9,color:'#0A6B34',margin:'2px 0 0',opacity:.7}}>Sua nova senha já está ativa.</p>
+            </div>
+          </div>
+        )}
+
+        {error&&(
+          <div className="shake" style={{background:'var(--red-light)',border:'1.5px solid #FFBDBD',borderRadius:12,padding:'12px 16px',display:'flex',alignItems:'center',gap:8,marginBottom:16}}>
+            <Icon name="alert-circle" size={16} style={{color:'var(--red)',flexShrink:0}}/>
+            <p style={{fontSize:11,fontWeight:700,color:'var(--red)',margin:0}}>{error}</p>
+          </div>
+        )}
+
+        <form onSubmit={submit} className="card" style={{padding:24,display:'flex',flexDirection:'column',gap:18}}>
+          {/* Senha atual */}
+          <div>
+            <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',display:'block',marginBottom:6}}>Senha Atual</label>
+            <div style={{position:'relative'}}>
+              <input type={showCurrent?'text':'password'} value={currentPass} onChange={e=>setCurrentPass(e.target.value)} className="input" placeholder="••••••••" required style={{paddingRight:44,letterSpacing:showCurrent?'normal':'.2em'}}/>
+              <button type="button" onClick={()=>setShowCurrent(!showCurrent)} style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--muted)',padding:4}}>
+                {showCurrent?<Icon name="eye-off" size={15}/>:<Icon name="eye" size={15}/>}
+              </button>
+            </div>
+          </div>
+
+          <div style={{height:1,background:'var(--border)'}}/>
+
+          {/* Nova senha */}
+          <div>
+            <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',display:'block',marginBottom:6}}>Nova Senha</label>
+            <div style={{position:'relative'}}>
+              <input type={showNew?'text':'password'} value={newPass} onChange={e=>setNewPass(e.target.value)} className="input" placeholder="Mínimo 6 caracteres" required minLength={6} style={{paddingRight:44,letterSpacing:showNew?'normal':'.2em'}}/>
+              <button type="button" onClick={()=>setShowNew(!showNew)} style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--muted)',padding:4}}>
+                {showNew?<Icon name="eye-off" size={15}/>:<Icon name="eye" size={15}/>}
+              </button>
+            </div>
+            {newPass.length>0&&(
+              <div style={{marginTop:6,display:'flex',gap:4}}>
+                {[
+                  {ok:newPass.length>=6,label:'6+ chars'},
+                  {ok:/[A-Z]/.test(newPass),label:'Maiúscula'},
+                  {ok:/[0-9]/.test(newPass),label:'Número'},
+                  {ok:/[^A-Za-z0-9]/.test(newPass),label:'Símbolo'},
+                ].map((c,i)=>(
+                  <span key={i} style={{fontSize:7,fontWeight:800,padding:'2px 7px',borderRadius:999,textTransform:'uppercase',background:c.ok?'#EDFAF3':'var(--smoke)',color:c.ok?'#0A6B34':'var(--muted)',border:`1px solid ${c.ok?'#AAE6C5':'var(--border)'}`}}>
+                    {c.ok?'✓':''} {c.label}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Confirmar nova senha */}
+          <div>
+            <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',display:'block',marginBottom:6}}>Confirmar Nova Senha</label>
+            <div style={{position:'relative'}}>
+              <input type={showConfirm?'text':'password'} value={confirmPass} onChange={e=>setConfirmPass(e.target.value)} className="input" placeholder="Repita a nova senha" required style={{paddingRight:44,letterSpacing:showConfirm?'normal':'.2em',borderColor:confirmPass&&newPass&&confirmPass!==newPass?'var(--red)':confirmPass&&confirmPass===newPass?'#059669':'var(--border)'}}/>
+              <button type="button" onClick={()=>setShowConfirm(!showConfirm)} style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--muted)',padding:4}}>
+                {showConfirm?<Icon name="eye-off" size={15}/>:<Icon name="eye" size={15}/>}
+              </button>
+            </div>
+            {confirmPass&&newPass&&confirmPass!==newPass&&<p style={{fontSize:9,color:'var(--red)',fontWeight:700,margin:'4px 0 0'}}>As senhas não coincidem</p>}
+            {confirmPass&&confirmPass===newPass&&newPass.length>=6&&<p style={{fontSize:9,color:'#059669',fontWeight:700,margin:'4px 0 0'}}>✓ Senhas coincidem</p>}
+          </div>
+
+          <button type="submit" disabled={saving||!currentPass||!newPass||!confirmPass} className="btn-primary" style={{width:'100%',padding:14}}>
+            {saving?<><Icon name="refresh-cw" size={15} className="spin"/> Salvando...</>:<><Icon name="shield-check" size={15}/> Alterar Senha</>}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ── Donor System ──────────────────────────────────────────────────────────
 function DonorSystem({requests,vehicles,loggedInUser}){
   const[step,setStep]=useState(1);
   const[targetOSInput,setTargetOSInput]=useState('');
@@ -438,13 +563,10 @@ function DonorSystem({requests,vehicles,loggedInUser}){
   const[showConfirm,setShowConfirm]=useState(false);
   const[etapaFilter,setEtapaFilter]=useState('');
 
-  // OS receptora: encontrar o pedido de compra pela OS digitada
   const targetRequest=useMemo(()=>{
     if(!targetOS)return null;
-    // Junta todos os pedidos da mesma OS em um único objeto para exibir peças
     const matching=requests.filter(r=>String(r.os).trim()===targetOS.trim());
     if(!matching.length)return null;
-    // Mescla peças de todos os pedidos da mesma OS
     const base={...matching[0]};
     const allItems=[];const seen=new Set();
     matching.forEach(r=>(r.items||[]).forEach(it=>{const k=it.id||it.description;if(!seen.has(k)){seen.add(k);allItems.push(it);}}));
@@ -452,8 +574,6 @@ function DonorSystem({requests,vehicles,loggedInUser}){
     return base;
   },[requests,targetOS]);
 
-  // Peças pendentes / em cotação da OS receptora
-  // Usa targetOS (já confirmado) para garantir que os dados estejam disponíveis
   const targetItems=useMemo(()=>{
     if(!targetRequest)return[];
     return(targetRequest.items||[]).filter(it=>
@@ -463,16 +583,12 @@ function DonorSystem({requests,vehicles,loggedInUser}){
 
   const targetModelo=(targetRequest?.vehicleData?.modelo||'').trim().toLowerCase();
 
-  // MELHORIA 3: busca no banco de veículos (vehicles collection)
-  // Excluir a própria OS; excluir os com etapa/localizacao = "Entregue"
-  // Recebidos sempre primeiro
   const vehicleCandidates=useMemo(()=>{
     if(!targetModelo)return{recebidos:[],outros:[]};
     const candidatos=vehicles.filter(v=>{
-      if(String(v.os).trim()===targetOS.trim())return false;// exclui a própria
+      if(String(v.os).trim()===targetOS.trim())return false;
       const modelo=(v.modelo||'').trim().toLowerCase();
       if(modelo!==targetModelo)return false;
-      // Exclui entregues
       const loc=(v.localizacao||'').trim().toLowerCase();
       const etapa=(v.etapa||'').trim().toLowerCase();
       if(loc==='entregue'||etapa==='entregue')return false;
@@ -483,17 +599,14 @@ function DonorSystem({requests,vehicles,loggedInUser}){
     return{recebidos,outros};
   },[vehicles,targetModelo,targetOS]);
 
-  // Encontra o request da OS doadora (se existir) para exibir info extra
   const sourceVehicle=useMemo(()=>vehicles.find(v=>String(v.os).trim()===sourceOS.trim()),[vehicles,sourceOS]);
 
-  // Etapas únicas dos candidatos (para filtro)
   const etapasUnicas=useMemo(()=>{
     const all=[...vehicleCandidates.recebidos,...vehicleCandidates.outros];
     const set=new Set(all.map(v=>(v.etapa||'').trim()).filter(Boolean));
     return Array.from(set).sort();
   },[vehicleCandidates]);
 
-  // Candidatos filtrados por etapa
   const filteredRecebidos=useMemo(()=>
     etapaFilter?vehicleCandidates.recebidos.filter(v=>(v.etapa||'').trim()===etapaFilter):vehicleCandidates.recebidos
   ,[vehicleCandidates.recebidos,etapaFilter]);
@@ -507,7 +620,6 @@ function DonorSystem({requests,vehicles,loggedInUser}){
   const confirmStep1=()=>{
     const t=targetOSInput.trim();
     if(!t)return alert('Digite o número da OS receptora.');
-    // Verifica diretamente pelo input, sem depender dos estados async
     const matching=requests.filter(r=>String(r.os).trim()===t);
     if(!matching.length){alert('Nenhum pedido encontrado para a OS '+t+'.');return;}
     const allItems=[];const seen=new Set();
@@ -521,73 +633,40 @@ function DonorSystem({requests,vehicles,loggedInUser}){
     setShowConfirm(false);
     setProcessing(true);
     try{
-      // ── PASSO 1: Marca itens da OS RECEPTORA (targetOS) como "Doado"
-      // com receivedFrom:sourceOS — ela vai RECEBER as peças da sourceOS
       const receptoraDocs=requests.filter(r=>String(r.os).trim()===targetOS.trim());
       for(const req of receptoraDocs){
         const newItems=[...req.items];let changed=false;
         selectedItems.forEach(itemId=>{
           const idx=newItems.findIndex(it=>String(it.id)===String(itemId));
           if(idx!==-1){
-            newItems[idx]={
-              ...newItems[idx],
-              status:'Doado',
-              statusOriginal:'Doado',
-              receivedFrom:sourceOS,   // ← RECEPTORA recebeu DA doadora
-              donatedTo:undefined,     // não doou para ninguém
-              donatedAt:Date.now()
-            };
+            newItems[idx]={...newItems[idx],status:'Doado',statusOriginal:'Doado',receivedFrom:sourceOS,donatedTo:undefined,donatedAt:Date.now()};
             changed=true;
           }
         });
         if(changed)await col('requests').doc(req.id).update({items:stripUndefined(newItems)});
       }
 
-      // ── PASSO 2: Cria pedido de compra na OS DOADORA (sourceOS)
-      // com donatedTo:targetOS — ela vai COMPRAR/CEDER para a receptora
       const toTransfer=selectedItems.map(itemId=>{
         const orig=targetRequest.items.find(it=>String(it.id)===String(itemId));
         if(!orig)return null;
         const base=stripUndefined({...orig});
-        // Limpa campos de cotação — é um pedido novo
-        delete base.price; delete base.supplier; delete base.deliveryDate;
-        delete base.actualDeliveryDate; delete base.boughtAt; delete base.statusOriginal;
-        delete base.receivedFrom; delete base.donatedTo;
-        return{
-          ...base,
-          id:String(Date.now())+String(Math.floor(Math.random()*9999)),
-          status:'Pendente',
-          donatedTo:targetOS    // ← DOADORA vai ceder PARA a receptora
-        };
+        delete base.price;delete base.supplier;delete base.deliveryDate;
+        delete base.actualDeliveryDate;delete base.boughtAt;delete base.statusOriginal;
+        delete base.receivedFrom;delete base.donatedTo;
+        return{...base,id:String(Date.now())+String(Math.floor(Math.random()*9999)),status:'Pendente',donatedTo:targetOS};
       }).filter(Boolean);
 
       const doadoraDocs=requests.filter(r=>String(r.os).trim()===sourceOS.trim());
       if(doadoraDocs.length>0){
         const donorReq=doadoraDocs[0];
-        await col('requests').doc(donorReq.id).update({
-          items:stripUndefined([...(donorReq.items||[]),...toTransfer])
-        });
+        await col('requests').doc(donorReq.id).update({items:stripUndefined([...(donorReq.items||[]),...toTransfer])});
       } else {
         const vData=sourceVehicle||{os:sourceOS};
         const cleanVData={};
         Object.entries(vData).forEach(([k,v])=>{if(v!==undefined)cleanVData[k]=v;});
-        await col('requests').add({
-          os:sourceOS,
-          responsavel:loggedInUser?.user||'Sistema',
-          vehicleData:cleanVData,
-          unidade:'Unidade 1',
-          items:toTransfer,
-          timestamp:Date.now(),
-          status:'Pendente'
-        });
+        await col('requests').add({os:sourceOS,responsavel:loggedInUser?.user||'Sistema',vehicleData:cleanVData,unidade:'Unidade 1',items:toTransfer,timestamp:Date.now(),status:'Pendente'});
       }
-      col('donations').add(stripUndefined({
-        receptoraOS:targetOS,
-        doadoraOS:sourceOS,
-        itemIds:selectedItems.map(String),
-        executadoPor:loggedInUser?.user||'Sistema',
-        timestamp:Date.now()
-      })).catch(e=>console.warn('Log doação:',e));
+      col('donations').add(stripUndefined({receptoraOS:targetOS,doadoraOS:sourceOS,itemIds:selectedItems.map(String),executadoPor:loggedInUser?.user||'Sistema',timestamp:Date.now()})).catch(e=>console.warn('Log doação:',e));
       setDone(true);
     }catch(err){
       console.error('Erro na transferência:',err);
@@ -601,7 +680,6 @@ function DonorSystem({requests,vehicles,loggedInUser}){
     setShowConfirm(true);
   };
 
-  // ── Modal de confirmação elegante ──────────────────────────────────────────
   if(processing)return(
     <div style={{maxWidth:440,margin:'0 auto',background:'#fff',borderRadius:20,border:'1.5px solid var(--border)',padding:48,textAlign:'center'}} className="fade-in">
       <div style={{width:72,height:72,borderRadius:999,background:'var(--red-light)',border:'2px solid #FFBDBD',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 20px'}}>
@@ -638,7 +716,7 @@ function DonorSystem({requests,vehicles,loggedInUser}){
           </div>
         </div>
         <div style={{padding:'20px 28px'}}>
-          <p style={{fontSize:10,fontWeight:700,color:'var(--muted)',marginBottom:14,margin:'0 0 16px'}}>Peças que serão transferidas:</p>
+          <p style={{fontSize:10,fontWeight:700,color:'var(--muted)',marginBottom:16}}>Peças que serão transferidas:</p>
           <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:20}}>
             {selectedItems.map(itemId=>{
               const it=targetRequest?.items.find(i=>String(i.id)===String(itemId));
@@ -668,11 +746,6 @@ function DonorSystem({requests,vehicles,loggedInUser}){
       <div style={{width:64,height:64,background:'#EDFAF3',borderRadius:18,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 20px'}}><Icon name="check-circle" size={32}/></div>
       <h2 style={{fontSize:24,fontWeight:800,margin:'0 0 8px',letterSpacing:'-.02em'}}>Transferência Concluída</h2>
       <p style={{fontSize:12,color:'var(--muted)',marginBottom:20}}>OS <strong>#{targetOS}</strong> vai receber {selectedItems.length} peça(s) compradas pela OS <strong>#{sourceOS}</strong></p>
-      <div style={{background:'var(--smoke)',borderRadius:12,padding:'14px 16px',textAlign:'left',marginBottom:24}}>
-        <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--red)',marginBottom:6}}>Resultado</p>
-        <p style={{fontSize:11,color:'var(--ink)',margin:'0 0 4px'}}>• OS <strong>#{targetOS}</strong> — itens marcados como "Recebido" (receivedFrom: {sourceOS})</p>
-        <p style={{fontSize:11,color:'var(--ink)',margin:0}}>• OS <strong>#{sourceOS}</strong> — pedido de compra criado para entregar à OS #{targetOS}</p>
-      </div>
       <button onClick={reset} className="btn-primary" style={{width:'100%',padding:14}}>Nova Transferência</button>
     </div>
   );
@@ -681,7 +754,6 @@ function DonorSystem({requests,vehicles,loggedInUser}){
 
   return(
     <div style={{maxWidth:680,margin:'0 auto'}} className="fade-up">
-      {/* Header */}
       <div style={{background:'var(--ink)',borderRadius:16,padding:'20px 24px',display:'flex',alignItems:'center',gap:14,color:'#fff',marginBottom:16}}>
         <div style={{width:44,height:44,background:'var(--red)',borderRadius:12,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="git-merge" size={20}/></div>
         <div>
@@ -690,7 +762,6 @@ function DonorSystem({requests,vehicles,loggedInUser}){
         </div>
       </div>
 
-      {/* Steps indicator */}
       <div className="card" style={{padding:16,marginBottom:16}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}>
           {steps.map((s,i)=>(
@@ -707,7 +778,6 @@ function DonorSystem({requests,vehicles,loggedInUser}){
         </div>
       </div>
 
-      {/* PASSO 1 — Digitar OS receptora */}
       {step===1&&(
         <div className="card slide-in">
           <div style={{padding:'16px 20px',borderBottom:'1px solid var(--border)',background:'var(--smoke)'}}>
@@ -716,27 +786,13 @@ function DonorSystem({requests,vehicles,loggedInUser}){
             <p style={{margin:0,fontSize:10,color:'var(--muted)',marginTop:2}}>Digite o número da OS que vai RECEBER as peças</p>
           </div>
           <div style={{padding:20}}>
-            {/* MELHORIA 2: input de texto em vez de select */}
             <div style={{marginBottom:16}}>
               <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',display:'block',marginBottom:6}}>Número da OS Receptora</label>
               <div style={{display:'flex',gap:10}}>
-                <input
-                  type="text" inputMode="numeric"
-                  value={targetOSInput}
-                  onChange={e=>setTargetOSInput(sanitize(e.target.value))}
-                  onKeyDown={e=>e.key==='Enter'&&confirmStep1()}
-                  placeholder="Ex: 12345"
-                  className="input"
-                  style={{fontSize:22,fontWeight:800,letterSpacing:'.05em',flex:1}}
-                  autoFocus
-                />
-                <button onClick={confirmStep1} className="btn-primary" style={{padding:'12px 20px',flexShrink:0}}>
-                  Buscar <Icon name="search" size={15}/>
-                </button>
+                <input type="text" inputMode="numeric" value={targetOSInput} onChange={e=>setTargetOSInput(sanitize(e.target.value))} onKeyDown={e=>e.key==='Enter'&&confirmStep1()} placeholder="Ex: 12345" className="input" style={{fontSize:22,fontWeight:800,letterSpacing:'.05em',flex:1}} autoFocus/>
+                <button onClick={confirmStep1} className="btn-primary" style={{padding:'12px 20px',flexShrink:0}}>Buscar <Icon name="search" size={15}/></button>
               </div>
             </div>
-
-            {/* Preview do request encontrado */}
             {targetOSInput.trim()&&(()=>{
               const found=requests.filter(r=>String(r.os).trim()===targetOSInput.trim());
               if(!found.length)return <p style={{fontSize:10,color:'var(--muted)',textAlign:'center',padding:'12px 0'}}>Nenhum pedido encontrado para OS #{targetOSInput.trim()}</p>;
@@ -762,7 +818,6 @@ function DonorSystem({requests,vehicles,loggedInUser}){
                 </div>
               );
             })()}
-
             <button onClick={confirmStep1} disabled={!targetOSInput.trim()} className="btn-primary" style={{width:'100%',padding:13,marginTop:16}}>
               Selecionar Peças <Icon name="arrow-right" size={15}/>
             </button>
@@ -770,7 +825,6 @@ function DonorSystem({requests,vehicles,loggedInUser}){
         </div>
       )}
 
-      {/* PASSO 2 — Selecionar peças */}
       {step===2&&(
         <div className="card slide-in">
           <div style={{padding:'16px 20px',borderBottom:'1px solid var(--border)',background:'var(--smoke)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
@@ -813,7 +867,6 @@ function DonorSystem({requests,vehicles,loggedInUser}){
         </div>
       )}
 
-      {/* PASSO 3 — Escolher OS doadora (do banco de veículos) */}
       {step===3&&(
         <div className="card slide-in">
           <div style={{padding:'16px 20px',borderBottom:'1px solid var(--border)',background:'var(--smoke)'}}>
@@ -822,7 +875,6 @@ function DonorSystem({requests,vehicles,loggedInUser}){
             <p style={{margin:0,fontSize:10,color:'var(--muted)',marginTop:2}}>Veículos do mesmo modelo — <strong>recebidos têm prioridade</strong></p>
           </div>
           <div style={{padding:20}}>
-            {/* Resumo */}
             <div style={{background:'var(--ink)',borderRadius:12,padding:14,color:'#fff',marginBottom:16}}>
               <p style={{fontSize:7,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'rgba(255,255,255,.3)',margin:'0 0 8px'}}>Peças a transferir da OS #{targetOS}</p>
               <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
@@ -830,30 +882,22 @@ function DonorSystem({requests,vehicles,loggedInUser}){
               </div>
             </div>
 
-            {/* Filtro por etapa */}
             {etapasUnicas.length>0&&(
               <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:14}}>
                 <Icon name="filter" size={14} style={{color:'var(--muted)',flexShrink:0}}/>
                 <div style={{display:'flex',gap:6,flexWrap:'wrap',flex:1}}>
-                  <button onClick={()=>setEtapaFilter('')} style={{padding:'4px 12px',borderRadius:999,fontSize:8,fontWeight:800,textTransform:'uppercase',border:'1.5px solid',cursor:'pointer',transition:'all .15s',background:etapaFilter===''?'var(--ink)':'transparent',color:etapaFilter===''?'#fff':'var(--muted)',borderColor:etapaFilter===''?'var(--ink)':'var(--border)',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
-                    Todas
-                  </button>
+                  <button onClick={()=>setEtapaFilter('')} style={{padding:'4px 12px',borderRadius:999,fontSize:8,fontWeight:800,textTransform:'uppercase',border:'1.5px solid',cursor:'pointer',transition:'all .15s',background:etapaFilter===''?'var(--ink)':'transparent',color:etapaFilter===''?'#fff':'var(--muted)',borderColor:etapaFilter===''?'var(--ink)':'var(--border)',fontFamily:'Plus Jakarta Sans,sans-serif'}}>Todas</button>
                   {etapasUnicas.map(e=>(
-                    <button key={e} onClick={()=>setEtapaFilter(etapaFilter===e?'':e)} style={{padding:'4px 12px',borderRadius:999,fontSize:8,fontWeight:800,textTransform:'uppercase',border:'1.5px solid',cursor:'pointer',transition:'all .15s',background:etapaFilter===e?'var(--red)':'transparent',color:etapaFilter===e?'#fff':'var(--muted)',borderColor:etapaFilter===e?'var(--red)':'var(--border)',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
-                      {e}
-                    </button>
+                    <button key={e} onClick={()=>setEtapaFilter(etapaFilter===e?'':e)} style={{padding:'4px 12px',borderRadius:999,fontSize:8,fontWeight:800,textTransform:'uppercase',border:'1.5px solid',cursor:'pointer',transition:'all .15s',background:etapaFilter===e?'var(--red)':'transparent',color:etapaFilter===e?'#fff':'var(--muted)',borderColor:etapaFilter===e?'var(--red)':'var(--border)',fontFamily:'Plus Jakarta Sans,sans-serif'}}>{e}</button>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Seção RECEBIDOS */}
             {filteredRecebidos.length>0&&(
               <div style={{marginBottom:16}}>
                 <div className="divider" style={{marginBottom:12}}>
-                  <span style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'#059669',padding:'3px 10px',background:'#EDFAF3',borderRadius:999,border:'1px solid #AAE6C5',whiteSpace:'nowrap',flexShrink:0}}>
-                    ✦ Recebidos — Prioridade · Mesmo modelo
-                  </span>
+                  <span style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'#059669',padding:'3px 10px',background:'#EDFAF3',borderRadius:999,border:'1px solid #AAE6C5',whiteSpace:'nowrap',flexShrink:0}}>✦ Recebidos — Prioridade · Mesmo modelo</span>
                 </div>
                 <div style={{display:'flex',flexDirection:'column',gap:8}}>
                   {filteredRecebidos.map((v,i)=>(
@@ -882,7 +926,6 @@ function DonorSystem({requests,vehicles,loggedInUser}){
               </div>
             )}
 
-            {/* Outros veículos do mesmo modelo */}
             {filteredOutros.length>0&&(
               <div style={{marginBottom:16}}>
                 <div className="divider" style={{marginBottom:12}}>
@@ -917,18 +960,15 @@ function DonorSystem({requests,vehicles,loggedInUser}){
               </div>
             )}
 
-            {/* MELHORIA 2: também permite digitar uma OS manualmente */}
             <div style={{marginBottom:16}}>
               <div className="divider" style={{marginBottom:12}}>
                 <span style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.08em',color:'var(--muted)',whiteSpace:'nowrap',flexShrink:0}}>Ou digitar outra OS</span>
               </div>
               <div style={{display:'flex',gap:8}}>
-                <input type="text" inputMode="numeric" placeholder="Número da OS doadora" className="input" style={{fontSize:14,fontWeight:700}}
-                  value={sourceOS} onChange={e=>setSourceOS(sanitize(e.target.value))}/>
+                <input type="text" inputMode="numeric" placeholder="Número da OS doadora" className="input" style={{fontSize:14,fontWeight:700}} value={sourceOS} onChange={e=>setSourceOS(sanitize(e.target.value))}/>
               </div>
             </div>
 
-            {/* Resumo */}
             {sourceOS&&(
               <div style={{background:'var(--ink)',borderRadius:12,padding:14,color:'#fff',marginBottom:16}}>
                 <p style={{fontSize:7,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'rgba(255,255,255,.3)',margin:'0 0 10px'}}>Resumo da operação</p>
@@ -964,7 +1004,7 @@ function DonorSystem({requests,vehicles,loggedInUser}){
   );
 }
 
-// ── Request Form — MELHORIA 1 (exibe todas peças mescladas da OS) ──────────
+// ── Request Form ──────────────────────────────────────────────────────────
 function RequestForm({user,loggedInUser,vehiclesDB,requests}){
   const[os,setOs]=useState('');const[vehicle,setVehicle]=useState(null);const[unidade,setUnidade]=useState('Unidade 1');
   const[items,setItems]=useState([{id:Date.now(),description:'',quantity:1,photo:null,status:'Pendente'}]);
@@ -1003,7 +1043,6 @@ function RequestForm({user,loggedInUser,vehiclesDB,requests}){
     await salvar();
   };
 
-  // MELHORIA 1: peças já cadastradas na mesma OS (mescladas)
   const existingItemsForOS=useMemo(()=>{
     if(!os.trim())return[];
     const matching=requests.filter(r=>String(r.os).trim()===os.trim());
@@ -1023,7 +1062,6 @@ function RequestForm({user,loggedInUser,vehiclesDB,requests}){
 
   return(
     <div className="fade-up" style={{paddingBottom:16}}>
-      {/* Modal Foto */}
       {showFoto&&(
         <div style={{position:'fixed',inset:0,zIndex:600,background:'rgba(0,0,0,.8)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
           <div style={{background:'#fff',borderRadius:20,overflow:'hidden',maxWidth:360,width:'100%',boxShadow:'0 32px 64px rgba(0,0,0,.3)'}}>
@@ -1038,7 +1076,6 @@ function RequestForm({user,loggedInUser,vehiclesDB,requests}){
           </div>
         </div>
       )}
-      {/* Modal Duplicata */}
       {showDup&&(
         <div style={{position:'fixed',inset:0,zIndex:600,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
           <div style={{background:'#fff',borderRadius:20,overflow:'hidden',maxWidth:560,width:'100%',boxShadow:'0 32px 64px rgba(0,0,0,.3)'}}>
@@ -1049,7 +1086,6 @@ function RequestForm({user,loggedInUser,vehiclesDB,requests}){
                 <p style={{margin:0,fontSize:9,color:'rgba(255,255,255,.4)',textTransform:'uppercase',letterSpacing:'.08em',marginTop:2}}>OS #{os} — Será inclusão adicional</p>
               </div>
             </div>
-            {/* MELHORIA 1: mostra peças já cadastradas de TODAS as solicitações mescladas */}
             <div style={{padding:16,maxHeight:'40vh',overflowY:'auto'}}>
               <p style={{fontSize:10,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',marginBottom:10,letterSpacing:'.08em'}}>Peças já cadastradas nesta OS:</p>
               <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
@@ -1101,7 +1137,6 @@ function RequestForm({user,loggedInUser,vehiclesDB,requests}){
               <RoleBadge role={loggedInUser.role}/>
             </div>
           </div>
-          {/* Painel do veículo */}
           <div style={{borderTop:'2px solid var(--border)',background:'var(--ink)',padding:20,minHeight:100,display:'flex',alignItems:'center'}}>
             {vehicle?(
               <div style={{width:'100%'}}>
@@ -1116,7 +1151,6 @@ function RequestForm({user,loggedInUser,vehiclesDB,requests}){
                   <p style={{fontSize:7,color:'rgba(255,255,255,.3)',fontWeight:700,textTransform:'uppercase',margin:'0 0 2px'}}>Chassi</p>
                   <p className="mono" style={{fontSize:13,fontWeight:700,color:'rgba(255,255,255,.9)',margin:0,letterSpacing:'.08em',userSelect:'all'}}>{vehicle.chassi}</p>
                 </div>
-                {/* MELHORIA 1: mostra peças já cadastradas na OS */}
                 {existingItemsForOS.length>0&&(
                   <div style={{marginTop:12,paddingTop:12,borderTop:'1px solid rgba(255,255,255,.1)'}}>
                     <p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',color:'rgba(255,255,255,.3)',marginBottom:6}}>Peças já cadastradas nesta OS:</p>
@@ -1139,7 +1173,6 @@ function RequestForm({user,loggedInUser,vehiclesDB,requests}){
           </div>
         </div>
 
-        {/* Itens */}
         <div>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
             <h3 style={{margin:0,fontSize:13,fontWeight:800,textTransform:'uppercase',display:'flex',alignItems:'center',gap:8}}><Icon name="package" size={16}/> Peças</h3>
@@ -1192,21 +1225,19 @@ function RequestForm({user,loggedInUser,vehiclesDB,requests}){
   );
 }
 
-// ── Status View ───────────────────────────────────────────────────────────
-function StatusView({requests,isAdmin}){
+// ── Status View ── UPDATED: shows etapa + localizacao ────────────────────
+function StatusView({requests,isAdmin,isMaster}){
   const[search,setSearch]=useState('');
   const[unidadeFilter,setUnidadeFilter]=useState('todas');
   const[statusTab,setStatusTab]=useState('geral');
   const[toDelete,setToDelete]=useState(null);
 
-  // Mescla pedidos da mesma OS antes de exibir
   const merged=useMemo(()=>mergeByOS(requests.filter(r=>!r.importado)),[requests]);
 
   const filtered=useMemo(()=>merged.filter(r=>{
     const t=search.toLowerCase();
     const mb=String(r.os||'').toLowerCase().includes(t)||String(r.responsavel||'').toLowerCase().includes(t)||String(r.vehicleData?.modelo||'').toLowerCase().includes(t)||String(r.vehicleData?.chassi||'').toLowerCase().includes(t);
     const mu=unidadeFilter==='todas'||r.unidade===unidadeFilter;
-    // Filtro por aba de status
     let ms=true;
     if(statusTab==='pendente') ms=r.items?.some(it=>it.status==='Pendente');
     else if(statusTab==='cotacao') ms=r.items?.some(it=>it.status==='Em Cotação'||it.status==='Comprado');
@@ -1215,7 +1246,6 @@ function StatusView({requests,isAdmin}){
     return mb&&mu&&ms;
   }),[merged,search,unidadeFilter,statusTab]);
 
-  // Contadores para as abas
   const counts=useMemo(()=>({
     geral:merged.length,
     pendente:merged.filter(r=>r.items?.some(it=>it.status==='Pendente')).length,
@@ -1225,8 +1255,8 @@ function StatusView({requests,isAdmin}){
   }),[merged]);
 
   const exportCSV=()=>{
-    const rows=[['Data','OS','Unidade','Chassi','Veiculo','Peca','Qtd','Status','Valor','Loja','Prazo','Entrega'].join(';')];
-    filtered.forEach(r=>(r.items||[]).forEach(it=>rows.push([r.timestamp?new Date(r.timestamp).toLocaleDateString():'',r.os,r.unidade||'Unidade 1',r.vehicleData?.chassi||'-',r.vehicleData?.modelo||'-',it.description||'-',it.quantity||1,it.statusOriginal||it.status||'Pendente',it.price||0,it.supplier||'-',it.deliveryDate||'-',it.actualDeliveryDate||'-'].join(';'))));
+    const rows=[['Data','OS','Unidade','Chassi','Veiculo','Etapa','Localizacao','Peca','Qtd','Status','Valor','Loja','Prazo','Entrega'].join(';')];
+    filtered.forEach(r=>(r.items||[]).forEach(it=>rows.push([r.timestamp?new Date(r.timestamp).toLocaleDateString():'',r.os,r.unidade||'Unidade 1',r.vehicleData?.chassi||'-',r.vehicleData?.modelo||'-',r.vehicleData?.etapa||'-',r.vehicleData?.localizacao||'-',it.description||'-',it.quantity||1,it.statusOriginal||it.status||'Pendente',it.price||0,it.supplier||'-',it.deliveryDate||'-',it.actualDeliveryDate||'-'].join(';'))));
     const blob=new Blob(['\uFEFF'+rows.join('\n')],{type:'text/csv;charset=utf-8;'});
     const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`Relatorio_VRZ_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.csv`;a.click();
   };
@@ -1237,8 +1267,10 @@ function StatusView({requests,isAdmin}){
     doc.text('OS: #'+req.os,10,24);doc.text('Unidade: '+(req.unidade||'Unidade 1'),10,30);
     doc.text('Data: '+new Date(req.timestamp).toLocaleString(),10,36);
     doc.text('Veiculo: '+(req.vehicleData?.modelo||''),10,42);doc.text('Chassi: '+(req.vehicleData?.chassi||''),10,48);
-    doc.text('Solicitante: '+req.responsavel,10,54);
-    let y=64;doc.setFontSize(11);doc.text('ITENS:',10,y);y+=8;
+    doc.text('Etapa: '+(req.vehicleData?.etapa||'—'),10,54);
+    doc.text('Localizacao: '+(req.vehicleData?.localizacao||'—'),10,60);
+    doc.text('Solicitante: '+req.responsavel,10,66);
+    let y=76;doc.setFontSize(11);doc.text('ITENS:',10,y);y+=8;
     (req.items||[]).forEach((it,i)=>{
       if(y>250){doc.addPage();y=15;}
       doc.setFontSize(9);
@@ -1272,7 +1304,6 @@ function StatusView({requests,isAdmin}){
       <div style={{marginBottom:16}}>
         <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.15em',color:'var(--red)',marginBottom:4}}>Registros do Portal</p>
         <h2 style={{fontSize:32,fontWeight:800,margin:'0 0 12px',letterSpacing:'-.02em'}}>Histórico de OS</h2>
-        {/* Abas de status */}
         <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)',overflowX:'auto',marginBottom:12}}>
           {[
             {key:'geral',label:`Todos (${counts.geral})`,color:'var(--ink)'},
@@ -1291,7 +1322,7 @@ function StatusView({requests,isAdmin}){
             <option value="todas">Todas as Unidades</option>
             {UNIDADES.map(u=><option key={u} value={u}>{u}</option>)}
           </select>
-          {isAdmin&&(
+          {(isAdmin||isMaster)&&(
             <button onClick={exportCSV} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 14px',background:'#059669',color:'#fff',border:'none',borderRadius:8,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}>
               <Icon name="file-text" size={13}/> Excel
             </button>
@@ -1313,16 +1344,27 @@ function StatusView({requests,isAdmin}){
           <div key={r.os} className="card" style={{borderLeft:'3px solid var(--red)'}}>
             <div style={{padding:'14px 16px'}}>
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8,marginBottom:10}}>
-                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
                   <span style={{fontSize:15,fontWeight:800}}>OS #{r.os}</span>
                   <span className="pill">{r.unidade||'Unidade 1'}</span>
+                  {/* ── NOVO: etapa e localização ao lado da OS ── */}
+                  {r.vehicleData?.etapa&&(
+                    <span style={{display:'inline-flex',alignItems:'center',gap:4,padding:'3px 9px',borderRadius:999,fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.05em',background:'#EAF0FF',color:'#1A4EC2',border:'1px solid #C0D0F5'}}>
+                      <Icon name="layers" size={10}/> {r.vehicleData.etapa}
+                    </span>
+                  )}
+                  {r.vehicleData?.localizacao&&(
+                    <span style={{display:'inline-flex',alignItems:'center',gap:4,padding:'3px 9px',borderRadius:999,fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.05em',background:'#F0FFF4',color:'#166534',border:'1px solid #BBF7D0'}}>
+                      <Icon name="map-pin" size={10}/> {r.vehicleData.localizacao}
+                    </span>
+                  )}
                   {r._merged&&<span style={{fontSize:7,fontWeight:800,padding:'2px 7px',borderRadius:999,background:'#EAF0FF',color:'#1A4EC2',border:'1px solid #C0D0F5'}}>Mesclado</span>}
                 </div>
                 <div style={{display:'flex',gap:8}}>
                   <button onClick={()=>exportPDF(r)} style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',background:'#2563EB',color:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}>
                     <Icon name="file-down" size={12}/> PDF
                   </button>
-                  {isAdmin&&<button onClick={()=>setToDelete(r.id)} style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',background:'var(--red)',color:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}>
+                  {isMaster&&<button onClick={()=>setToDelete(r.id)} style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',background:'var(--red)',color:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}>
                     <Icon name="trash-2" size={12}/> Excluir
                   </button>}
                 </div>
@@ -1342,7 +1384,7 @@ function StatusView({requests,isAdmin}){
                         <span style={{fontSize:8,color:'var(--red)',fontWeight:700}}>QTD:{it.quantity}</span>
                         <StatusBadge status={it.status||'Pendente'} orig={it.statusOriginal}/>
                       </div>
-                        {it.receivedFrom&&(
+                      {it.receivedFrom&&(
                         <div style={{display:'flex',alignItems:'center',gap:4,marginTop:3,padding:'2px 6px',background:'#EDFAF3',borderRadius:5,border:'1px solid #AAE6C5'}}>
                           <Icon name="arrow-left" size={9}/>
                           <span style={{fontSize:7,color:'#0A6B34',fontWeight:800}}>Recebida da OS #{it.receivedFrom}</span>
@@ -1367,20 +1409,22 @@ function StatusView({requests,isAdmin}){
   );
 }
 
-// ── User Management ───────────────────────────────────────────────────────
-function UserManagement({users,onAdd,onDelete,onToggle,onRole}){
+// ── User Management ── UPDATED: master role, can only be Lucas.Sabino ─────
+function UserManagement({users,onAdd,onDelete,onToggle,onRole,currentUser}){
   const[nu,setNu]=useState('');const[np,setNp]=useState('');const[nr,setNr]=useState('solicitante');const[showP,setShowP]=useState(false);
   return(
     <div className="fade-in" style={{display:'flex',flexDirection:'column',gap:20}}>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12}}>
+      {/* Role matrix — 4 roles now */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12}}>
         {[
-          {role:'admin',items:['✓ Nova Req.','✓ Histórico','✓ Doações','✓ Excluir','✓ Gestão','✓ Usuários']},
+          {role:'master',items:['✓ Nova Req.','✓ Histórico','✓ Doações','✓ Excluir','✓ Gestão','✓ Usuários']},
+          {role:'admin',items:['✓ Nova Req.','✓ Histórico','✓ Doações','✗ Excluir','✗ Gestão','✗ Usuários']},
           {role:'solicitante',items:['✓ Nova Req.','✓ Histórico','✗ Doações','✗ Excluir','✗ Gestão','✗ Usuários']},
           {role:'leitor',items:['✗ Nova Req.','✓ Histórico','✗ Doações','✗ Excluir','✗ Gestão','✗ Usuários']}
         ].map(({role,items})=>(
-          <div key={role} style={{borderRadius:12,padding:12,background:role==='admin'?'var(--red-light)':role==='solicitante'?'#EAF0FF':'var(--smoke)',border:`1px solid ${role==='admin'?'#FFBDBD':role==='solicitante'?'#C0D0F5':'var(--border)'}`}}>
+          <div key={role} style={{borderRadius:12,padding:12,background:role==='master'?'#0D0D0D':role==='admin'?'var(--red-light)':role==='solicitante'?'#EAF0FF':'var(--smoke)',border:`1px solid ${role==='master'?'#8B7500':role==='admin'?'#FFBDBD':role==='solicitante'?'#C0D0F5':'var(--border)'}`}}>
             <RoleBadge role={role}/>
-            <ul style={{fontSize:9,fontWeight:700,listStyle:'none',margin:'8px 0 0',padding:0,color:role==='admin'?'#A81515':role==='solicitante'?'#1A4EC2':'var(--muted)'}}>
+            <ul style={{fontSize:9,fontWeight:700,listStyle:'none',margin:'8px 0 0',padding:0,color:role==='master'?'#FFD700':role==='admin'?'#A81515':role==='solicitante'?'#1A4EC2':'var(--muted)'}}>
               {items.map((p,i)=><li key={i} style={{marginBottom:2,opacity:p.startsWith('✗')?.4:1}}>{p}</li>)}
             </ul>
           </div>
@@ -1393,7 +1437,12 @@ function UserManagement({users,onAdd,onDelete,onToggle,onRole}){
           <div><label style={{fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',display:'block',marginBottom:6}}>Senha</label>
             <div style={{position:'relative'}}><input type={showP?'text':'password'} value={np} onChange={e=>setNp(e.target.value)} className="input" placeholder="Senha" style={{fontSize:12,paddingRight:36}}/><button type="button" onClick={()=>setShowP(!showP)} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',fontSize:12}}>{showP?'👁':'👁‍🗨'}</button></div></div>
           <div><label style={{fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',display:'block',marginBottom:6}}>Categoria</label>
-            <select value={nr} onChange={e=>setNr(e.target.value)} className="input" style={{fontSize:12,appearance:'auto'}}><option value="solicitante">Solicitante</option><option value="leitor">Leitor</option><option value="admin">Admin</option></select></div>
+            {/* Master role can only be assigned to Lucas.Sabino — hide it from new user creation */}
+            <select value={nr} onChange={e=>setNr(e.target.value)} className="input" style={{fontSize:12,appearance:'auto'}}>
+              <option value="solicitante">Solicitante</option>
+              <option value="leitor">Leitor</option>
+              <option value="admin">Admin</option>
+            </select></div>
         </div>
         <button onClick={()=>{if(!nu||!np)return alert('Preencha todos os campos.');onAdd(nu,np,nr);setNu('');setNp('');setNr('solicitante');}} className="btn-primary" style={{width:'100%'}}>+ Criar Conta</button>
       </div>
@@ -1401,14 +1450,37 @@ function UserManagement({users,onAdd,onDelete,onToggle,onRole}){
         <table className="vtable w-full">
           <thead><tr><th>Usuário</th><th>Categoria</th><th>Status</th><th style={{textAlign:'right'}}>Ação</th></tr></thead>
           <tbody>
-            {users.map((u,i)=>(
-              <tr key={i}>
-                <td style={{fontWeight:700,textTransform:'uppercase',fontSize:12}}>{u.user}</td>
-                <td><select value={u.role||'solicitante'} onChange={e=>onRole(u,e.target.value)} className="badge" style={{cursor:'pointer',border:'none',outline:'none',background:u.role==='admin'?'var(--red)':u.role==='leitor'?'var(--muted)':'#1A4EC2',color:'#fff'}}><option value="admin">Admin</option><option value="solicitante">Solicitante</option><option value="leitor">Leitor</option></select></td>
-                <td><button onClick={()=>onToggle(u)} style={{fontSize:9,fontWeight:800,textTransform:'uppercase',padding:'3px 10px',borderRadius:999,cursor:'pointer',border:'1px solid',background:u.active!==false?'#EDFAF3':'#FFF0F0',color:u.active!==false?'#0A6B34':'var(--red)',borderColor:u.active!==false?'#AAE6C5':'#FFBDBD'}}>{u.active!==false?'Ativo':'Desativado'}</button></td>
-                <td style={{textAlign:'right'}}><button onClick={()=>onDelete(u.id||u.user,u)} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'5px 12px',background:'var(--red)',color:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}><Icon name="trash-2" size={12}/> Excluir</button></td>
-              </tr>
-            ))}
+            {users.map((u,i)=>{
+              const isMasterUser=u.user===MASTER_USER;
+              return(
+                <tr key={i}>
+                  <td style={{fontWeight:700,textTransform:'uppercase',fontSize:12}}>
+                    {u.user}
+                    {isMasterUser&&<span style={{marginLeft:6,fontSize:7,fontWeight:800,padding:'1px 6px',borderRadius:999,background:'#0D0D0D',color:'#FFD700',border:'1px solid #8B7500'}}>ÚNICO MASTER</span>}
+                  </td>
+                  <td>
+                    <select
+                      value={u.role||'solicitante'}
+                      onChange={e=>onRole(u,e.target.value)}
+                      disabled={isMasterUser}
+                      className="badge"
+                      style={{cursor:isMasterUser?'not-allowed':'pointer',border:'none',outline:'none',background:u.role==='master'?'#0D0D0D':u.role==='admin'?'var(--red)':u.role==='leitor'?'var(--muted)':'#1A4EC2',color:u.role==='master'?'#FFD700':'#fff',opacity:isMasterUser?.8:1}}
+                    >
+                      {isMasterUser&&<option value="master">Master</option>}
+                      <option value="admin">Admin</option>
+                      <option value="solicitante">Solicitante</option>
+                      <option value="leitor">Leitor</option>
+                    </select>
+                  </td>
+                  <td><button onClick={()=>!isMasterUser&&onToggle(u)} disabled={isMasterUser} style={{fontSize:9,fontWeight:800,textTransform:'uppercase',padding:'3px 10px',borderRadius:999,cursor:isMasterUser?'not-allowed':'pointer',border:'1px solid',background:u.active!==false?'#EDFAF3':'#FFF0F0',color:u.active!==false?'#0A6B34':'var(--red)',borderColor:u.active!==false?'#AAE6C5':'#FFBDBD',opacity:isMasterUser?.5:1}}>{u.active!==false?'Ativo':'Desativado'}</button></td>
+                  <td style={{textAlign:'right'}}>
+                    <button onClick={()=>!isMasterUser&&onDelete(u.id||u.user,u)} disabled={isMasterUser} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'5px 12px',background:isMasterUser?'var(--smoke)':'var(--red)',color:isMasterUser?'var(--muted)':'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:isMasterUser?'not-allowed':'pointer',opacity:isMasterUser?.5:1}}>
+                      <Icon name="trash-2" size={12}/> Excluir
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -1609,7 +1681,6 @@ function LoginView({onLogin,usersList}){
 function App(){
   const[user,setUser]=useState(null);
   const[loggedIn,setLoggedIn]=useState(null);
-  // MELHORIA 4: sempre abre em 'request'
   const[view,setView]=useState('request');
   const[subView,setSubView]=useState('pending');
   const[importData,setImportData]=useState([]);const[showImport,setShowImport]=useState(false);const[editing,setEditing]=useState(null);
@@ -1620,58 +1691,69 @@ function App(){
   const[users,setUsers]=useState([]);
   const[initDone,setInitDone]=useState(false);
 
-  // Sincroniza: usa APENAS dados do Firestore após seed inicial
   useEffect(()=>{
-    if(usrLoad)return; // espera carregar
+    if(usrLoad)return;
     if(!initDone){
-      // Seed: cria no Firestore os usuários init que ainda não existem
       INIT_USERS.forEach(async iu=>{
         const exists=usersData.find(d=>d.user.toLowerCase()===iu.user.toLowerCase());
         if(!exists){
           try{await col('users').add(iu);}catch(e){console.warn('seed user:',e);}
+        } else if(iu.user===MASTER_USER&&exists.role!=='master'){
+          // Ensure Lucas.Sabino is always master
+          try{await col('users').doc(exists.id).update({role:'master'});}catch(e){console.warn('ensure master:',e);}
         }
       });
       setInitDone(true);
     }
-    // users é SEMPRE o que vem do Firestore — nada mais
     setUsers(usersData);
   },[usersData,usrLoad]);
+
   useEffect(()=>{const u=auth.onAuthStateChanged(u=>{if(u)setUser(u);else auth.signInAnonymously();});return u;},[]);
 
-  const isAdmin=loggedIn?.role==='admin';const isSol=loggedIn?.role==='solicitante'||isAdmin;
-  const addUser=async(u,p,role='solicitante')=>{try{await col('users').add({user:u,pass:p,active:true,role});}catch{alert('Erro.');}};
+  // Role helpers
+  const isMaster=loggedIn?.role==='master';
+  const isAdmin=loggedIn?.role==='admin'||isMaster;         // admin + master
+  const isSol=loggedIn?.role==='solicitante'||isAdmin;      // sol + admin + master
+  const canDonate=isMaster||loggedIn?.role==='admin';       // admin + master
+  const canDelete=isMaster;                                  // ONLY master
+  const canManage=isMaster;                                  // ONLY master (Gestão + Usuários)
+
+  const addUser=async(u,p,role='solicitante')=>{
+    // Prevent creating new master via UI
+    if(role==='master')return alert('Apenas Lucas.Sabino pode ser Master.');
+    try{await col('users').add({user:u,pass:p,active:true,role});}catch{alert('Erro.');}
+  };
   const deleteUser=async(id,userObj)=>{
+    if(userObj?.user===MASTER_USER)return alert('O usuário Master não pode ser excluído.');
     if(!window.confirm('Remover usuário?'))return;
     const docId=userObj?.id||id;
-    if(!docId||docId===userObj?.user){
-      // Ainda não tem id do Firestore (improvável após seed) — remove só local
-      setUsers(p=>p.filter(u=>u.id!==id&&u.user!==id));
-      return;
-    }
-    try{
-      await col('users').doc(docId).delete();
-      // Firestore onSnapshot vai atualizar automaticamente
-    }catch(e){
-      console.error('deleteUser:',e);
-      alert('Erro ao excluir: '+e.message);
-    }
+    if(!docId||docId===userObj?.user){setUsers(p=>p.filter(u=>u.id!==id&&u.user!==id));return;}
+    try{await col('users').doc(docId).delete();}
+    catch(e){console.error('deleteUser:',e);alert('Erro ao excluir: '+e.message);}
   };
   const toggleUser=async u=>{
+    if(u.user===MASTER_USER)return;
     const s=!(u.active!==false);
     if(!u.id){setUsers(p=>p.map(x=>x.user===u.user?{...x,active:s}:x));return;}
     try{await col('users').doc(u.id).update({active:s});}
     catch(e){console.error(e);alert('Erro ao alterar status.');}
   };
   const changeRole=async(u,role)=>{
+    if(u.user===MASTER_USER)return alert('O papel do usuário Master não pode ser alterado.');
+    if(role==='master')return alert('Apenas Lucas.Sabino pode ser Master.');
     if(!u.id){setUsers(p=>p.map(x=>x.user===u.user?{...x,role}:x));return;}
     try{await col('users').doc(u.id).update({role});}
     catch(e){console.error(e);alert('Erro ao alterar categoria.');}
   };
 
-  // Permissões de rota por role
+  // Handle password change — update loggedIn state too
+  const handlePasswordChanged=(newPass)=>{
+    setLoggedIn(p=>({...p,pass:newPass}));
+  };
+
   const defaultViewForRole=(role)=>{
     if(role==='leitor')return 'status';
-    return 'request'; // solicitante e admin
+    return 'request';
   };
   const login=u=>{
     const found=users.find(x=>x.user.toLowerCase()===u.user.toLowerCase()&&x.pass===u.pass);
@@ -1685,7 +1767,7 @@ function App(){
     const fi=t=>headers.findIndex(h=>t.some(x=>h.includes(x)));
     const[iO,iM,iF,iC,iCh,iE,iL]=[fi(['OS']),fi(['MODELO']),fi(['FABRICANTE','MARCA']),fi(['COR']),fi(['CHASSI']),fi(['ETAPA']),fi(['LOCALIZA'])];
     const rows=(iO!==-1?lines.slice(1):lines).map(l=>{const v=l.split(/[,\t]/);const g=(i,fb)=>(i!==-1?v[i]:v[fb])?.trim()||'';return{os:g(iO,0),modelo:g(iM,1),fabricante:g(iF,2),cor:g(iC,3),chassi:g(iCh,4),etapa:g(iE,5),localizacao:g(iL,6)};}).filter(r=>r.os);
-    setImportData(rows);
+    setImportData(rows);setShowImport(true);
   };
   const commitImport=async()=>{
     if(!importData.length)return;const batch=db.batch();
@@ -1693,12 +1775,9 @@ function App(){
     await batch.commit();alert('Sucesso! '+importData.length+' veículos importados.');setImportData([]);setShowImport(false);
   };
 
-  // MELHORIA 5: updateItem agora reconhece 'Comprado'
-  // Regras: Valor+Loja+Prazo → Em Cotação; botão Comprado → Comprado; Data Real → Concluído
   const updateItem=async(reqId,idx,fields)=>{
     const req=requests.find(r=>r.id===reqId);if(!req)return;
     const newItems=[...req.items];const item={...newItems[idx],...fields};
-    // Só muda status automaticamente se não foi definido explicitamente pelo campo 'status'
     if(!fields.status){
       if(item.actualDeliveryDate)item.status='Concluído';
       else if(item.boughtAt)item.status='Comprado';
@@ -1716,11 +1795,10 @@ function App(){
 
   if(!loggedIn)return <LoginView onLogin={login} usersList={users}/>;
 
-  // MELHORIA 5: tabCounts inclui 'comprado'
   const tabCounts={
     pending:requests.filter(r=>r.items?.some(it=>it.status==='Pendente')).length,
     quoting:requests.filter(r=>r.items?.some(it=>it.status==='Em Cotação')).length,
-    bought:requests.filter(r=>r.items?.some(it=>it.status==='Comprado')).length,  // NOVO
+    bought:requests.filter(r=>r.items?.some(it=>it.status==='Comprado')).length,
     completed:requests.filter(r=>r.items?.every(it=>it.status==='Concluído'||it.status==='Doado')).length,
     donated:requests.filter(r=>r.items?.some(it=>it.status==='Doado')).length,
   };
@@ -1728,9 +1806,10 @@ function App(){
   const navItems=[
     isSol&&{key:'request',icon:'plus-circle',label:'Nova Peça'},
     {key:'status',icon:'search',label:'Histórico'},
-    isAdmin&&{key:'donor',icon:'git-merge',label:'Doações'},
-    isAdmin&&{key:'admin',icon:'settings',label:'Gestão'},
+    canDonate&&{key:'donor',icon:'git-merge',label:'Doações'},
+    canManage&&{key:'admin',icon:'settings',label:'Gestão'},
     isAdmin&&{key:'dashboard',icon:'bar-chart-2',label:'Análises'},
+    {key:'password',icon:'lock',label:'Senha'},
   ].filter(Boolean);
 
   const loading=reqLoad||vehLoad||usrLoad;
@@ -1755,7 +1834,7 @@ function App(){
         </div>
         <div style={{background:'rgba(255,255,255,.06)',borderRadius:12,padding:12,border:'1px solid rgba(255,255,255,.1)'}}>
           <p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',color:'rgba(255,255,255,.3)',margin:'0 0 4px'}}>Logado como</p>
-          <p style={{fontSize:11,fontWeight:800,textTransform:'uppercase',color:'var(--red)',margin:'0 0 6px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{loggedIn.user}</p>
+          <p style={{fontSize:11,fontWeight:800,textTransform:'uppercase',color:isMaster?'#FFD700':'var(--red)',margin:'0 0 6px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{loggedIn.user}</p>
           <div style={{marginBottom:10}}><RoleBadge role={loggedIn.role}/></div>
           <button onClick={logout} style={{width:'100%',padding:7,background:'rgba(255,255,255,.08)',border:'1px solid rgba(255,255,255,.12)',borderRadius:8,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',color:'rgba(255,255,255,.5)',transition:'all .15s',fontFamily:'Plus Jakarta Sans,sans-serif'}} onMouseEnter={e=>{e.currentTarget.style.background='var(--red)';e.currentTarget.style.color='#fff';e.currentTarget.style.borderColor='var(--red)';}} onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,.08)';e.currentTarget.style.color='rgba(255,255,255,.5)';e.currentTarget.style.borderColor='rgba(255,255,255,.12)';}}>Sair</button>
         </div>
@@ -1774,7 +1853,7 @@ function App(){
             <h1 style={{fontSize:20,fontWeight:800,margin:0,letterSpacing:'-.01em'}}>VRZ</h1>
           </div>
           <div style={{display:'flex',alignItems:'center',gap:10}}>
-            <div style={{textAlign:'right'}}><p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--red)',margin:0,maxWidth:100,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{loggedIn.user}</p><RoleBadge role={loggedIn.role}/></div>
+            <div style={{textAlign:'right'}}><p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:isMaster?'#856A00':'var(--red)',margin:0,maxWidth:100,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{loggedIn.user}</p><RoleBadge role={loggedIn.role}/></div>
             <button onClick={logout} style={{width:34,height:34,background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}><Icon name="log-out" size={15}/></button>
           </div>
         </div>
@@ -1789,9 +1868,10 @@ function App(){
               <>
                 {view==='dashboard'&&isAdmin&&<DashboardView requests={requests}/>}
                 {view==='request'&&isSol&&<RequestForm user={user} loggedInUser={loggedIn} vehiclesDB={vehicles} requests={requests}/>}
-                {view==='status'&&<StatusView requests={requests} isAdmin={isAdmin}/>}
-                {view==='donor'&&isAdmin&&<DonorSystem requests={requests} vehicles={vehicles} loggedInUser={loggedIn}/>}
-                {view==='admin'&&isAdmin&&(
+                {view==='status'&&<StatusView requests={requests} isAdmin={isAdmin} isMaster={isMaster}/>}
+                {view==='donor'&&canDonate&&<DonorSystem requests={requests} vehicles={vehicles} loggedInUser={loggedIn}/>}
+                {view==='password'&&<ChangePasswordView loggedInUser={loggedIn} users={users} onPasswordChanged={handlePasswordChanged}/>}
+                {view==='admin'&&canManage&&(
                   <div className="fade-up" style={{paddingBottom:40}}>
                     <div style={{marginBottom:16}}>
                       <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.15em',color:'var(--red)',marginBottom:4}}>Administração</p>
@@ -1802,12 +1882,11 @@ function App(){
                         <Icon name="file-up" size={14}/> Importar Planilha
                       </button>
                     </div>
-                    {/* Tab bar — MELHORIA 5: inclui "Comprado" */}
                     <div style={{display:'flex',gap:4,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)',overflowX:'auto',marginBottom:20}}>
                       {[
                         {key:'pending',label:`Pendentes (${tabCounts.pending})`,color:'#C45E00'},
                         {key:'quoting',label:`Em Cotação (${tabCounts.quoting})`,color:'#1A4EC2'},
-                        {key:'bought',label:`Comprado (${tabCounts.bought})`,color:'#6B21A8'},  // NOVO
+                        {key:'bought',label:`Comprado (${tabCounts.bought})`,color:'#6B21A8'},
                         {key:'completed',label:`Concluídos (${tabCounts.completed})`,color:'#0A6B34'},
                         {key:'donated',label:`Doados (${tabCounts.donated})`,color:'#A81515'},
                         {key:'vehicles',label:`Veículos (${vehicles.length})`,color:'var(--ink)'},
@@ -1820,7 +1899,7 @@ function App(){
                       ))}
                     </div>
 
-                    {subView==='users'&&<UserManagement users={users} onAdd={addUser} onDelete={deleteUser} onToggle={toggleUser} onRole={changeRole}/>}
+                    {subView==='users'&&<UserManagement users={users} onAdd={addUser} onDelete={deleteUser} onToggle={toggleUser} onRole={changeRole} currentUser={loggedIn}/>}
                     {subView==='storage'&&<StorageView requests={requests}/>}
                     {subView==='vehicles'&&(
                       <div className="card" style={{overflow:'hidden'}}>
@@ -1841,7 +1920,6 @@ function App(){
                       </div>
                     )}
 
-                    {/* Lista de pedidos — mesclada por OS */}
                     {['pending','quoting','bought','completed','donated'].includes(subView)&&(()=>{
                       const merged=mergeByOS(requests);
                       const filtered=merged.filter(req=>{
@@ -1903,7 +1981,7 @@ function App(){
       </div>
 
       {/* Import Modal */}
-      {showImport&&isAdmin&&(
+      {showImport&&canManage&&(
         <div style={{position:'fixed',inset:0,zIndex:300,background:'rgba(0,0,0,.9)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
           <div style={{background:'#fff',width:'100%',maxWidth:1000,height:'82vh',borderRadius:24,overflow:'hidden',boxShadow:'0 40px 80px rgba(0,0,0,.5)',display:'flex',flexDirection:'column'}}>
             <div style={{padding:'20px 28px',background:'var(--ink)',display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:'4px solid var(--red)',flexShrink:0}}>
@@ -1947,7 +2025,7 @@ function App(){
         </div>
       )}
 
-      {/* Editing Modal — MELHORIA 5: botão "Já foi comprado?" em itens Em Cotação */}
+      {/* Editing Modal */}
       {editing&&isAdmin&&(
         <div style={{position:'fixed',inset:0,zIndex:200,background:'rgba(0,0,0,.9)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center',padding:16,overflowY:'auto'}}>
           <div style={{background:'#fff',width:'100%',maxWidth:1000,borderRadius:24,boxShadow:'0 40px 80px rgba(0,0,0,.5)',display:'flex',flexDirection:'column',margin:'auto',borderBottom:'5px solid var(--red)'}}>
@@ -1981,13 +2059,11 @@ function App(){
                             <Icon name="arrow-right" size={10}/> Doada para OS #{it.donatedTo}
                           </span>
                         )}
-                        {/* MELHORIA 5: botão "Já foi comprado?" aparece em Em Cotação */}
                         {it.status==='Em Cotação'&&(
                           <button onClick={()=>updateItem(editing.id,idx,{status:'Comprado',boughtAt:new Date().toISOString().slice(0,10)})} className="btn-bought">
                             <Icon name="shopping-bag" size={12}/> Já foi comprado?
                           </button>
                         )}
-                        {/* Volta para Em Cotação se quiser */}
                         {it.status==='Comprado'&&(
                           <button onClick={()=>updateItem(editing.id,idx,{status:'Em Cotação',boughtAt:null})} style={{fontSize:8,fontWeight:700,padding:'3px 8px',borderRadius:6,border:'1px solid #D8B4FE',background:'#F5F0FF',color:'#6B21A8',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
                             ↩ Desfazer
