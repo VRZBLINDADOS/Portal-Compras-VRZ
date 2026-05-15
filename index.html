@@ -87,6 +87,21 @@ body{font-family:'Plus Jakarta Sans',sans-serif;margin:0;background:#fff;overflo
 .excel-input:focus{background:#FFFBE6;box-shadow:inset 0 0 0 2px var(--red)}
 
 canvas{display:block}
+
+/* ── MOBILE IMPROVEMENTS ── */
+@media(max-width:767px){
+  .card{border-radius:12px}
+  .input{padding:10px 14px;font-size:14px}
+  .btn-primary{padding:12px 18px;font-size:10px}
+  .btn-ghost{padding:10px 16px;font-size:10px}
+  /* Histórico — itens empilhados em coluna no mobile */
+  .hist-meta{grid-template-columns:1fr 1fr!important}
+  /* Gestão modal — full screen no mobile */
+  .edit-modal-inner{border-radius:16px!important;max-height:92vh!important}
+  /* Dashboard grid */
+  .dash-grid-3{grid-template-columns:1fr!important}
+}
+
 .divider{display:flex;align-items:center;gap:10px}
 .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border)}
 .login-bg{background:linear-gradient(145deg,#0D0D0D 0%,#1A0505 60%,#2A0808 100%)}
@@ -1099,7 +1114,8 @@ function StatusView({requests,loggedInUser,vehicles}){
     const mu=unidadeFilter==='todas'||r.unidade===unidadeFilter;
     let ms=true;
     if(statusTab==='pendente')ms=r.items?.some(it=>it.status==='Pendente');
-    else if(statusTab==='cotacao')ms=r.items?.some(it=>it.status==='Em Cotação'||it.status==='Comprado');
+    else if(statusTab==='cotacao')ms=r.items?.some(it=>it.status==='Em Cotação');
+    else if(statusTab==='comprado')ms=r.items?.some(it=>it.status==='Comprado');
     else if(statusTab==='concluido')ms=r.items?.every(it=>it.status==='Concluído'||it.status==='Doado');
     else if(statusTab==='doado')ms=r.items?.some(it=>it.status==='Doado'||it.receivedFrom||it.donatedTo);
     return mb&&mu&&ms;
@@ -1108,7 +1124,8 @@ function StatusView({requests,loggedInUser,vehicles}){
   const counts=useMemo(()=>({
     geral:merged.length,
     pendente:merged.filter(r=>r.items?.some(it=>it.status==='Pendente')).length,
-    cotacao:merged.filter(r=>r.items?.some(it=>it.status==='Em Cotação'||it.status==='Comprado')).length,
+    cotacao:merged.filter(r=>r.items?.some(it=>it.status==='Em Cotação')).length,
+    comprado:merged.filter(r=>r.items?.some(it=>it.status==='Comprado')).length,
     concluido:merged.filter(r=>r.items?.every(it=>it.status==='Concluído'||it.status==='Doado')).length,
     doado:merged.filter(r=>r.items?.some(it=>it.status==='Doado'||it.receivedFrom||it.donatedTo)).length,
   }),[merged]);
@@ -1160,12 +1177,13 @@ function StatusView({requests,loggedInUser,vehicles}){
 
       <div style={{marginBottom:16}}>
         <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.15em',color:'var(--red)',marginBottom:4}}>Registros do Portal</p>
-        <h2 style={{fontSize:32,fontWeight:800,margin:'0 0 12px',letterSpacing:'-.02em'}}>Histórico de OS</h2>
-        <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)',overflowX:'auto',marginBottom:12}}>
+        <h2 style={{fontSize:26,fontWeight:800,margin:'0 0 12px',letterSpacing:'-.02em'}}>Histórico de OS</h2>
+        <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)',overflowX:'auto',marginBottom:12,WebkitOverflowScrolling:'touch'}}>
           {[
             {key:'geral',label:`Todos (${counts.geral})`,color:'var(--ink)'},
             {key:'pendente',label:`Pendentes (${counts.pendente})`,color:'#C45E00'},
             {key:'cotacao',label:`Em Cotação (${counts.cotacao})`,color:'#1A4EC2'},
+            {key:'comprado',label:`Comprado (${counts.comprado||0})`,color:'#6B21A8'},
             {key:'concluido',label:`Concluídos (${counts.concluido})`,color:'#0A6B34'},
             {key:'doado',label:`Doações (${counts.doado})`,color:'#A81515'},
           ].map(t=>(
@@ -1198,16 +1216,15 @@ function StatusView({requests,loggedInUser,vehicles}){
             <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',margin:0}}>Nenhum resultado encontrado</p>
           </div>
         ):filtered.map(r=>{
-          // MELHORIA 1: busca etapa/localização do banco de veículos
           const vInfo=vehicleMap[String(r.os).trim()]||r.vehicleData||{};
           const etapa=vInfo.etapa||r.vehicleData?.etapa||'';
           const localizacao=vInfo.localizacao||r.vehicleData?.localizacao||'';
           return(
-          <div key={r.os} className="card" style={{borderLeft:'3px solid var(--red)'}}>
+          <div key={r.os} style={{background:'#fff',border:'1.5px solid var(--border)',borderRadius:14,borderLeft:'3px solid var(--red)',overflow:'visible'}}>
             <div style={{padding:'14px 16px'}}>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8,marginBottom:10}}>
-                <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
-                  <span style={{fontSize:15,fontWeight:800}}>OS #{r.os}</span>
+              <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',flexWrap:'wrap',gap:8,marginBottom:10}}>
+                <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',flex:1,minWidth:0}}>
+                  <span style={{fontSize:14,fontWeight:800}}>OS #{r.os}</span>
                   <span className="pill">{r.unidade||'Unidade 1'}</span>
                   {/* MELHORIA 1: etapa e localização */}
                   {etapa&&(
@@ -1231,37 +1248,67 @@ function StatusView({requests,loggedInUser,vehicles}){
                   </button>}
                 </div>
               </div>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(100px,1fr))',gap:'6px 16px',marginBottom:12}}>
+              <div className="hist-meta" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(100px,1fr))',gap:'6px 16px',marginBottom:12}}>
                 {[['Solicitante',r.responsavel||'—'],['Veículo',r.vehicleData?.modelo||'—'],['Chassi',r.vehicleData?.chassi||'—'],['Data',r.timestamp?new Date(r.timestamp).toLocaleDateString():'—']].map(([l,v])=>(
                   <div key={l}><p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',margin:'0 0 2px'}}>{l}</p><p style={{fontSize:10,fontWeight:600,color:'var(--ink)',margin:0}}>{v}</p></div>
                 ))}
               </div>
-              <div style={{display:'flex',gap:8,overflowX:'auto',paddingBottom:4}}>
-                {(r.items||[]).map((it,i)=>(
-                  <div key={i} style={{flexShrink:0,display:'flex',alignItems:'center',gap:8,background:'var(--smoke)',padding:'8px 10px',borderRadius:10,border:'1px solid var(--border)',minWidth:150,maxWidth:220}}>
-                    {it.photo&&<img src={it.photo} style={{width:32,height:32,borderRadius:7,objectFit:'cover',border:'1px solid var(--border)',flexShrink:0}} alt="Peça"/>}
-                    <div style={{minWidth:0,flex:1}}>
-                      <p style={{fontSize:9,fontWeight:700,textTransform:'uppercase',margin:'0 0 4px',lineHeight:1.2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.description||'(sem descrição)'}</p>
-                      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:4,flexWrap:'wrap'}}>
-                        <span style={{fontSize:8,color:'var(--red)',fontWeight:700}}>QTD:{it.quantity}</span>
+              <div style={{display:'flex',flexDirection:'column',gap:0,borderTop:'1px solid var(--border)',marginTop:8}}>
+                {(r.items||[]).map((it,i)=>{
+                  const bgItem=it.status==='Concluído'?'#F0FBF5':it.status==='Doado'?'#FFF5F5':it.status==='Comprado'?'#F8F4FF':it.status==='Em Cotação'?'#F0F5FF':'#FAFAF9';
+                  const borderColor=it.status==='Concluído'?'#AAE6C5':it.status==='Doado'?'#FFBDBD':it.status==='Comprado'?'#D8B4FE':it.status==='Em Cotação'?'#C0D0F5':'var(--border)';
+                  return(
+                  <div key={i} style={{display:'flex',alignItems:'flex-start',gap:12,padding:'12px 16px',borderBottom:i<(r.items||[]).length-1?'1px solid var(--border)':'none',background:bgItem}}>
+                    {/* Foto */}
+                    {it.photo
+                      ?<img src={it.photo} style={{width:44,height:44,borderRadius:8,objectFit:'cover',border:`1px solid ${borderColor}`,flexShrink:0}} alt="Peça"/>
+                      :<div style={{width:44,height:44,borderRadius:8,background:'rgba(0,0,0,.05)',border:`1px solid ${borderColor}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="package" size={18}/></div>
+                    }
+                    {/* Conteúdo */}
+                    <div style={{flex:1,minWidth:0}}>
+                      {/* Linha 1: nome + badge + qtd */}
+                      <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:5}}>
+                        <span style={{fontSize:11,fontWeight:800,textTransform:'uppercase',color:'var(--ink)',wordBreak:'break-word'}}>{it.description||'(sem descrição)'}</span>
                         <StatusBadge status={it.status||'Pendente'} orig={it.statusOriginal}/>
+                        <span style={{fontSize:8,background:'rgba(0,0,0,.06)',padding:'1px 6px',borderRadius:4,fontWeight:700,color:'var(--muted)'}}>×{it.quantity}</span>
                       </div>
+                      {/* Linha 2: infos de cotação */}
+                      <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
+                        {it.deliveryDate&&(it.status==='Em Cotação'||it.status==='Comprado')&&(
+                          <span style={{display:'inline-flex',alignItems:'center',gap:3,fontSize:9,fontWeight:700,color:'#1A4EC2',background:'#EAF0FF',padding:'2px 8px',borderRadius:4,border:'1px solid #C0D0F5'}}>
+                            <Icon name="calendar" size={10}/> Prazo: {new Date(it.deliveryDate+'T00:00:00').toLocaleDateString('pt-BR')}
+                          </span>
+                        )}
+                        {it.supplier&&<span style={{fontSize:9,fontWeight:600,color:'var(--muted)',display:'inline-flex',alignItems:'center',gap:3}}><Icon name="store" size={10}/>{it.supplier}</span>}
+                        {it.price>0&&<span style={{fontSize:10,fontWeight:800,color:'#059669'}}>{fmtBRL(it.price)}</span>}
+                        {it.boughtAt&&(
+                          <span style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:9,fontWeight:700,color:'#6B21A8',background:'#F5F0FF',padding:'3px 9px',borderRadius:5,border:'1px solid #D8B4FE'}}>
+                            🛍 Comprado: {new Date(it.boughtAt+'T00:00:00').toLocaleDateString('pt-BR')}
+                            {it.deliveryDate&&<span style={{opacity:.7}}>· Prazo: {new Date(it.deliveryDate+'T00:00:00').toLocaleDateString('pt-BR')}</span>}
+                          </span>
+                        )}
+                        {it.actualDeliveryDate&&(
+                          <span style={{fontSize:9,fontWeight:700,color:'#059669',display:'inline-flex',alignItems:'center',gap:3,background:'#EDFAF3',padding:'2px 8px',borderRadius:4,border:'1px solid #AAE6C5'}}>
+                            <Icon name="check-circle" size={10}/> Entregue: {new Date(it.actualDeliveryDate+'T00:00:00').toLocaleDateString('pt-BR')}
+                          </span>
+                        )}
+                      </div>
+                      {/* Transferências */}
                       {it.receivedFrom&&(
-                        <div style={{display:'flex',alignItems:'center',gap:4,marginTop:3,padding:'2px 6px',background:'#EDFAF3',borderRadius:5,border:'1px solid #AAE6C5'}}>
+                        <div style={{display:'inline-flex',alignItems:'center',gap:4,marginTop:5,padding:'2px 8px',background:'#EDFAF3',borderRadius:5,border:'1px solid #AAE6C5'}}>
                           <Icon name="arrow-left" size={9}/>
-                          <span style={{fontSize:7,color:'#0A6B34',fontWeight:800}}>Recebida da OS #{it.receivedFrom}</span>
+                          <span style={{fontSize:8,color:'#0A6B34',fontWeight:800}}>Recebida da OS #{it.receivedFrom}</span>
                         </div>
                       )}
                       {it.donatedTo&&!it.receivedFrom&&(
-                        <div style={{display:'flex',alignItems:'center',gap:4,marginTop:3,padding:'2px 6px',background:'#FFF0F0',borderRadius:5,border:'1px solid #FFBDBD'}}>
+                        <div style={{display:'inline-flex',alignItems:'center',gap:4,marginTop:5,padding:'2px 8px',background:'#FFF0F0',borderRadius:5,border:'1px solid #FFBDBD'}}>
                           <Icon name="arrow-right" size={9}/>
-                          <span style={{fontSize:7,color:'var(--red)',fontWeight:800}}>Doada para OS #{it.donatedTo}</span>
+                          <span style={{fontSize:8,color:'var(--red)',fontWeight:800}}>Doada para OS #{it.donatedTo}</span>
                         </div>
                       )}
-                      {it.price>0&&<p style={{fontSize:8,color:'#059669',fontWeight:800,margin:'2px 0 0'}}>{fmtBRL(it.price)}</p>}
                     </div>
                   </div>
-                ))}
+                );})}
               </div>
             </div>
           </div>
@@ -1570,14 +1617,20 @@ function EditingModal({req,onClose,onSave}){
 
   const handleSave=async()=>{
     setSaving(true);
-    await onSave(req.id,localItems);
-    setSaving(false);
-    onClose();
+    try{
+      const timeout=new Promise((_,rej)=>setTimeout(()=>rej(new Error('Tempo esgotado. Verifique sua conexão.')),12000));
+      await Promise.race([onSave(req.id,localItems),timeout]);
+      onClose();
+    }catch(e){
+      alert('Erro ao salvar: '+e.message);
+    }finally{
+      setSaving(false);
+    }
   };
 
   return(
     <div style={{position:'fixed',inset:0,zIndex:200,background:'rgba(0,0,0,.9)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center',padding:16,overflowY:'auto'}}>
-      <div style={{background:'#fff',width:'100%',maxWidth:1000,borderRadius:24,boxShadow:'0 40px 80px rgba(0,0,0,.5)',display:'flex',flexDirection:'column',margin:'auto',borderBottom:'5px solid var(--red)'}}>
+      <div className="edit-modal-inner" style={{background:'#fff',width:'100%',maxWidth:1000,borderRadius:24,boxShadow:'0 40px 80px rgba(0,0,0,.5)',display:'flex',flexDirection:'column',margin:'auto',borderBottom:'5px solid var(--red)'}}>
         {/* Header */}
         <div style={{padding:'20px 28px',background:'var(--ink)',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
           <div>
@@ -1626,7 +1679,12 @@ function EditingModal({req,onClose,onSave}){
                       </button>
                     )}
                   </div>
-                  {it.boughtAt&&<p style={{fontSize:8,color:'#6B21A8',fontWeight:700,margin:'6px 0 0'}}>🛍 Comprado em {it.boughtAt}</p>}
+                  {it.boughtAt&&(
+                    <p style={{fontSize:8,color:'#6B21A8',fontWeight:700,margin:'6px 0 0'}}>
+                      🛍 Comprado: {new Date(it.boughtAt+'T00:00:00').toLocaleDateString('pt-BR')}
+                      {it.deliveryDate&&<span style={{opacity:.7}}> · Prazo: {new Date(it.deliveryDate+'T00:00:00').toLocaleDateString('pt-BR')}</span>}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -1715,11 +1773,20 @@ function EditingModal({req,onClose,onSave}){
 
 // ── Chegadas View — itens entregues (actualDeliveryDate preenchido) ────────
 function ChegadasView({requests,loggedInUser,vehicles}){
-  const[filtro,setFiltro]=useState('7'); // dias: '7','30','todos'
+  const[filtro,setFiltro]=useState('7');
   const[search,setSearch]=useState('');
-  const[lidas,setLidas]=useState(()=>{try{return JSON.parse(localStorage.getItem('vrz_lidas')||'[]');}catch{return[];}});
+  // lidas compartilhadas via Firestore
+  const{data:lidasData}=useFirestore('lidas');
+  const lidas=useMemo(()=>{
+    if(!lidasData?.length)return[];
+    const all=lidasData.flatMap(d=>d.uids||[]);
+    return all;
+  },[lidasData]);
+  const[lidasDocId,setLidasDocId]=useState(null);
+  useEffect(()=>{
+    if(lidasData?.length&&!lidasDocId)setLidasDocId(lidasData[0].id);
+  },[lidasData]);
 
-  // Mapa de veículos por OS
   const vehicleMap=useMemo(()=>{const m={};vehicles.forEach(v=>{m[String(v.os).trim()]=v;});return m;},[vehicles]);
 
   // Coleta todos os itens entregues (com actualDeliveryDate) de todos os pedidos
@@ -1758,20 +1825,15 @@ function ChegadasView({requests,loggedInUser,vehicles}){
 
   const naoLidas=chegadas.filter(c=>!lidas.includes(c.uid)).length;
 
-  const marcarTodasLidas=()=>{
-    const ids=chegadas.map(c=>c.uid);
-    const novo=[...new Set([...lidas,...ids])];
-    setLidas(novo);
-    try{localStorage.setItem('vrz_lidas',JSON.stringify(novo));}catch{}
+  const salvarLidas=async(novo)=>{
+    try{
+      const arr=[...new Set([...lidas,...novo])];
+      if(lidasDocId)await col('lidas').doc(lidasDocId).update({uids:arr});
+      else{const ref=await col('lidas').add({uids:arr});setLidasDocId(ref.id);}
+    }catch(e){console.warn('lidas:',e);}
   };
-  const marcarLida=(uid)=>{
-    if(lidas.includes(uid))return;
-    const novo=[...lidas,uid];
-    setLidas(novo);
-    try{localStorage.setItem('vrz_lidas',JSON.stringify(novo));}catch{}
-  };
-
-  const hoje=new Date().toLocaleDateString('pt-BR');
+  const marcarTodasLidas=()=>salvarLidas(chegadas.map(c=>c.uid));
+  const marcarLida=(uid)=>{if(lidas.includes(uid))return;salvarLidas([uid]);};
 
   return(
     <div className="fade-up" style={{paddingBottom:24}}>
@@ -1819,7 +1881,6 @@ function ChegadasView({requests,loggedInUser,vehicles}){
           {[
             {label:'Total de chegadas',v:chegadas.length,icon:'package-check',bg:'var(--ink)',fg:'#fff'},
             {label:'Não visualizadas',v:naoLidas,icon:'bell',bg:'var(--red)',fg:'#fff'},
-            {label:'Hoje',v:chegadas.filter(c=>new Date(c.item.actualDeliveryDate+'T00:00:00').toLocaleDateString('pt-BR')===hoje).length,icon:'calendar-check',bg:'var(--smoke)',fg:'var(--ink)'},
           ].map((k,i)=>(
             <div key={i} style={{background:k.bg,color:k.fg,borderRadius:14,padding:'16px 20px',border:k.bg==='var(--smoke)'?'1.5px solid var(--border)':'none'}}>
               <div style={{width:30,height:30,borderRadius:8,background:k.bg==='var(--smoke)'?'var(--border)':'rgba(255,255,255,.15)',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:10}}><Icon name={k.icon} size={15}/></div>
@@ -1843,63 +1904,45 @@ function ChegadasView({requests,loggedInUser,vehicles}){
             const isNova=!lidas.includes(c.uid);
             const dtFormatada=new Date(c.item.actualDeliveryDate+'T00:00:00').toLocaleDateString('pt-BR');
             return(
-              <div key={c.uid} onClick={()=>marcarLida(c.uid)} className="card" style={{borderLeft:`3px solid ${isNova?'var(--red)':'#AAE6C5'}`,cursor:'pointer',transition:'all .15s',opacity:isNova?1:.82}}
+              <div key={c.uid} onClick={()=>marcarLida(c.uid)} className="card" style={{borderLeft:`3px solid ${isNova?'var(--red)':'#AAE6C5'}`,cursor:'pointer',transition:'background .15s',background:'#fff'}}
                 onMouseEnter={e=>e.currentTarget.style.background='var(--smoke)'}
                 onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
-                <div style={{padding:'14px 16px'}}>
-                  <div style={{display:'flex',alignItems:'flex-start',gap:14}}>
-                    {/* Foto ou ícone */}
-                    <div style={{flexShrink:0}}>
-                      {c.item.photo?(
-                        <img src={c.item.photo} style={{width:56,height:56,borderRadius:10,objectFit:'cover',border:'1.5px solid var(--border)'}} alt="Peça"/>
-                      ):(
-                        <div style={{width:56,height:56,borderRadius:10,background:isNova?'var(--red-light)':'var(--smoke)',border:`1.5px solid ${isNova?'#FFBDBD':'var(--border)'}`,display:'flex',alignItems:'center',justifyContent:'center'}}>
-                          <Icon name="package" size={22}/>
-                        </div>
-                      )}
+                <div style={{padding:'12px 14px'}}>
+                  {/* Linha 1: status + OS + badges */}
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:8}}>
+                    <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',flex:1,minWidth:0}}>
+                      {isNova&&<span style={{display:'inline-flex',alignItems:'center',gap:3,background:'var(--red)',color:'#fff',fontSize:7,fontWeight:800,padding:'2px 7px',borderRadius:999,textTransform:'uppercase',whiteSpace:'nowrap'}}><span className="pulse-beacon" style={{width:5,height:5,borderRadius:'50%',background:'#fff',display:'inline-block'}}/>Nova</span>}
+                      <span style={{fontSize:13,fontWeight:800,color:'var(--ink)',whiteSpace:'nowrap'}}>OS #{c.os}</span>
+                      <span className="pill" style={{fontSize:7,padding:'2px 7px'}}>{c.unidade}</span>
+                      {c.etapa&&<span style={{fontSize:7,fontWeight:800,padding:'2px 7px',borderRadius:5,background:'#FFF4E6',border:'1px solid #FFD9A8',color:'#C45E00',textTransform:'uppercase',whiteSpace:'nowrap'}}>{c.etapa}</span>}
+                      {c.localizacao&&<span style={{fontSize:7,fontWeight:800,padding:'2px 7px',borderRadius:5,background:'#EAF0FF',border:'1px solid #C0D0F5',color:'#1A4EC2',textTransform:'uppercase',whiteSpace:'nowrap'}}>{c.localizacao}</span>}
                     </div>
-
-                    {/* Conteúdo */}
+                    <div style={{width:32,height:32,borderRadius:8,background:isNova?'var(--red)':'#EDFAF3',border:`1px solid ${isNova?'var(--red)':'#AAE6C5'}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                      <Icon name={isNova?'bell':'check-circle'} size={15} style={{color:isNova?'#fff':'#059669'}}/>
+                    </div>
+                  </div>
+                  {/* Linha 2: foto + info */}
+                  <div style={{display:'flex',gap:10,alignItems:'flex-start'}}>
+                    {c.item.photo
+                      ?<img src={c.item.photo} style={{width:48,height:48,borderRadius:8,objectFit:'cover',border:'1px solid var(--border)',flexShrink:0}} alt="Peça"/>
+                      :<div style={{width:48,height:48,borderRadius:8,background:isNova?'var(--red-light)':'var(--smoke)',border:`1px solid ${isNova?'#FFBDBD':'var(--border)'}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="package" size={18}/></div>
+                    }
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:6}}>
-                        {isNova&&<span style={{display:'inline-flex',alignItems:'center',gap:4,background:'var(--red)',color:'#fff',fontSize:8,fontWeight:800,padding:'2px 8px',borderRadius:999,textTransform:'uppercase',letterSpacing:'.06em'}}><span className="pulse-beacon" style={{width:5,height:5,borderRadius:'50%',background:'#fff',display:'inline-block'}}/>Nova</span>}
-                        <span style={{fontSize:15,fontWeight:800,color:'var(--ink)'}}>OS #{c.os}</span>
-                        <span className="pill" style={{fontSize:8}}>{c.unidade}</span>
-                        {c.etapa&&<span style={{display:'inline-flex',alignItems:'center',gap:3,padding:'3px 8px',borderRadius:6,background:'#FFF4E6',border:'1px solid #FFD9A8',fontSize:8,fontWeight:800,color:'#C45E00',textTransform:'uppercase'}}><Icon name="layers" size={9}/>{c.etapa}</span>}
-                        {c.localizacao&&<span style={{display:'inline-flex',alignItems:'center',gap:3,padding:'3px 8px',borderRadius:6,background:'#EAF0FF',border:'1px solid #C0D0F5',fontSize:8,fontWeight:800,color:'#1A4EC2',textTransform:'uppercase'}}><Icon name="map-pin" size={9}/>{c.localizacao}</span>}
-                      </div>
-
-                      <p style={{fontSize:13,fontWeight:700,textTransform:'uppercase',margin:'0 0 6px',color:'var(--ink)'}}>{c.item.description}</p>
-
-                      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(90px,1fr))',gap:'4px 16px'}}>
-                        {[
-                          ['Veículo',c.vehicleData?.modelo||'—'],
-                          ['Solicitante',c.responsavel],
-                          ['Qtd',c.item.quantity],
-                          ['Entregue em',dtFormatada],
-                        ].map(([l,v])=>(
+                      <p style={{fontSize:12,fontWeight:800,textTransform:'uppercase',margin:'0 0 5px',color:'var(--ink)',lineHeight:1.2}}>{c.item.description}</p>
+                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'3px 12px'}}>
+                        {[['Veículo',c.vehicleData?.modelo||'—'],['Solicitante',c.responsavel],['Qtd',String(c.item.quantity)],['Entregue',dtFormatada]].map(([l,v])=>(
                           <div key={l}>
-                            <p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',margin:'0 0 1px'}}>{l}</p>
-                            <p style={{fontSize:10,fontWeight:700,color:'var(--ink)',margin:0}}>{v}</p>
+                            <p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',margin:0}}>{l}</p>
+                            <p style={{fontSize:10,fontWeight:700,color:'var(--ink)',margin:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{v}</p>
                           </div>
                         ))}
                       </div>
-
-                      {/* Fornecedor e valor se existir */}
                       {(c.item.supplier||c.item.price>0)&&(
-                        <div style={{display:'flex',gap:10,marginTop:8,flexWrap:'wrap'}}>
-                          {c.item.supplier&&<span style={{fontSize:9,fontWeight:700,color:'var(--muted)',display:'flex',alignItems:'center',gap:4}}><Icon name="store" size={11}/>{c.item.supplier}</span>}
+                        <div style={{display:'flex',gap:8,marginTop:5,flexWrap:'wrap'}}>
+                          {c.item.supplier&&<span style={{fontSize:8,fontWeight:700,color:'var(--muted)',display:'flex',alignItems:'center',gap:3}}><Icon name="store" size={10}/>{c.item.supplier}</span>}
                           {c.item.price>0&&<span style={{fontSize:9,fontWeight:800,color:'#059669'}}>{fmtBRL(c.item.price)}</span>}
                         </div>
                       )}
-                    </div>
-
-                    {/* Badge de status */}
-                    <div style={{flexShrink:0,textAlign:'right'}}>
-                      <div style={{width:40,height:40,borderRadius:10,background:isNova?'var(--red)':'#EDFAF3',border:`1px solid ${isNova?'var(--red)':'#AAE6C5'}`,display:'flex',alignItems:'center',justifyContent:'center'}}>
-                        <Icon name={isNova?'bell':'check-circle'} size={18} style={{color:isNova?'#fff':'#059669'}}/>
-                      </div>
-                      <p style={{fontSize:7,fontWeight:800,textTransform:'uppercase',color:isNova?'var(--red)':'#059669',margin:'4px 0 0',letterSpacing:'.06em'}}>{isNova?'Nova':'Vista'}</p>
                     </div>
                   </div>
                 </div>
@@ -2062,20 +2105,23 @@ function App(){
     donated:requests.filter(r=>r.items?.some(it=>it.status==='Doado')).length,
   };
 
+  // Lidas compartilhadas via Firestore para badge no menu
+  const{data:lidasNavData}=useFirestore('lidas');
+  const lidasNav=useMemo(()=>{
+    if(!lidasNavData?.length)return[];
+    return lidasNavData.flatMap(d=>d.uids||[]);
+  },[lidasNavData]);
   const chegadasNaoLidas=useMemo(()=>{
-    try{
-      const lidas=JSON.parse(localStorage.getItem('vrz_lidas')||'[]');
-      let count=0;
-      requests.forEach(req=>{
-        (req.items||[]).forEach(it=>{
-          if(!it.actualDeliveryDate)return;
-          const uid=String(req.os)+'_'+String(it.id||it.description);
-          if(!lidas.includes(uid))count++;
-        });
+    let count=0;
+    requests.forEach(req=>{
+      (req.items||[]).forEach(it=>{
+        if(!it.actualDeliveryDate)return;
+        const uid=String(req.os)+'_'+String(it.id||it.description);
+        if(!lidasNav.includes(uid))count++;
       });
-      return count;
-    }catch{return 0;}
-  },[requests]);
+    });
+    return count;
+  },[requests,lidasNav]);
 
   const navItems=[
     isSol&&{key:'request',icon:'plus-circle',label:'Nova Peça'},
@@ -2113,7 +2159,7 @@ function App(){
                 {n.badge>0&&<span style={{position:'absolute',top:-4,right:-4,background:'var(--red)',color:'#fff',borderRadius:999,fontSize:7,fontWeight:800,minWidth:14,height:14,display:'flex',alignItems:'center',justifyContent:'center',padding:'0 3px',border:'1.5px solid #0D0D0D'}}>{n.badge>99?'99+':n.badge}</span>}
               </div>
               {n.label}
-              {n.badge>0&&view!==n.key&&<span style={{marginLeft:'auto',background:'var(--red)',color:'#fff',borderRadius:999,fontSize:8,fontWeight:800,padding:'2px 7px'}}>{n.badge>99?'99+':n.badge}</span>}
+              {n.badge>0&&view!==n.key&&<span className="pulse-beacon" style={{marginLeft:'auto',width:7,height:7,borderRadius:'50%',background:'var(--red)',display:'inline-block',flexShrink:0}}/>}
             </button>
           ))}
         </div>
@@ -2269,7 +2315,7 @@ function App(){
             <button key={n.key} onClick={()=>setView(n.key)} className={`bottom-nav-btn ${view===n.key?'active':''}`}>
               <div style={{position:'relative',display:'flex',alignItems:'center',justifyContent:'center'}}>
                 <Icon name={n.icon} size={21}/>
-                {n.badge>0&&<span style={{position:'absolute',top:-5,right:-7,background:'var(--red)',color:'#fff',borderRadius:999,fontSize:7,fontWeight:800,minWidth:14,height:14,display:'flex',alignItems:'center',justifyContent:'center',padding:'0 3px',border:'2px solid #fff'}}>{n.badge>99?'99+':n.badge}</span>}
+                {n.badge>0&&<span style={{position:'absolute',top:-2,right:-2,width:8,height:8,borderRadius:'50%',background:'var(--red)',border:'2px solid #fff'}}/>}
               </div>
               <span>{n.label}</span>
             </button>
