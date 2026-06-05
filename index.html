@@ -1280,7 +1280,7 @@ function StatusView({requests,loggedInUser,vehicles}){
                           </span>
                         )}
                         {it.supplier&&<span style={{fontSize:9,fontWeight:600,color:'var(--muted)',display:'inline-flex',alignItems:'center',gap:3}}><Icon name="store" size={10}/>{it.supplier}</span>}
-                        {it.price>0&&<span style={{fontSize:10,fontWeight:800,color:'#059669'}}>{fmtBRL(it.price)}</span>}
+                        
                         {it.boughtAt&&(
                           <span style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:9,fontWeight:700,color:'#6B21A8',background:'#F5F0FF',padding:'3px 9px',borderRadius:5,border:'1px solid #D8B4FE'}}>
                             🛍 Comprado: {new Date(it.boughtAt+'T00:00:00').toLocaleDateString('pt-BR')}
