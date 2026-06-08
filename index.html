@@ -900,17 +900,21 @@ const compressImageToBlob=async(file)=>{
       const r=new FileReader();r.onload=e=>{const img=new Image();img.onload=()=>{const c=document.createElement('canvas');const ctx=c.getContext('2d');let w=img.width,h=img.height;const mx=1024;if(w>h&&w>mx){h*=mx/w;w=mx;}else if(h>mx){w*=mx/h;h=mx;}c.width=w;c.height=h;ctx.drawImage(img,0,0,w,h);c.toBlob(b=>resolve(b),'image/jpeg',.7);};img.src=e.target.result;};r.readAsDataURL(file);
     });
   };
-  const handleImageUpload=async(itemId,file)=>{
+ const handleImageUpload=async(itemId,file)=>{
     setCompressing(true);
     try{
-      const blob=await compressImageToBlob(file);
-      const path=`fotos/${AID}/${itemId}_${Date.now()}.jpg`;
-      const ref=storage.ref(path);
-      await ref.put(blob);
-      const url=await ref.getDownloadURL();
-      setItems(p=>p.map(i=>i.id===itemId?{...i,photo:url}:i));
+      const c=await new Promise(resolve=>{
+        const r=new FileReader();r.onload=e=>{const img=new Image();img.onload=()=>{
+          const c=document.createElement('canvas');const ctx=c.getContext('2d');
+          let w=img.width,h=img.height;const mx=700;
+          if(w>h&&w>mx){h*=mx/w;w=mx;}else if(h>mx){w*=mx/h;h=mx;}
+          c.width=w;c.height=h;ctx.drawImage(img,0,0,w,h);
+          resolve(c.toDataURL('image/jpeg',.55));
+        };img.src=e.target.result;};r.readAsDataURL(file);
+      });
+      setItems(p=>p.map(i=>i.id===itemId?{...i,photo:c}:i));
       setSemFoto(p=>p.filter(id=>id!==itemId));
-    }catch(e){alert('Erro ao enviar foto: '+e.message);}
+    }catch{alert('Erro ao processar imagem.');}
     setCompressing(false);
   };
   const salvar=async()=>{
