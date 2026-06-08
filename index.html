@@ -121,6 +121,7 @@ canvas{display:block}
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
 <script src="https://unpkg.com/lucide@latest"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 </head>
@@ -129,7 +130,7 @@ canvas{display:block}
 <script type="text/babel" data-presets="react">
 const FB={apiKey:"AIzaSyBT1N43mp6hoxXOj6bmTlqouQWSmfn32-E",authDomain:"portal-compras-vrz.firebaseapp.com",projectId:"portal-compras-vrz",storageBucket:"portal-compras-vrz.firebasestorage.app",messagingSenderId:"713014398002",appId:"1:713014398002:web:d89f485af020178b00002b"};
 if(!firebase.apps.length)firebase.initializeApp(FB);
-const db=firebase.firestore();const auth=firebase.auth();
+const db=firebase.firestore();const auth=firebase.auth();const storage=firebase.storage();
 const AID='portal-compras-vrz';
 const col=(c)=>db.collection('artifacts').doc(AID).collection('public').doc('data').collection(c);
 const{useState,useEffect,useMemo,useRef,useCallback}=React;
@@ -894,14 +895,23 @@ function RequestForm({user,loggedInUser,vehiclesDB,requests}){
   const[showDup,setShowDup]=useState(false);const[dups,setDups]=useState([]);const[compressing,setCompressing]=useState(false);
 
   const onOSBlur=()=>{const t=String(os).trim();if(!t)return;const f=vehiclesDB.find(v=>String(v.os).trim()===t);if(f)setVehicle(f);else{setVehicle(null);alert('OS não cadastrada.');}};
-
-  const compressImage=async(file)=>{
+const compressImageToBlob=async(file)=>{
     return new Promise(resolve=>{
-      const r=new FileReader();r.onload=e=>{const img=new Image();img.onload=()=>{const c=document.createElement('canvas');const ctx=c.getContext('2d');let w=img.width,h=img.height;const mx=1024;if(w>h&&w>mx){h*=mx/w;w=mx;}else if(h>mx){w*=mx/h;h=mx;}c.width=w;c.height=h;ctx.drawImage(img,0,0,w,h);resolve(c.toDataURL('image/jpeg',.7));};img.src=e.target.result;};r.readAsDataURL(file);
+      const r=new FileReader();r.onload=e=>{const img=new Image();img.onload=()=>{const c=document.createElement('canvas');const ctx=c.getContext('2d');let w=img.width,h=img.height;const mx=1024;if(w>h&&w>mx){h*=mx/w;w=mx;}else if(h>mx){w*=mx/h;h=mx;}c.width=w;c.height=h;ctx.drawImage(img,0,0,w,h);c.toBlob(b=>resolve(b),'image/jpeg',.7);};img.src=e.target.result;};r.readAsDataURL(file);
     });
   };
   const handleImageUpload=async(itemId,file)=>{
-    setCompressing(true);try{const c=await compressImage(file);setItems(p=>p.map(i=>i.id===itemId?{...i,photo:c}:i));setSemFoto(p=>p.filter(id=>id!==itemId));}catch{alert('Erro ao processar imagem.');}setCompressing(false);
+    setCompressing(true);
+    try{
+      const blob=await compressImageToBlob(file);
+      const path=`fotos/${AID}/${itemId}_${Date.now()}.jpg`;
+      const ref=storage.ref(path);
+      await ref.put(blob);
+      const url=await ref.getDownloadURL();
+      setItems(p=>p.map(i=>i.id===itemId?{...i,photo:url}:i));
+      setSemFoto(p=>p.filter(id=>id!==itemId));
+    }catch(e){alert('Erro ao enviar foto: '+e.message);}
+    setCompressing(false);
   };
   const salvar=async()=>{
     setSubmitting(true);
@@ -1574,6 +1584,15 @@ function EditingModal({req,onClose,onSave}){
   // Copia profunda dos items para estado local — nunca toca no Firestore enquanto digita
   const[localItems,setLocalItems]=useState(()=>JSON.parse(JSON.stringify(req.items||[])));
   const[saving,setSaving]=useState(false);
+  const[confirmDeleteIdx,setConfirmDeleteIdx]=useState(null);
+  const deleteItem=(idx)=>{
+    if(localItems.length<=1){alert('O pedido precisa ter pelo menos 1 peça.');return;}
+    setConfirmDeleteIdx(idx);
+  };
+  const confirmDelete=()=>{
+    setLocalItems(prev=>prev.filter((_,i)=>i!==confirmDeleteIdx));
+    setConfirmDeleteIdx(null);
+  };
 
   // Atualiza um campo de um item localmente (sem salvar)
   const setField=(idx,key,val)=>{
@@ -1646,7 +1665,16 @@ function EditingModal({req,onClose,onSave}){
         {/* Body */}
         <div style={{padding:24,overflowY:'auto',maxHeight:'68vh'}} className="scroll-y">
           {localItems.map((it,idx)=>(
-            <div key={idx} style={{background:it.status==='Doado'?'var(--red-light)':it.status==='Comprado'?'#F5F0FF':'var(--smoke)',borderRadius:14,padding:18,border:`1.5px solid ${it.status==='Doado'?'#FFBDBD':it.status==='Comprado'?'#D8B4FE':'var(--border)'}`,marginBottom:12}}>
+           <div key={idx} style={{background:it.status==='Doado'?'var(--red-light)':it.status==='Comprado'?'#F5F0FF':'var(--smoke)',borderRadius:14,padding:18,border:`1.5px solid ${confirmDeleteIdx===idx?'var(--red)':it.status==='Doado'?'#FFBDBD':it.status==='Comprado'?'#D8B4FE':'var(--border)'}`,marginBottom:12}}>
+              {confirmDeleteIdx===idx&&(
+                <div style={{background:'var(--red)',borderRadius:10,padding:'10px 14px',marginBottom:12,display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}>
+                  <span style={{fontSize:10,fontWeight:800,color:'#fff'}}>Excluir "{it.description}"?</span>
+                  <div style={{display:'flex',gap:8}}>
+                    <button type="button" onClick={()=>setConfirmDeleteIdx(null)} style={{padding:'5px 14px',background:'rgba(255,255,255,.2)',border:'none',borderRadius:7,fontSize:9,fontWeight:800,color:'#fff',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>Cancelar</button>
+                    <button type="button" onClick={confirmDelete} style={{padding:'5px 14px',background:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,color:'var(--red)',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>Confirmar</button>
+                  </div>
+                </div>
+              )}
               {/* Topo do item */}
               <div style={{display:'flex',alignItems:'flex-start',gap:12,marginBottom:16}}>
                 {it.photo
@@ -1654,7 +1682,15 @@ function EditingModal({req,onClose,onSave}){
                   :<div style={{width:52,height:52,borderRadius:10,background:'var(--border)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="package" size={20}/></div>
                 }
                 <div style={{minWidth:0,flex:1}}>
-                  <p style={{fontSize:13,fontWeight:800,textTransform:'uppercase',margin:'0 0 8px',color:'var(--ink)'}}>{it.description||'(sem descrição)'}</p>
+                  <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:8,marginBottom:8}}>
+                    <p style={{fontSize:13,fontWeight:800,textTransform:'uppercase',margin:0,color:'var(--ink)',flex:1}}>{it.description||'(sem descrição)'}</p>
+                    {it.status!=='Concluído'&&it.status!=='Doado'&&(
+                      <button type="button" onClick={()=>deleteItem(idx)} style={{display:'flex',alignItems:'center',gap:4,padding:'4px 10px',background:'var(--red-light)',border:'1px solid #FFBDBD',borderRadius:7,fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--red)',cursor:'pointer',flexShrink:0,fontFamily:'Plus Jakarta Sans,sans-serif',whiteSpace:'nowrap'}}>
+                        <Icon name="trash-2" size={11}/> Excluir
+                      </button>
+                    )}
+                  </div>
+                  
                   <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
                     <span style={{fontSize:9,color:'var(--muted)',fontWeight:600}}>Qtd: {it.quantity}</span>
                     <StatusBadge status={it.status||'Pendente'} orig={it.statusOriginal}/>
