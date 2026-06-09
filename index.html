@@ -1998,9 +1998,10 @@ function ChegadasView({requests,loggedInUser,vehicles}){
 // ── Login ─────────────────────────────────────────────────────────────────
 function LoginView({onLogin,usersList}){
   const[u,setU]=useState('');const[p,setP]=useState('');const[showP,setShowP]=useState(false);const[err,setErr]=useState('');
-  const submit=e=>{
+ const submit=e=>{
     e.preventDefault();
-    const found=usersList.find(x=>x.user.toLowerCase()===u.trim().toLowerCase()&&x.pass===p.trim());
+    const uT=u.trim();const pT=p.trim();
+    const found=usersList.find(x=>x.user.toLowerCase()===uT.toLowerCase()&&x.pass===pT);
     if(found){if(found.active===false){setErr('Conta desativada. Contate o Admin.');}else{onLogin(found);}}
     else{setErr('Usuário ou senha incorretos.');}
   };
@@ -2016,9 +2017,9 @@ function LoginView({onLogin,usersList}){
           {err&&(<div className="shake" style={{background:'var(--red-light)',border:'1px solid #FFBDBD',borderRadius:10,padding:'10px 14px',display:'flex',alignItems:'center',gap:8}}><Icon name="alert-circle" size={14}/><span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',color:'var(--red)'}}>{err}</span></div>)}
           <div style={{display:'flex',flexDirection:'column',gap:14}}>
             <div><label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.14em',color:'var(--muted)',display:'block',marginBottom:6}}>Usuário</label>
-              <div style={{position:'relative'}}><div style={{position:'absolute',left:12,top:'50%',transform:'translateY(-50%)',color:'var(--muted)'}}><Icon name="user" size={15}/></div><input type="text" value={u} onChange={e=>setU(e.target.value)} className="input" style={{paddingLeft:38}} placeholder="USUÁRIO" required/></div></div>
+              <div style={{position:'relative'}}><div style={{position:'absolute',left:12,top:'50%',transform:'translateY(-50%)',color:'var(--muted)'}}><Icon name="user" size={15}/></div><input type="text" value={u} onChange={e=>setU(e.target.value)} className="input" style={{paddingLeft:38}} placeholder="USUÁRIO" autoComplete="username" autoCorrect="off" autoCapitalize="none" spellCheck="false" required/>
             <div><label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.14em',color:'var(--muted)',display:'block',marginBottom:6}}>Senha</label>
-              <div style={{position:'relative'}}><div style={{position:'absolute',left:12,top:'50%',transform:'translateY(-50%)',color:'var(--muted)'}}><Icon name="lock" size={15}/></div><input type={showP?'text':'password'} value={p} onChange={e=>setP(e.target.value)} className="input" style={{paddingLeft:38,paddingRight:40,letterSpacing:showP?'normal':'.2em'}} placeholder="••••••••" required/><button type="button" onClick={()=>setShowP(!showP)} style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--muted)',padding:4,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:6,transition:'color .15s'}} onMouseEnter={e=>e.currentTarget.style.color='var(--ink)'} onMouseLeave={e=>e.currentTarget.style.color='var(--muted)'} title={showP?'Ocultar senha':'Ver senha'}>
+              <div style={{position:'relative'}}><div style={{position:'absolute',left:12,top:'50%',transform:'translateY(-50%)',color:'var(--muted)'}}><Icon name="lock" size={15}/></div><input type={showP?'text':'password'} value={p} onChange={e=>setP(e.target.value)} className="input" style={{paddingLeft:38,paddingRight:40,letterSpacing:showP?'normal':'.2em'}} placeholder="••••••••" autoComplete="current-password" autoCorrect="off" autoCapitalize="none" spellCheck="false" required/>><button type="button" onClick={()=>setShowP(!showP)} style={{position:'absolute',right:12,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--muted)',padding:4,display:'flex',alignItems:'center',justifyContent:'center',borderRadius:6,transition:'color .15s'}} onMouseEnter={e=>e.currentTarget.style.color='var(--ink)'} onMouseLeave={e=>e.currentTarget.style.color='var(--muted)'} title={showP?'Ocultar senha':'Ver senha'}>
                   {showP?(
                     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
                   ):(
