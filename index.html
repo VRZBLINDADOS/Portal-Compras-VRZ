@@ -917,10 +917,23 @@ const compressImageToBlob=async(file)=>{
     }catch{alert('Erro ao processar imagem.');}
     setCompressing(false);
   };
-  const salvar=async()=>{
+const salvar=async()=>{
     setSubmitting(true);
-    try{await col('requests').add({os,responsavel:loggedInUser.user,vehicleData:vehicle,unidade,items,timestamp:Date.now(),status:'Pendente',userId:user?.uid||'anon'});setDone(true);setShowDup(false);}
-    catch{alert('Erro ao salvar pedido.');}setSubmitting(false);
+    try{
+      const LIMITE=13;
+      if(items.length>LIMITE){
+        const partes=[];
+        for(let i=0;i<items.length;i+=LIMITE)partes.push(items.slice(i,i+LIMITE));
+        for(let p=0;p<partes.length;p++){
+          await col('requests').add({os,responsavel:loggedInUser.user,vehicleData:vehicle,unidade,items:partes[p],timestamp:Date.now()+(p*10),status:'Pendente',userId:user?.uid||'anon',parte:p+1,totalPartes:partes.length});
+        }
+      }else{
+        await col('requests').add({os,responsavel:loggedInUser.user,vehicleData:vehicle,unidade,items,timestamp:Date.now(),status:'Pendente',userId:user?.uid||'anon'});
+      }
+      setDone(true);setShowDup(false);
+    }
+    catch{alert('Erro ao salvar pedido.');}
+    setSubmitting(false);
   };
   const submit=async e=>{
     e.preventDefault();
@@ -1252,6 +1265,7 @@ function StatusView({requests,loggedInUser,vehicles}){
                     </span>
                   )}
                   {r._merged&&<span style={{fontSize:7,fontWeight:800,padding:'2px 7px',borderRadius:999,background:'#EAF0FF',color:'#1A4EC2',border:'1px solid #C0D0F5'}}>Mesclado</span>}
+{r.parte&&r.totalPartes>1&&<span style={{fontSize:7,fontWeight:800,padding:'2px 7px',borderRadius:999,background:'#F3E8FF',color:'#6B21A8',border:'1px solid #D8B4FE'}}>Parte {r.parte}/{r.totalPartes}</span>}
                 </div>
                 <div style={{display:'flex',gap:8}}>
                   <button onClick={()=>exportPDF(r)} style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',background:'#2563EB',color:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}>
@@ -2138,6 +2152,21 @@ function App(){
   };
 
   // Salva array completo de items no Firestore — chamado só ao confirmar
+  const compressBase64=(b64,maxPx=600,quality=0.45)=>new Promise(resolve=>{
+    if(!b64||!b64.startsWith('data:image')){resolve(b64);return;}
+    const img=new Image();
+    img.onload=()=>{
+      let w=img.width,h=img.height;
+      if(w>h&&w>maxPx){h=Math.round(h*maxPx/w);w=maxPx;}
+      else if(h>maxPx){w=Math.round(w*maxPx/h);h=maxPx;}
+      const c=document.createElement('canvas');c.width=w;c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      resolve(c.toDataURL('image/jpeg',quality));
+    };
+    img.onerror=()=>resolve(b64);
+    img.src=b64;
+  });
+
   const saveItems=async(reqId,newItems)=>{
     const req=requests.find(r=>r.id===reqId);if(!req)return;
     let gs='Concluído';
@@ -2145,7 +2174,18 @@ function App(){
     else if(newItems.some(it=>it.status==='Em Cotação'))gs='Em Cotação';
     else if(newItems.some(it=>it.status==='Comprado'))gs='Comprado';
     else if(newItems.some(it=>it.status==='Doado'))gs='Doado';
-    try{await col('requests').doc(reqId).update({items:stripUndefined(newItems),status:gs});}
+    const compressedItems=await Promise.all(newItems.map(async it=>{
+      if(!it.photo)return it;
+      const photo=await compressBase64(it.photo,600,0.45);
+      return{...it,photo};
+    }));
+    const payload=stripUndefined(compressedItems);
+    const estimado=JSON.stringify(payload).length;
+    if(estimado>900000){
+      alert(`Documento ainda grande (~${Math.round(estimado/1024)}KB). Remova algumas fotos ou reduza itens.`);
+      return;
+    }
+    try{await col('requests').doc(reqId).update({items:payload,status:gs});}
     catch(e){console.error('Erro ao salvar:',e);alert('Erro ao salvar: '+e.message);}
   };
 
@@ -2332,6 +2372,7 @@ function App(){
                                 <p style={{fontSize:16,fontWeight:800,margin:0}}>#{req.os}</p>
                                 <p style={{fontSize:8,color:'var(--muted)',fontWeight:600,margin:0}}>{req.unidade||'Unidade 1'}</p>
                                 {req._merged&&<span style={{fontSize:7,fontWeight:800,padding:'1px 5px',borderRadius:999,background:'#EAF0FF',color:'#1A4EC2',border:'1px solid #C0D0F5',display:'inline-block',marginTop:3}}>Mesclado</span>}
+{req.parte&&req.totalPartes>1&&<span style={{fontSize:7,fontWeight:800,padding:'1px 5px',borderRadius:999,background:'#F3E8FF',color:'#6B21A8',border:'1px solid #D8B4FE',display:'inline-block',marginTop:3}}>Parte {req.parte}/{req.totalPartes}</span>}
                               </div>
                               <div style={{flex:1,minWidth:0}}>
                                 <p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',margin:'0 0 6px'}}>Itens ({req.items?.length||0}) · {req.vehicleData?.modelo||'—'}</p>
