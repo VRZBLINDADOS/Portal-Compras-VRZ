@@ -2067,7 +2067,9 @@ function App(){
   const[view,setView]=useState('request');
   const[subView,setSubView]=useState('pending');
   const[importData,setImportData]=useState([]);const[showImport,setShowImport]=useState(false);const[editing,setEditing]=useState(null);
-  const[showChangePwd,setShowChangePwd]=useState(false); // MELHORIA 2
+  const[showChangePwd,setShowChangePwd]=useState(false);
+const[gestSearch,setGestSearch]=useState('');
+const[gestFab,setGestFab]=useState('');
 
   const{data:requests,loading:reqLoad}=useFirestore('requests');
   const{data:vehicles,loading:vehLoad}=useFirestore('vehicles');
@@ -2375,9 +2377,7 @@ function App(){
                         if(subView==='donated')return req.items?.some(it=>it.status==='Doado');
                         return req.items?.every(it=>it.status==='Concluído'||it.status==='Doado');
                       });
-                      const fabricantes=[...new Set(baseFiltered.map(r=>r.vehicleData?.fabricante||'').filter(Boolean))].sort();
-                      const [gestSearch,setGestSearch]=useState('');
-                      const [gestFab,setGestFab]=useState('');
+                    const fabricantes=[...new Set(baseFiltered.map(r=>r.vehicleData?.fabricante||'').filter(Boolean))].sort();
                       const filtered=baseFiltered.filter(req=>{
                         const t=gestSearch.toLowerCase();
                         const mb=!t||String(req.os||'').toLowerCase().includes(t)||String(req.vehicleData?.chassi||'').toLowerCase().includes(t)||String(req.vehicleData?.modelo||'').toLowerCase().includes(t);
