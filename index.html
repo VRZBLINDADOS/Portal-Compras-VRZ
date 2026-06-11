@@ -2190,10 +2190,17 @@ function App(){
   };
 
   // ── Todos os hooks ANTES de qualquer return condicional ──────────────────
+  
+  const hoje=new Date();hoje.setHours(0,0,0,0);
   const tabCounts={
     pending:requests.filter(r=>r.items?.some(it=>it.status==='Pendente')).length,
     quoting:requests.filter(r=>r.items?.some(it=>it.status==='Em Cotação')).length,
     bought:requests.filter(r=>r.items?.some(it=>it.status==='Comprado')).length,
+    overdue:requests.filter(r=>r.items?.some(it=>{
+      if(it.status!=='Comprado'||!it.deliveryDate)return false;
+      const prazo=new Date(it.deliveryDate+'T00:00:00');
+      return prazo<hoje;
+    })).length,
     completed:requests.filter(r=>r.items?.every(it=>it.status==='Concluído'||it.status==='Doado')).length,
     donated:requests.filter(r=>r.items?.some(it=>it.status==='Doado')).length,
   };
@@ -2318,8 +2325,9 @@ function App(){
                       {[
                         {key:'pending',label:`Pendentes (${tabCounts.pending})`,color:'#C45E00'},
                         {key:'quoting',label:`Em Cotação (${tabCounts.quoting})`,color:'#1A4EC2'},
-                        {key:'bought',label:`Comprado (${tabCounts.bought})`,color:'#6B21A8'},
-                        {key:'completed',label:`Concluídos (${tabCounts.completed})`,color:'#0A6B34'},
+                       {key:'bought',label:`Comprado (${tabCounts.bought})`,color:'#6B21A8'},
+                       {key:'overdue',label:`⚠ Atrasados (${tabCounts.overdue||0})`,color:'#DC1F1F'},
+                       {key:'completed',label:`Concluídos (${tabCounts.completed})`,color:'#0A6B34'},
                         {key:'donated',label:`Doados (${tabCounts.donated})`,color:'#A81515'},
                         {key:'vehicles',label:`Veículos (${vehicles.length})`,color:'var(--ink)'},
                         isMaster&&{key:'users',label:'Usuários',color:'var(--red)'},
@@ -2352,12 +2360,18 @@ function App(){
                       </div>
                     )}
 
-                   {['pending','quoting','bought','completed','donated'].includes(subView)&&(()=>{
+                  {['pending','quoting','bought','overdue','completed','donated'].includes(subView)&&(()=>{
                       const merged=mergeByOS(requests);
+                      const hojeAba=new Date();hojeAba.setHours(0,0,0,0);
                       const baseFiltered=merged.filter(req=>{
                         if(subView==='pending')return req.items?.some(it=>it.status==='Pendente');
                         if(subView==='quoting')return req.items?.some(it=>it.status==='Em Cotação');
                         if(subView==='bought')return req.items?.some(it=>it.status==='Comprado');
+                        if(subView==='overdue')return req.items?.some(it=>{
+                          if(it.status!=='Comprado'||!it.deliveryDate)return false;
+                          const prazo=new Date(it.deliveryDate+'T00:00:00');
+                          return prazo<hojeAba;
+                        });
                         if(subView==='donated')return req.items?.some(it=>it.status==='Doado');
                         return req.items?.every(it=>it.status==='Concluído'||it.status==='Doado');
                       });
