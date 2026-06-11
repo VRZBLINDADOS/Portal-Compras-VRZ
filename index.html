@@ -2352,19 +2352,47 @@ function App(){
                       </div>
                     )}
 
-                    {['pending','quoting','bought','completed','donated'].includes(subView)&&(()=>{
+                   {['pending','quoting','bought','completed','donated'].includes(subView)&&(()=>{
                       const merged=mergeByOS(requests);
-                      const filtered=merged.filter(req=>{
+                      const baseFiltered=merged.filter(req=>{
                         if(subView==='pending')return req.items?.some(it=>it.status==='Pendente');
                         if(subView==='quoting')return req.items?.some(it=>it.status==='Em Cotação');
                         if(subView==='bought')return req.items?.some(it=>it.status==='Comprado');
                         if(subView==='donated')return req.items?.some(it=>it.status==='Doado');
                         return req.items?.every(it=>it.status==='Concluído'||it.status==='Doado');
                       });
+                      const fabricantes=[...new Set(baseFiltered.map(r=>r.vehicleData?.fabricante||'').filter(Boolean))].sort();
+                      const [gestSearch,setGestSearch]=useState('');
+                      const [gestFab,setGestFab]=useState('');
+                      const filtered=baseFiltered.filter(req=>{
+                        const t=gestSearch.toLowerCase();
+                        const mb=!t||String(req.os||'').toLowerCase().includes(t)||String(req.vehicleData?.chassi||'').toLowerCase().includes(t)||String(req.vehicleData?.modelo||'').toLowerCase().includes(t);
+                        const mf=!gestFab||req.vehicleData?.fabricante===gestFab;
+                        return mb&&mf;
+                      });
                       const accentCol=subView==='pending'?'#C45E00':subView==='quoting'?'#1A4EC2':subView==='bought'?'#6B21A8':subView==='donated'?'#A81515':'#0A6B34';
                       return(
                         <div className="fade-in" style={{display:'flex',flexDirection:'column',gap:12}}>
-                          {filtered.length===0&&<div style={{padding:'48px 20px',textAlign:'center',background:'#fff',borderRadius:14,border:'1.5px dashed var(--border)'}}><p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',margin:0}}>Nenhum pedido nesta categoria</p></div>}
+                          {/* Barra de busca + filtro fabricante */}
+                          <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+                            <div style={{position:'relative',flex:1,minWidth:200}}>
+                              <input type="text" placeholder="Buscar OS / Chassi / Modelo..." value={gestSearch} onChange={e=>setGestSearch(e.target.value)} className="input" style={{paddingLeft:36,fontSize:11}}/>
+                              <div style={{position:'absolute',left:11,top:'50%',transform:'translateY(-50%)',color:'var(--muted)'}}><Icon name="search" size={14}/></div>
+                              {gestSearch&&<button onClick={()=>setGestSearch('')} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',color:'var(--muted)',fontSize:14,lineHeight:1}}>×</button>}
+                            </div>
+                            {fabricantes.length>0&&(
+                              <select value={gestFab} onChange={e=>setGestFab(e.target.value)} className="input" style={{width:'auto',padding:'8px 14px',fontSize:10,fontWeight:700,appearance:'auto',minWidth:160}}>
+                                <option value="">Todos os fabricantes</option>
+                                {fabricantes.map(f=><option key={f} value={f}>{f}</option>)}
+                              </select>
+                            )}
+                            {(gestSearch||gestFab)&&(
+                              <button onClick={()=>{setGestSearch('');setGestFab('');}} style={{display:'flex',alignItems:'center',gap:5,padding:'8px 14px',background:'var(--smoke)',border:'1.5px solid var(--border)',borderRadius:10,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',color:'var(--muted)',fontFamily:'Plus Jakarta Sans,sans-serif',whiteSpace:'nowrap'}}>
+                                <Icon name="x" size={12}/> Limpar
+                              </button>
+                            )}
+                          </div>
+                          {filtered.length===0&&<div style={{padding:'48px 20px',textAlign:'center',background:'#fff',borderRadius:14,border:'1.5px dashed var(--border)'}}><p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',margin:0}}>{gestSearch||gestFab?'Nenhum resultado para os filtros aplicados':'Nenhum pedido nesta categoria'}</p></div>}
                           {filtered.map(req=>(
                             <div key={req.os} className="card" style={{display:'flex',alignItems:'center',gap:16,padding:'14px 16px',borderLeft:`3px solid ${accentCol}`}}>
                               <div style={{textAlign:'center',flexShrink:0}}>
