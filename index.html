@@ -582,12 +582,19 @@ function DonorSystem({requests,vehicles,loggedInUser}){
         });
         if(changed)await col('requests').doc(req.id).update({items:stripUndefined(newItems)});
       }
-      const toTransfer=selectedItems.map(itemId=>{
-        const orig=targetRequest.items.find(it=>String(it.id)===String(itemId));if(!orig)return null;
-        const base=stripUndefined({...orig});
-        delete base.price;delete base.supplier;delete base.deliveryDate;delete base.actualDeliveryDate;delete base.boughtAt;delete base.statusOriginal;delete base.receivedFrom;delete base.donatedTo;
-        return{...base,id:String(Date.now())+String(Math.floor(Math.random()*9999)),status:'Pendente',donatedTo:targetOS};
-      }).filter(Boolean);
+     const toTransfer=selectedItems.map(itemId=>{
+  const orig=targetRequest.items.find(it=>String(it.id)===String(itemId));if(!orig)return null;
+  const base=stripUndefined({...orig});
+  const jaComprado=orig.status==='Comprado'||orig.status==='Em Cotação';
+  // Se já foi comprado, mantém as infos de compra; senão, limpa tudo
+  if(!jaComprado){
+    delete base.price;delete base.supplier;delete base.deliveryDate;
+    delete base.actualDeliveryDate;delete base.boughtAt;
+  }
+  delete base.statusOriginal;delete base.receivedFrom;delete base.donatedTo;
+  const novoStatus=jaComprado?(orig.status==='Comprado'?'Comprado':'Em Cotação'):'Pendente';
+  return{...base,id:String(Date.now())+String(Math.floor(Math.random()*9999)),status:novoStatus,donatedTo:targetOS};
+}).filter(Boolean);
       const doadoraDocs=requests.filter(r=>String(r.os).trim()===sourceOS.trim());
       if(doadoraDocs.length>0){
         const donorReq=doadoraDocs[0];
