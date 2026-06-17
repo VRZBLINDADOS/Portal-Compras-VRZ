@@ -2112,6 +2112,7 @@ function LoginView({onLogin,usersList}){
 function CancelDonationView({requests,loggedInUser}){
   const{data:donations,loading}=useFirestore('donations');
   const[cancelando,setCancelando]=useState(null);
+  const[itensSelecionados,setItensSelecionados]=useState([]);
   const[processando,setProcessando]=useState(false);
   const[search,setSearch]=useState('');
 
@@ -2125,14 +2126,14 @@ function CancelDonationView({requests,loggedInUser}){
       .sort((a,b)=>b.timestamp-a.timestamp);
   },[donations,search]);
 
-  const executarCancelamento=async(don)=>{
+  const executarCancelamento=async(don,idsParaCancelar)=>{
     setProcessando(true);
     try{
       // 1. Remove itens doados da OS receptora (volta status para Pendente ou original)
       const receptoraDocs=requests.filter(r=>String(r.os).trim()===String(don.receptoraOS).trim());
       for(const req of receptoraDocs){
        const newItems=req.items.map(it=>{
-  const eraDoado=don.itemIds.includes(String(it.id))&&it.receivedFrom===String(don.doadoraOS);
+ const eraDoado=idsParaCancelar.includes(String(it.id))&&it.receivedFrom===String(don.doadoraOS);
   if(!eraDoado)return it;
   // Tenta restaurar snapshot original
   const snap=don.snapshot?.find(s=>String(s.id)===String(it.id));
@@ -2155,16 +2156,20 @@ function CancelDonationView({requests,loggedInUser}){
       // 2. Remove itens transferidos da OS doadora (os que foram adicionados pela doação)
       const doadoraDocs=requests.filter(r=>String(r.os).trim()===String(don.doadoraOS).trim());
       for(const req of doadoraDocs){
-        const newItems=req.items.filter(it=>it.donatedTo!==String(don.receptoraOS));
+       const newItems=req.items.filter(it=>!(it.donatedTo===String(don.receptoraOS)&&idsParaCancelar.includes(String(it.id))));
         if(newItems.length===0){
           await col('requests').doc(req.id).delete();
         }else{
           await col('requests').doc(req.id).update({items:stripUndefined(newItems)});
         }
       }
-      // 3. Marca doação como cancelada
+     // 3. Marca doação — total ou parcialmente cancelada
+      const totalItens=don.itemIds?.length||0;
+      const cancelamentoTotal=idsParaCancelar.length>=totalItens;
       await col('donations').doc(don.id).update({
-        cancelado:true,
+        cancelado:cancelamentoTotal,
+        canceladoParcial:!cancelamentoTotal,
+        itensCancelados:idsParaCancelar,
         canceladoPor:loggedInUser?.user||'Sistema',
         canceladoEm:Date.now(),
       });
@@ -2214,10 +2219,9 @@ function CancelDonationView({requests,loggedInUser}){
                 <p style={{fontSize:8,fontWeight:700,color:'var(--muted)',margin:0,textTransform:'uppercase'}}>{don.executadoPor}</p>
                 <p style={{fontSize:8,color:'var(--muted)',margin:0}}>{don.timestamp?new Date(don.timestamp).toLocaleDateString('pt-BR'):''}</p>
               </div>
-              <button onClick={()=>setCancelando(don)} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 14px',background:'var(--red)',color:'#fff',border:'none',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
-                <Icon name="undo-2" size={13}/> Cancelar
-              </button>
-            </div>
+              <button onClick={()=>{setCancelando(don);setItensSelecionados(don.itemIds?.map(String)||[]);}} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 14px',background:'var(--red)',color:'#fff',border:'none',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
+    <Icon name="undo-2" size={13}/> Cancelar
+  </button>
           </div>
           <div style={{padding:'10px 16px',display:'flex',gap:6,flexWrap:'wrap'}}>
             {(don.snapshot||[]).map((it,i)=>(
@@ -2234,39 +2238,85 @@ function CancelDonationView({requests,loggedInUser}){
       ))}
 
       {/* Modal de confirmação */}
-      {cancelando&&(
-        <div style={{position:'fixed',inset:0,zIndex:700,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}} className="fade-in">
-          <div style={{background:'#fff',borderRadius:24,overflow:'hidden',maxWidth:460,width:'100%',boxShadow:'0 40px 80px rgba(0,0,0,.4)'}}>
-            <div style={{background:'var(--ink)',padding:'24px 28px',borderBottom:'4px solid var(--red)',color:'#fff'}}>
-              <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:4}}>
-                <div style={{width:44,height:44,background:'var(--red)',borderRadius:12,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="undo-2" size={20}/></div>
-                <div>
-                  <h3 style={{margin:0,fontSize:17,fontWeight:800}}>Confirmar Cancelamento</h3>
-                  <p style={{margin:0,fontSize:9,color:'rgba(255,255,255,.4)',marginTop:2}}>Esta ação é irreversível</p>
-                </div>
-              </div>
-            </div>
-            <div style={{padding:24}}>
-              <div style={{background:'#FFFBE6',border:'1px solid #FFE680',borderRadius:10,padding:'12px 14px',marginBottom:18}}>
-                <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'#856A00',margin:'0 0 4px'}}>⚠ O que acontecerá</p>
-                <p style={{fontSize:10,color:'#856A00',margin:0,lineHeight:1.6}}>
-                  • OS <strong>#{cancelando.receptoraOS}</strong> terá os itens restaurados ao status original<br/>
-                  • OS <strong>#{cancelando.doadoraOS}</strong> terá os itens transferidos removidos<br/>
-                  • A doação será marcada como cancelada no histórico
-                </p>
-              </div>
-              <div style={{display:'flex',gap:10}}>
-                <button onClick={()=>setCancelando(null)} className="btn-ghost" style={{flex:1}}>Voltar</button>
-                <button onClick={()=>executarCancelamento(cancelando)} disabled={processando} className="btn-primary" style={{flex:2}}>
-                  {processando?<><Icon name="refresh-cw" size={14} className="spin"/> Processando...</>:<><Icon name="undo-2" size={14}/> Confirmar Cancelamento</>}
-                </button>
-              </div>
-            </div>
+     {cancelando&&(
+  <div style={{position:'fixed',inset:0,zIndex:700,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}} className="fade-in">
+    <div style={{background:'#fff',borderRadius:24,overflow:'hidden',maxWidth:500,width:'100%',boxShadow:'0 40px 80px rgba(0,0,0,.4)'}}>
+      <div style={{background:'var(--ink)',padding:'24px 28px',borderBottom:'4px solid var(--red)',color:'#fff'}}>
+        <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:4}}>
+          <div style={{width:44,height:44,background:'var(--red)',borderRadius:12,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="undo-2" size={20}/></div>
+          <div>
+            <h3 style={{margin:0,fontSize:17,fontWeight:800}}>Cancelar Doação</h3>
+            <p style={{margin:0,fontSize:9,color:'rgba(255,255,255,.4)',marginTop:2}}>OS #{cancelando.receptoraOS} → OS #{cancelando.doadoraOS}</p>
           </div>
         </div>
-      )}
+      </div>
+      <div style={{padding:24}}>
+        {/* Seleção de itens */}
+        <div style={{marginBottom:18}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+            <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',margin:0}}>Selecione os itens para cancelar</p>
+            <button onClick={()=>{
+              const todos=cancelando.itemIds?.map(String)||[];
+              setItensSelecionados(itensSelecionados.length===todos.length?[]:todos);
+            }} style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--red)',background:'none',border:'none',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
+              {itensSelecionados.length===(cancelando.itemIds?.length||0)?'Desmarcar todos':'Selecionar todos'}
+            </button>
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:8,maxHeight:220,overflowY:'auto'}} className="scroll-y">
+            {(cancelando.snapshot||[]).length>0?(cancelando.snapshot||[]).map((it,i)=>{
+              const isSel=itensSelecionados.includes(String(it.id));
+              return(
+                <label key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 12px',borderRadius:10,border:`1.5px solid ${isSel?'var(--red)':'var(--border)'}`,background:isSel?'var(--red-light)':'var(--smoke)',cursor:'pointer',transition:'all .15s'}}>
+                  <input type="checkbox" checked={isSel} onChange={()=>setItensSelecionados(p=>p.includes(String(it.id))?p.filter(x=>x!==String(it.id)):[...p,String(it.id)])} style={{width:15,height:15,accentColor:'var(--red)',flexShrink:0}}/>
+                  {it.photo?<img src={it.photo} style={{width:36,height:36,borderRadius:7,objectFit:'cover',border:'1px solid var(--border)',flexShrink:0}} alt=""/>
+                    :<div style={{width:36,height:36,borderRadius:7,background:'var(--border)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="package" size={14}/></div>}
+                  <div style={{flex:1,minWidth:0}}>
+                    <p style={{fontSize:11,fontWeight:800,textTransform:'uppercase',margin:'0 0 3px'}}>{it.description}</p>
+                    <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                      <span style={{fontSize:8,color:'var(--muted)',fontWeight:600}}>Qtd: {it.quantity}</span>
+                      {it.price>0&&<span style={{fontSize:8,fontWeight:700,color:'#059669'}}>{fmtBRL(it.price)}</span>}
+                      {it.supplier&&<span style={{fontSize:8,color:'var(--muted)'}}>{it.supplier}</span>}
+                    </div>
+                  </div>
+                  <span style={{fontSize:7,fontWeight:800,padding:'2px 7px',borderRadius:5,background:isSel?'var(--red)':'var(--border)',color:isSel?'#fff':'var(--muted)',transition:'all .15s',flexShrink:0}}>{isSel?'✓ Cancelar':'—'}</span>
+                </label>
+              );
+            }):(
+              // Fallback sem snapshot: mostra só IDs
+              (cancelando.itemIds||[]).map((id,i)=>{
+                const isSel=itensSelecionados.includes(String(id));
+                return(
+                  <label key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderRadius:10,border:`1.5px solid ${isSel?'var(--red)':'var(--border)'}`,background:isSel?'var(--red-light)':'var(--smoke)',cursor:'pointer'}}>
+                    <input type="checkbox" checked={isSel} onChange={()=>setItensSelecionados(p=>p.includes(String(id))?p.filter(x=>x!==String(id)):[...p,String(id)])} style={{width:15,height:15,accentColor:'var(--red)',flexShrink:0}}/>
+                    <span style={{fontSize:10,fontWeight:700,color:'var(--muted)'}}>Item #{String(id).slice(-6)}</span>
+                  </label>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        {itensSelecionados.length>0&&(
+          <div style={{background:'#FFFBE6',border:'1px solid #FFE680',borderRadius:10,padding:'10px 14px',marginBottom:18}}>
+            <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'#856A00',margin:'0 0 4px'}}>⚠ O que acontecerá</p>
+            <p style={{fontSize:10,color:'#856A00',margin:0,lineHeight:1.6}}>
+              • <strong>{itensSelecionados.length}</strong> item(s) da OS <strong>#{cancelando.receptoraOS}</strong> voltarão ao status original<br/>
+              • Os mesmos itens serão removidos da OS doadora <strong>#{cancelando.doadoraOS}</strong>
+              {itensSelecionados.length<(cancelando.itemIds?.length||0)&&<><br/>• A doação permanecerá ativa para os <strong>{(cancelando.itemIds?.length||0)-itensSelecionados.length}</strong> item(s) restante(s)</>}
+            </p>
+          </div>
+        )}
+
+        <div style={{display:'flex',gap:10}}>
+          <button onClick={()=>{setCancelando(null);setItensSelecionados([]);}} className="btn-ghost" style={{flex:1}}>Voltar</button>
+          <button onClick={()=>executarCancelamento(cancelando,itensSelecionados)} disabled={processando||itensSelecionados.length===0} className="btn-primary" style={{flex:2}}>
+            {processando?<><Icon name="refresh-cw" size={14} className="spin"/> Processando...</>:<><Icon name="undo-2" size={14}/> Cancelar {itensSelecionados.length} item(s)</>}
+          </button>
+        </div>
+      </div>
     </div>
-  );
+  </div>
+)}
 }
 
 // ── DeletedItemsView ──────────────────────────────────────────────────────
