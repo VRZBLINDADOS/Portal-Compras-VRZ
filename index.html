@@ -1478,7 +1478,7 @@ function UserManagement({users,onAdd,onDelete,onToggle,onRole,loggedInUser}){
 }
 
 // ── Storage View ──────────────────────────────────────────────────────────
-function StorageView({requests}){
+function StorageView({requests,loggedInUser}){
   const LIM=1000;
   const[sel,setSel]=useState({});const[exportando,setExportando]=useState(false);const[excluindo,setExcluindo]=useState(false);const[confirmar,setConfirmar]=useState(false);
   const[prog,setProg]=useState({atual:0,total:0,msg:''});
