@@ -2131,14 +2131,25 @@ function CancelDonationView({requests,loggedInUser}){
       // 1. Remove itens doados da OS receptora (volta status para Pendente ou original)
       const receptoraDocs=requests.filter(r=>String(r.os).trim()===String(don.receptoraOS).trim());
       for(const req of receptoraDocs){
-        const newItems=req.items.map(it=>{
-          const eraDoado=don.itemIds.includes(String(it.id))&&it.receivedFrom===String(don.doadoraOS);
-          if(!eraDoado)return it;
-          // Tenta restaurar snapshot original
-          const snap=don.snapshot?.find(s=>String(s.id)===String(it.id));
-          if(snap)return stripUndefined({...snap,status:snap.status||'Pendente',receivedFrom:undefined,donatedTo:undefined});
-          return{...it,status:'Pendente',receivedFrom:undefined,donatedTo:undefined};
-        });
+       const newItems=req.items.map(it=>{
+  const eraDoado=don.itemIds.includes(String(it.id))&&it.receivedFrom===String(don.doadoraOS);
+  if(!eraDoado)return it;
+  // Tenta restaurar snapshot original
+  const snap=don.snapshot?.find(s=>String(s.id)===String(it.id));
+  const base=snap?stripUndefined({...snap}):stripUndefined({...it});
+  // Remove campos de doação
+  delete base.receivedFrom;
+  delete base.donatedTo;
+  delete base.donatedAt;
+  // Recalcula status correto com base nos dados de compra
+  let statusRestaurado='Pendente';
+  if(base.actualDeliveryDate) statusRestaurado='Concluído';
+  else if(base.boughtAt)      statusRestaurado='Comprado';
+  else if(base.price&&base.supplier&&base.deliveryDate) statusRestaurado='Em Cotação';
+  base.status=statusRestaurado;
+  delete base.statusOriginal;
+  return base;
+});
         await col('requests').doc(req.id).update({items:stripUndefined(newItems)});
       }
       // 2. Remove itens transferidos da OS doadora (os que foram adicionados pela doação)
