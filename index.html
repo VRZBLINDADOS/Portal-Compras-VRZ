@@ -2214,14 +2214,15 @@ function CancelDonationView({requests,loggedInUser}){
                 <span style={{fontSize:15,fontWeight:800}}>OS #{don.doadoraOS}</span>
               </div>
             </div>
-            <div style={{display:'flex',alignItems:'center',gap:8}}>
+           <div style={{display:'flex',alignItems:'center',gap:8}}>
               <div style={{textAlign:'right'}}>
                 <p style={{fontSize:8,fontWeight:700,color:'var(--muted)',margin:0,textTransform:'uppercase'}}>{don.executadoPor}</p>
                 <p style={{fontSize:8,color:'var(--muted)',margin:0}}>{don.timestamp?new Date(don.timestamp).toLocaleDateString('pt-BR'):''}</p>
               </div>
               <button onClick={()=>{setCancelando(don);setItensSelecionados(don.itemIds?.map(String)||[]);}} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 14px',background:'var(--red)',color:'#fff',border:'none',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
-    <Icon name="undo-2" size={13}/> Cancelar
-  </button>
+                <Icon name="undo-2" size={13}/> Cancelar
+              </button>
+            </div>
           </div>
           <div style={{padding:'10px 16px',display:'flex',gap:6,flexWrap:'wrap'}}>
             {(don.snapshot||[]).map((it,i)=>(
@@ -2317,6 +2318,8 @@ function CancelDonationView({requests,loggedInUser}){
     </div>
   </div>
 )}
+    </div>
+  );
 }
 
 // ── DeletedItemsView ──────────────────────────────────────────────────────
