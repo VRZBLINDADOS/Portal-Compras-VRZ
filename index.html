@@ -2484,7 +2484,8 @@ function DeletedItemsView({loggedInUser}){
  // ── Resumo Reunião ────────────────────────────────────────────────────────
 function ResumoReuniaoView({requests}){
   // semanaOffset: 0 = semana atual, -1 = semana passada, etc.
-  const[semanaOffset,setSemanaOffset]=useState(0);
+const[semanaOffset,setSemanaOffset]=useState(0);
+  const[diaSelecionado,setDiaSelecionado]=useState(null); // {date, tipo: 'pedidos'|'compras'}
 
   // Calcula início (domingo) e fim (sábado) da semana selecionada
   const{inicioSemana,fimSemana}=useMemo(()=>{
@@ -2562,6 +2563,7 @@ function ResumoReuniaoView({requests}){
   const maxValDia=Math.max(...dadosCompra.dias.map(d=>d.valor),1);
 
   // Canvas gráfico 1
+  // Canvas gráfico 1
   const refBar1=useRef(null);
   useEffect(()=>{
     if(!refBar1.current)return;
@@ -2571,7 +2573,6 @@ function ResumoReuniaoView({requests}){
     const pad=40,bot=46,top=24;
     const chartH=H-bot-top,chartW=W-pad*2;
     const bw=chartW/dadosDia.length;
-    // Grid
     [0,.25,.5,.75,1].forEach(p=>{
       const y=top+chartH*(1-p);
       ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(W-pad,y);
@@ -2582,32 +2583,41 @@ function ResumoReuniaoView({requests}){
       const x=pad+i*bw;
       const bh=maxPedDia>0?(d.pedidos.length/maxPedDia)*chartH:0;
       const bx=x+bw*.16,bwidth=bw*.68;
-      // Barra
+      const isSel=diaSelecionado?.date===d.date&&diaSelecionado?.tipo==='pedidos';
       ctx.beginPath();
       if(bh>2){if(ctx.roundRect)ctx.roundRect(bx,top+chartH-bh,bwidth,bh,5);else ctx.rect(bx,top+chartH-bh,bwidth,bh);}
       else{if(ctx.roundRect)ctx.roundRect(bx,top+chartH-3,bwidth,3,2);else ctx.rect(bx,top+chartH-3,bwidth,3);}
-      ctx.fillStyle=d.isHoje?'#DC1F1F':'#0D0D0D';
+      ctx.fillStyle=isSel?'#F59E0B':d.isHoje?'#DC1F1F':'#0D0D0D';
       ctx.globalAlpha=bh>2?1:.25;ctx.fill();ctx.globalAlpha=1;
-      // Valor acima
+      if(isSel){ctx.beginPath();if(ctx.roundRect)ctx.roundRect(bx-1,top+chartH-bh-1,bwidth+2,bh+2,5);else ctx.rect(bx-1,top+chartH-bh-1,bwidth+2,bh+2);ctx.strokeStyle='#F59E0B';ctx.lineWidth=2;ctx.stroke();}
       if(d.pedidos.length>0){
-        ctx.fillStyle=d.isHoje?'#DC1F1F':'#1A1A1A';
+        ctx.fillStyle=isSel?'#F59E0B':d.isHoje?'#DC1F1F':'#1A1A1A';
         ctx.font='bold 11px Plus Jakarta Sans';ctx.textAlign='center';
         ctx.fillText(d.pedidos.length,x+bw/2,top+chartH-bh-8);
       }
-      // Label dia
-      ctx.fillStyle=d.isHoje?'#DC1F1F':'#9A9189';
-      ctx.font=`${d.isHoje?'bold ':''}9px Plus Jakarta Sans`;ctx.textAlign='center';
+      ctx.fillStyle=isSel?'#F59E0B':d.isHoje?'#DC1F1F':'#9A9189';
+      ctx.font=`${d.isHoje||isSel?'bold ':''}9px Plus Jakarta Sans`;ctx.textAlign='center';
       ctx.fillText(d.label,x+bw/2,H-24);
-      // Data curta
       ctx.fillStyle='#C0B8B2';ctx.font='7px Plus Jakarta Sans';
       const dtParts=d.date.split('-');ctx.fillText(`${dtParts[2]}/${dtParts[1]}`,x+bw/2,H-13);
-      // OS count
-      if(d.osSet.size>0){
-        ctx.fillStyle='#9A9189';ctx.font='7px Plus Jakarta Sans';
-        ctx.fillText(`${d.osSet.size} OS`,x+bw/2,H-3);
-      }
+      if(d.osSet.size>0){ctx.fillStyle='#9A9189';ctx.font='7px Plus Jakarta Sans';ctx.fillText(`${d.osSet.size} OS`,x+bw/2,H-3);}
     });
-  },[dadosDia,maxPedDia]);
+  },[dadosDia,maxPedDia,diaSelecionado]);
+
+  const handleClickBar1=useCallback((e)=>{
+    if(!refBar1.current)return;
+    const rect=refBar1.current.getBoundingClientRect();
+    const scaleX=refBar1.current.width/rect.width;
+    const cx=(e.clientX-rect.left)*scaleX;
+    const pad=40,bot=46,top=24;
+    const chartW=refBar1.current.width-pad*2;
+    const bw=chartW/dadosDia.length;
+    const i=Math.floor((cx-pad)/bw);
+    if(i<0||i>=dadosDia.length)return;
+    const d=dadosDia[i];
+    if(d.pedidos.length===0)return;
+    setDiaSelecionado(prev=>prev?.date===d.date&&prev?.tipo==='pedidos'?null:{date:d.date,tipo:'pedidos'});
+  },[dadosDia]);
 
   // Canvas gráfico 2
   const refBar2=useRef(null);
@@ -2633,29 +2643,43 @@ function ResumoReuniaoView({requests}){
       const x=pad+i*bw;
       const bh=maxValDia>0?(d.valor/maxValDia)*chartH:0;
       const bx=x+bw*.16,bwidth=bw*.68;
+      const isSel=diaSelecionado?.date===d.date&&diaSelecionado?.tipo==='compras';
       ctx.beginPath();
       if(bh>2){if(ctx.roundRect)ctx.roundRect(bx,top+chartH-bh,bwidth,bh,5);else ctx.rect(bx,top+chartH-bh,bwidth,bh);}
       else{if(ctx.roundRect)ctx.roundRect(bx,top+chartH-3,bwidth,3,2);else ctx.rect(bx,top+chartH-3,bwidth,3);}
-      ctx.fillStyle=d.isHoje?'#059669':'#7C3AED';
+      ctx.fillStyle=isSel?'#F59E0B':d.isHoje?'#059669':'#7C3AED';
       ctx.globalAlpha=bh>2?1:.2;ctx.fill();ctx.globalAlpha=1;
+      if(isSel){ctx.beginPath();if(ctx.roundRect)ctx.roundRect(bx-1,top+chartH-bh-1,bwidth+2,bh+2,5);else ctx.rect(bx-1,top+chartH-bh-1,bwidth+2,bh+2);ctx.strokeStyle='#F59E0B';ctx.lineWidth=2;ctx.stroke();}
       if(d.itens.length>0){
-        ctx.fillStyle=d.isHoje?'#059669':'#7C3AED';
+        ctx.fillStyle=isSel?'#F59E0B':d.isHoje?'#059669':'#7C3AED';
         ctx.font='bold 10px Plus Jakarta Sans';ctx.textAlign='center';
         const vStr=d.valor>=1000?'R$'+(d.valor/1000).toFixed(1)+'k':'R$'+d.valor.toFixed(0);
         ctx.fillText(vStr,x+bw/2,top+chartH-bh-8);
       }
-      ctx.fillStyle=d.isHoje?'#059669':'#9A9189';
-      ctx.font=`${d.isHoje?'bold ':''}9px Plus Jakarta Sans`;ctx.textAlign='center';
+      ctx.fillStyle=isSel?'#F59E0B':d.isHoje?'#059669':'#9A9189';
+      ctx.font=`${d.isHoje||isSel?'bold ':''}9px Plus Jakarta Sans`;ctx.textAlign='center';
       ctx.fillText(d.label,x+bw/2,H-24);
       const dtParts=d.date.split('-');
       ctx.fillStyle='#C0B8B2';ctx.font='7px Plus Jakarta Sans';
       ctx.fillText(`${dtParts[2]}/${dtParts[1]}`,x+bw/2,H-13);
-      if(d.itens.length>0){
-        ctx.fillStyle='#9A9189';ctx.font='7px Plus Jakarta Sans';
-        ctx.fillText(`${d.itens.length}×`,x+bw/2,H-3);
-      }
+      if(d.itens.length>0){ctx.fillStyle='#9A9189';ctx.font='7px Plus Jakarta Sans';ctx.fillText(`${d.itens.length}×`,x+bw/2,H-3);}
     });
-  },[dadosCompra,maxValDia]);
+  },[dadosCompra,maxValDia,diaSelecionado]);
+
+  const handleClickBar2=useCallback((e)=>{
+    if(!refBar2.current)return;
+    const rect=refBar2.current.getBoundingClientRect();
+    const scaleX=refBar2.current.width/rect.width;
+    const cx=(e.clientX-rect.left)*scaleX;
+    const pad=58,bot=46,top=24;
+    const chartW=refBar2.current.width-pad*2;
+    const bw=chartW/dadosCompra.dias.length;
+    const i=Math.floor((cx-pad)/bw);
+    if(i<0||i>=dadosCompra.dias.length)return;
+    const d=dadosCompra.dias[i];
+    if(d.itens.length===0)return;
+    setDiaSelecionado(prev=>prev?.date===d.date&&prev?.tipo==='compras'?null:{date:d.date,tipo:'compras'});
+  },[dadosCompra]);
 
   const fmtSemana=`${inicioSemana.toLocaleDateString('pt-BR')} – ${fimSemana.toLocaleDateString('pt-BR')}`;
   // Semana mais antiga com dados (para limitar navegação)
@@ -2740,7 +2764,61 @@ function ResumoReuniaoView({requests}){
             ))}
           </div>
         </div>
-        <canvas ref={refBar1} width={700} height={200} style={{width:'100%',height:'auto',display:'block'}}/>
+      <canvas ref={refBar1} width={700} height={200} style={{width:'100%',height:'auto',display:'block',cursor:'pointer'}} onClick={handleClickBar1}/>
+        {diaSelecionado?.tipo==='pedidos'&&(()=>{
+          const dSel=dadosDia.find(d=>d.date===diaSelecionado.date);
+          if(!dSel||dSel.pedidos.length===0)return null;
+          const porOS={};
+          dSel.pedidos.forEach(r=>{
+            const k=String(r.os).trim();
+            if(!porOS[k])porOS[k]={os:k,modelo:r.vehicleData?.modelo||'—',responsavel:r.responsavel||'—',pedidos:[],itens:0};
+            porOS[k].pedidos.push(r);
+            porOS[k].itens+=(r.items?.length||0);
+          });
+          const grupos=Object.values(porOS);
+          const dtParts=diaSelecionado.date.split('-');
+          return(
+            <div style={{marginTop:16,borderTop:'2px solid #F59E0B',paddingTop:16}} className="fade-in">
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12,flexWrap:'wrap',gap:8}}>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <div style={{width:8,height:24,background:'#F59E0B',borderRadius:3}}/>
+                  <div>
+                    <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'#856A00',margin:0}}>Detalhes do dia</p>
+                    <p style={{fontSize:13,fontWeight:800,margin:0}}>{`${dtParts[2]}/${dtParts[1]}/${dtParts[0]}`} — {dSel.pedidos.length} pedido{dSel.pedidos.length!==1?'s':''} · {grupos.length} OS</p>
+                  </div>
+                </div>
+                <button onClick={()=>setDiaSelecionado(null)} style={{display:'flex',alignItems:'center',gap:4,padding:'5px 12px',background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:8,fontSize:9,fontWeight:800,cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif',color:'var(--muted)'}}>
+                  Fechar ×
+                </button>
+              </div>
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                {grupos.map((g,gi)=>(
+                  <div key={g.os} style={{background:'var(--smoke)',borderRadius:12,border:'1px solid var(--border)',overflow:'hidden'}}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',background:gi===0?'#0D0D0D':'#fff',borderBottom:'1px solid var(--border)'}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8}}>
+                        <span style={{fontSize:14,fontWeight:800,color:gi===0?'#fff':'var(--ink)'}}>OS #{g.os}</span>
+                        <span style={{fontSize:8,fontWeight:700,textTransform:'uppercase',color:gi===0?'rgba(255,255,255,.5)':'var(--muted)'}}>{g.modelo}</span>
+                      </div>
+                      <div style={{display:'flex',alignItems:'center',gap:8}}>
+                        <span style={{fontSize:8,fontWeight:800,padding:'3px 10px',borderRadius:999,background:gi===0?'rgba(255,255,255,.12)':'var(--border)',color:gi===0?'rgba(255,255,255,.7)':'var(--muted)'}}>{g.pedidos.length} pedido{g.pedidos.length!==1?'s':''} · {g.itens} item{g.itens!==1?'ns':''}</span>
+                        <span style={{fontSize:9,fontWeight:700,color:gi===0?'rgba(255,255,255,.5)':'var(--muted)',textTransform:'uppercase'}}>{g.responsavel}</span>
+                      </div>
+                    </div>
+                    <div style={{padding:'8px 14px',display:'flex',flexWrap:'wrap',gap:5}}>
+                      {g.pedidos.flatMap(r=>r.items||[]).map((it,ii)=>(
+                        <span key={ii} style={{display:'inline-flex',alignItems:'center',gap:4,background:'#fff',border:'1px solid var(--border)',padding:'4px 10px',borderRadius:8,fontSize:9,fontWeight:700,textTransform:'uppercase'}}>
+                          <span style={{fontSize:7,fontWeight:800,background:'var(--ink)',color:'#fff',borderRadius:3,padding:'1px 4px'}}>{it.quantity}</span>
+                          {it.description}
+                          <StatusBadge status={it.status||'Pendente'}/>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
         <div style={{display:'flex',gap:16,marginTop:16,paddingTop:14,borderTop:'1px solid var(--border)',flexWrap:'wrap'}}>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
             <div style={{width:32,height:32,borderRadius:8,background:'var(--red-light)',border:'1px solid #FFBDBD',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="clipboard-list" size={14}/></div>
@@ -2770,7 +2848,68 @@ function ResumoReuniaoView({requests}){
             ))}
           </div>
         </div>
-        <canvas ref={refBar2} width={700} height={200} style={{width:'100%',height:'auto',display:'block'}}/>
+        <canvas ref={refBar2} width={700} height={200} style={{width:'100%',height:'auto',display:'block',cursor:'pointer'}} onClick={handleClickBar2}/>
+        {diaSelecionado?.tipo==='compras'&&(()=>{
+          const dSel=dadosCompra.dias.find(d=>d.date===diaSelecionado.date);
+          if(!dSel||dSel.itens.length===0)return null;
+          const porOS={};
+          dSel.itens.forEach(it=>{
+            const k=String(it.os).trim();
+            if(!porOS[k])porOS[k]={os:k,itens:[],total:0};
+            porOS[k].itens.push(it);
+            porOS[k].total+=parseFloat(it.price||0);
+          });
+          const grupos=Object.values(porOS).sort((a,b)=>b.total-a.total);
+          const totalDia=dSel.valor;
+          const dtParts=diaSelecionado.date.split('-');
+          return(
+            <div style={{marginTop:16,borderTop:'2px solid #F59E0B',paddingTop:16}} className="fade-in">
+              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12,flexWrap:'wrap',gap:8}}>
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <div style={{width:8,height:24,background:'#F59E0B',borderRadius:3}}/>
+                  <div>
+                    <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'#856A00',margin:0}}>Compras do dia</p>
+                    <p style={{fontSize:13,fontWeight:800,margin:0}}>{`${dtParts[2]}/${dtParts[1]}/${dtParts[0]}`} — {dSel.itens.length} item{dSel.itens.length!==1?'ns':''} · {fmtBRL(totalDia)}</p>
+                  </div>
+                </div>
+                <button onClick={()=>setDiaSelecionado(null)} style={{display:'flex',alignItems:'center',gap:4,padding:'5px 12px',background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:8,fontSize:9,fontWeight:800,cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif',color:'var(--muted)'}}>
+                  Fechar ×
+                </button>
+              </div>
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                {grupos.map((g,gi)=>(
+                  <div key={g.os} style={{background:'var(--smoke)',borderRadius:12,border:'1px solid var(--border)',overflow:'hidden'}}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',background:gi===0?'#7C3AED':'#fff',borderBottom:'1px solid var(--border)'}}>
+                      <span style={{fontSize:14,fontWeight:800,color:gi===0?'#fff':'var(--ink)'}}>OS #{g.os}</span>
+                      <div style={{display:'flex',alignItems:'center',gap:10}}>
+                        <span style={{fontSize:9,fontWeight:700,color:gi===0?'rgba(255,255,255,.6)':'var(--muted)'}}>{g.itens.length} item{g.itens.length!==1?'ns':''}</span>
+                        <span style={{fontSize:13,fontWeight:800,color:gi===0?'#fff':'#059669'}}>{fmtBRL(g.total)}</span>
+                        <div style={{height:4,width:60,background:gi===0?'rgba(255,255,255,.2)':'var(--border)',borderRadius:999,overflow:'hidden'}}>
+                          <div style={{height:'100%',background:gi===0?'#fff':'#7C3AED',borderRadius:999,width:`${totalDia>0?(g.total/totalDia*100):0}%`}}/>
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{padding:'8px 14px',display:'flex',flexDirection:'column',gap:5}}>
+                      {g.itens.map((it,ii)=>(
+                        <div key={ii} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'5px 8px',background:'#fff',borderRadius:8,border:'1px solid var(--border)'}}>
+                          <div style={{display:'flex',alignItems:'center',gap:6,flex:1,minWidth:0}}>
+                            {it.photo&&<img src={it.photo} style={{width:28,height:28,borderRadius:5,objectFit:'cover',flexShrink:0}} alt=""/>}
+                            <span style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:'var(--ink)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.description}</span>
+                            <span style={{fontSize:7,background:'rgba(0,0,0,.06)',padding:'1px 5px',borderRadius:3,fontWeight:700,color:'var(--muted)',flexShrink:0}}>×{it.quantity}</span>
+                          </div>
+                          <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
+                            {it.supplier&&<span style={{fontSize:8,color:'var(--muted)',fontWeight:600}}>{it.supplier}</span>}
+                            <span style={{fontSize:10,fontWeight:800,color:'#059669'}}>{it.price>0?fmtBRL(it.price):'—'}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
         <div style={{display:'flex',gap:16,marginTop:16,paddingTop:14,borderTop:'1px solid var(--border)',flexWrap:'wrap'}}>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
             <div style={{width:32,height:32,borderRadius:8,background:'#F5F0FF',border:'1px solid #D8B4FE',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="shopping-bag" size={14}/></div>
