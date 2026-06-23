@@ -2519,12 +2519,14 @@ const[semanaOffset,setSemanaOffset]=useState(0);
   },[inicioSemana]);
 
   // ── Gráfico 1: pedidos por dia ─────────────────────────────────────────
-  const dadosDia=useMemo(()=>{
+ const dadosDia=useMemo(()=>{
     const map={};diasDaSemana.forEach(d=>{map[d.date]={...d,pedidos:[],osSet:new Set()};});
     requests.forEach(r=>{
       if(!r.timestamp)return;
-      const d=new Date(r.timestamp);d.setHours(0,0,0,0);
-      const key=d.toISOString().slice(0,10);
+      // Usa horário local para comparar data
+      const ts=r.timestamp;
+      const dt=new Date(ts);
+      const key=`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
       if(map[key]){
         map[key].pedidos.push(r);
         if(r.os)map[key].osSet.add(String(r.os).trim());
@@ -2539,6 +2541,23 @@ const[semanaOffset,setSemanaOffset]=useState(0);
   const maxPedDia=Math.max(...dadosDia.map(d=>d.pedidos.length),1);
 
   // ── Gráfico 2: compras por dia ─────────────────────────────────────────
+  // Converte price corretamente independente de vírgula ou ponto
+  const parsePrice=(v)=>{
+    if(!v&&v!==0)return 0;
+    const s=String(v).trim().replace(/\s/g,'');
+    // Se tem vírgula E ponto: formato brasileiro 1.234,56
+    if(s.includes(',')&&s.includes('.'))return parseFloat(s.replace(/\./g,'').replace(',','.'));
+    // Só vírgula: pode ser decimal brasileiro (750,00) ou milhar (1,234)
+    if(s.includes(',')&&!s.includes('.')){
+      const parts=s.split(',');
+      // Se parte decimal tem 2 dígitos, é separador decimal
+      if(parts.length===2&&parts[1].length<=2)return parseFloat(s.replace(',','.'));
+      // Senão trata como separador de milhar
+      return parseFloat(s.replace(',',''));
+    }
+    return parseFloat(s)||0;
+  };
+
   const dadosCompra=useMemo(()=>{
     const map={};diasDaSemana.forEach(d=>{map[d.date]={...d,itens:[],valor:0};});
     const osComCompra=new Set();
@@ -2546,9 +2565,12 @@ const[semanaOffset,setSemanaOffset]=useState(0);
       (r.items||[]).forEach(it=>{
         if(it.status!=='Comprado'&&it.status!=='Concluído')return;
         if(!it.boughtAt)return;
-        if(map[it.boughtAt]){
-          map[it.boughtAt].itens.push(it);
-          map[it.boughtAt].valor+=parseFloat(it.price||0);
+        // boughtAt já vem como YYYY-MM-DD, compara direto
+        const dateKey=String(it.boughtAt).trim().slice(0,10);
+        if(map[dateKey]){
+          const preco=parsePrice(it.price);
+          map[dateKey].itens.push({...it,os:r.os,_preco:preco});
+          map[dateKey].valor+=preco;
           if(r.os)osComCompra.add(String(r.os).trim());
         }
       });
@@ -2562,45 +2584,63 @@ const[semanaOffset,setSemanaOffset]=useState(0);
 
   const maxValDia=Math.max(...dadosCompra.dias.map(d=>d.valor),1);
 
-  // Canvas gráfico 1
-  // Canvas gráfico 1
+// ── Canvas gráfico 1 ────────────────────────────────────────────────────
   const refBar1=useRef(null);
   useEffect(()=>{
     if(!refBar1.current)return;
     const ctx=refBar1.current.getContext('2d');
     const W=refBar1.current.width,H=refBar1.current.height;
     ctx.clearRect(0,0,W,H);
-    const pad=40,bot=46,top=24;
+    const pad=52,bot=56,top=32;
     const chartH=H-bot-top,chartW=W-pad*2;
     const bw=chartW/dadosDia.length;
+    // Grid lines
     [0,.25,.5,.75,1].forEach(p=>{
       const y=top+chartH*(1-p);
       ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(W-pad,y);
-      ctx.strokeStyle='#F0EAE6';ctx.lineWidth=1;ctx.setLineDash([4,4]);ctx.stroke();ctx.setLineDash([]);
-      if(p>0){ctx.fillStyle='#9A9189';ctx.font='bold 8px Plus Jakarta Sans';ctx.textAlign='right';ctx.fillText(Math.round(maxPedDia*p),pad-6,y+3);}
+      ctx.strokeStyle='#EDEAE7';ctx.lineWidth=1;ctx.setLineDash([5,5]);ctx.stroke();ctx.setLineDash([]);
+      if(p>0){
+        ctx.fillStyle='#9A9189';ctx.font='bold 11px Plus Jakarta Sans';ctx.textAlign='right';
+        ctx.fillText(Math.round(maxPedDia*p),pad-8,y+4);
+      }
     });
     dadosDia.forEach((d,i)=>{
       const x=pad+i*bw;
       const bh=maxPedDia>0?(d.pedidos.length/maxPedDia)*chartH:0;
-      const bx=x+bw*.16,bwidth=bw*.68;
+      const bx=x+bw*.18,bwidth=bw*.64;
       const isSel=diaSelecionado?.date===d.date&&diaSelecionado?.tipo==='pedidos';
+      // Barra
       ctx.beginPath();
-      if(bh>2){if(ctx.roundRect)ctx.roundRect(bx,top+chartH-bh,bwidth,bh,5);else ctx.rect(bx,top+chartH-bh,bwidth,bh);}
-      else{if(ctx.roundRect)ctx.roundRect(bx,top+chartH-3,bwidth,3,2);else ctx.rect(bx,top+chartH-3,bwidth,3);}
-      ctx.fillStyle=isSel?'#F59E0B':d.isHoje?'#DC1F1F':'#0D0D0D';
-      ctx.globalAlpha=bh>2?1:.25;ctx.fill();ctx.globalAlpha=1;
-      if(isSel){ctx.beginPath();if(ctx.roundRect)ctx.roundRect(bx-1,top+chartH-bh-1,bwidth+2,bh+2,5);else ctx.rect(bx-1,top+chartH-bh-1,bwidth+2,bh+2);ctx.strokeStyle='#F59E0B';ctx.lineWidth=2;ctx.stroke();}
-      if(d.pedidos.length>0){
-        ctx.fillStyle=isSel?'#F59E0B':d.isHoje?'#DC1F1F':'#1A1A1A';
-        ctx.font='bold 11px Plus Jakarta Sans';ctx.textAlign='center';
-        ctx.fillText(d.pedidos.length,x+bw/2,top+chartH-bh-8);
+      const barY=top+chartH-Math.max(bh,3);
+      const barH=Math.max(bh,3);
+      if(ctx.roundRect)ctx.roundRect(bx,barY,bwidth,barH,6);else ctx.rect(bx,barY,bwidth,barH);
+      ctx.fillStyle=isSel?'#F59E0B':d.isHoje?'#DC1F1F':'#1A1A1A';
+      ctx.globalAlpha=bh>3?1:.2;ctx.fill();ctx.globalAlpha=1;
+      // Borda seleção
+      if(isSel&&bh>3){
+        ctx.beginPath();
+        if(ctx.roundRect)ctx.roundRect(bx-2,barY-2,bwidth+4,barH+2,6);else ctx.rect(bx-2,barY-2,bwidth+4,barH+2);
+        ctx.strokeStyle='#F59E0B';ctx.lineWidth=2.5;ctx.stroke();
       }
-      ctx.fillStyle=isSel?'#F59E0B':d.isHoje?'#DC1F1F':'#9A9189';
-      ctx.font=`${d.isHoje||isSel?'bold ':''}9px Plus Jakarta Sans`;ctx.textAlign='center';
-      ctx.fillText(d.label,x+bw/2,H-24);
-      ctx.fillStyle='#C0B8B2';ctx.font='7px Plus Jakarta Sans';
-      const dtParts=d.date.split('-');ctx.fillText(`${dtParts[2]}/${dtParts[1]}`,x+bw/2,H-13);
-      if(d.osSet.size>0){ctx.fillStyle='#9A9189';ctx.font='7px Plus Jakarta Sans';ctx.fillText(`${d.osSet.size} OS`,x+bw/2,H-3);}
+      // Valor acima da barra
+      if(d.pedidos.length>0){
+        ctx.fillStyle=isSel?'#D97706':d.isHoje?'#DC1F1F':'#1A1A1A';
+        ctx.font='bold 14px Plus Jakarta Sans';ctx.textAlign='center';
+        ctx.fillText(String(d.pedidos.length),x+bw/2,barY-10);
+      }
+      // Label dia
+      ctx.fillStyle=isSel?'#D97706':d.isHoje?'#DC1F1F':'#6B6560';
+      ctx.font=`${isSel||d.isHoje?'bold ':''} 12px Plus Jakarta Sans`;ctx.textAlign='center';
+      ctx.fillText(d.label,x+bw/2,H-34);
+      // Data DD/MM
+      ctx.fillStyle='#B0AAA5';ctx.font='11px Plus Jakarta Sans';
+      const dtParts=d.date.split('-');
+      ctx.fillText(`${dtParts[2]}/${dtParts[1]}`,x+bw/2,H-18);
+      // OS count
+      if(d.osSet.size>0){
+        ctx.fillStyle=isSel?'#F59E0B':'#9A9189';ctx.font='bold 10px Plus Jakarta Sans';
+        ctx.fillText(`${d.osSet.size} OS`,x+bw/2,H-4);
+      }
     });
   },[dadosDia,maxPedDia,diaSelecionado]);
 
@@ -2609,7 +2649,7 @@ const[semanaOffset,setSemanaOffset]=useState(0);
     const rect=refBar1.current.getBoundingClientRect();
     const scaleX=refBar1.current.width/rect.width;
     const cx=(e.clientX-rect.left)*scaleX;
-    const pad=40,bot=46,top=24;
+    const pad=52;
     const chartW=refBar1.current.width-pad*2;
     const bw=chartW/dadosDia.length;
     const i=Math.floor((cx-pad)/bw);
@@ -2619,50 +2659,66 @@ const[semanaOffset,setSemanaOffset]=useState(0);
     setDiaSelecionado(prev=>prev?.date===d.date&&prev?.tipo==='pedidos'?null:{date:d.date,tipo:'pedidos'});
   },[dadosDia]);
 
-  // Canvas gráfico 2
+  // ── Canvas gráfico 2 ────────────────────────────────────────────────────
   const refBar2=useRef(null);
   useEffect(()=>{
     if(!refBar2.current)return;
     const ctx=refBar2.current.getContext('2d');
     const W=refBar2.current.width,H=refBar2.current.height;
     ctx.clearRect(0,0,W,H);
-    const pad=58,bot=46,top=24;
+    const pad=72,bot=56,top=32;
     const chartH=H-bot-top,chartW=W-pad*2;
     const bw=chartW/dadosCompra.dias.length;
+    // Grid lines
     [0,.25,.5,.75,1].forEach(p=>{
       const y=top+chartH*(1-p);
       ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(W-pad,y);
-      ctx.strokeStyle='#F0EAE6';ctx.lineWidth=1;ctx.setLineDash([4,4]);ctx.stroke();ctx.setLineDash([]);
+      ctx.strokeStyle='#EDEAE7';ctx.lineWidth=1;ctx.setLineDash([5,5]);ctx.stroke();ctx.setLineDash([]);
       if(p>0){
         const v=maxValDia*p;
-        ctx.fillStyle='#9A9189';ctx.font='bold 8px Plus Jakarta Sans';ctx.textAlign='right';
-        ctx.fillText(v>=1000?'R$'+(v/1000).toFixed(0)+'k':'R$'+Math.round(v),pad-6,y+3);
+        ctx.fillStyle='#9A9189';ctx.font='bold 11px Plus Jakarta Sans';ctx.textAlign='right';
+        const label=v>=1000?'R$'+(v/1000).toFixed(1).replace('.',',')+'k':'R$'+Math.round(v);
+        ctx.fillText(label,pad-8,y+4);
       }
     });
     dadosCompra.dias.forEach((d,i)=>{
       const x=pad+i*bw;
       const bh=maxValDia>0?(d.valor/maxValDia)*chartH:0;
-      const bx=x+bw*.16,bwidth=bw*.68;
+      const bx=x+bw*.18,bwidth=bw*.64;
       const isSel=diaSelecionado?.date===d.date&&diaSelecionado?.tipo==='compras';
+      // Barra
       ctx.beginPath();
-      if(bh>2){if(ctx.roundRect)ctx.roundRect(bx,top+chartH-bh,bwidth,bh,5);else ctx.rect(bx,top+chartH-bh,bwidth,bh);}
-      else{if(ctx.roundRect)ctx.roundRect(bx,top+chartH-3,bwidth,3,2);else ctx.rect(bx,top+chartH-3,bwidth,3);}
+      const barY=top+chartH-Math.max(bh,3);
+      const barH=Math.max(bh,3);
+      if(ctx.roundRect)ctx.roundRect(bx,barY,bwidth,barH,6);else ctx.rect(bx,barY,bwidth,barH);
       ctx.fillStyle=isSel?'#F59E0B':d.isHoje?'#059669':'#7C3AED';
-      ctx.globalAlpha=bh>2?1:.2;ctx.fill();ctx.globalAlpha=1;
-      if(isSel){ctx.beginPath();if(ctx.roundRect)ctx.roundRect(bx-1,top+chartH-bh-1,bwidth+2,bh+2,5);else ctx.rect(bx-1,top+chartH-bh-1,bwidth+2,bh+2);ctx.strokeStyle='#F59E0B';ctx.lineWidth=2;ctx.stroke();}
-      if(d.itens.length>0){
-        ctx.fillStyle=isSel?'#F59E0B':d.isHoje?'#059669':'#7C3AED';
-        ctx.font='bold 10px Plus Jakarta Sans';ctx.textAlign='center';
-        const vStr=d.valor>=1000?'R$'+(d.valor/1000).toFixed(1)+'k':'R$'+d.valor.toFixed(0);
-        ctx.fillText(vStr,x+bw/2,top+chartH-bh-8);
+      ctx.globalAlpha=bh>3?1:.18;ctx.fill();ctx.globalAlpha=1;
+      // Borda seleção
+      if(isSel&&bh>3){
+        ctx.beginPath();
+        if(ctx.roundRect)ctx.roundRect(bx-2,barY-2,bwidth+4,barH+2,6);else ctx.rect(bx-2,barY-2,bwidth+4,barH+2);
+        ctx.strokeStyle='#F59E0B';ctx.lineWidth=2.5;ctx.stroke();
       }
-      ctx.fillStyle=isSel?'#F59E0B':d.isHoje?'#059669':'#9A9189';
-      ctx.font=`${d.isHoje||isSel?'bold ':''}9px Plus Jakarta Sans`;ctx.textAlign='center';
-      ctx.fillText(d.label,x+bw/2,H-24);
+      // Valor acima da barra
+      if(d.itens.length>0&&d.valor>0){
+        ctx.fillStyle=isSel?'#D97706':d.isHoje?'#059669':'#7C3AED';
+        ctx.font='bold 12px Plus Jakarta Sans';ctx.textAlign='center';
+        const vStr=d.valor>=1000?'R$'+(d.valor/1000).toFixed(1).replace('.',',')+'k':'R$'+d.valor.toFixed(0);
+        ctx.fillText(vStr,x+bw/2,barY-10);
+      }
+      // Label dia
+      ctx.fillStyle=isSel?'#D97706':d.isHoje?'#059669':'#6B6560';
+      ctx.font=`${isSel||d.isHoje?'bold ':''} 12px Plus Jakarta Sans`;ctx.textAlign='center';
+      ctx.fillText(d.label,x+bw/2,H-34);
+      // Data DD/MM
+      ctx.fillStyle='#B0AAA5';ctx.font='11px Plus Jakarta Sans';
       const dtParts=d.date.split('-');
-      ctx.fillStyle='#C0B8B2';ctx.font='7px Plus Jakarta Sans';
-      ctx.fillText(`${dtParts[2]}/${dtParts[1]}`,x+bw/2,H-13);
-      if(d.itens.length>0){ctx.fillStyle='#9A9189';ctx.font='7px Plus Jakarta Sans';ctx.fillText(`${d.itens.length}×`,x+bw/2,H-3);}
+      ctx.fillText(`${dtParts[2]}/${dtParts[1]}`,x+bw/2,H-18);
+      // Qtd itens
+      if(d.itens.length>0){
+        ctx.fillStyle=isSel?'#F59E0B':'#9A9189';ctx.font='bold 10px Plus Jakarta Sans';
+        ctx.fillText(`${d.itens.length} item${d.itens.length>1?'s':''}`,x+bw/2,H-4);
+      }
     });
   },[dadosCompra,maxValDia,diaSelecionado]);
 
@@ -2671,7 +2727,7 @@ const[semanaOffset,setSemanaOffset]=useState(0);
     const rect=refBar2.current.getBoundingClientRect();
     const scaleX=refBar2.current.width/rect.width;
     const cx=(e.clientX-rect.left)*scaleX;
-    const pad=58,bot=46,top=24;
+    const pad=72;
     const chartW=refBar2.current.width-pad*2;
     const bw=chartW/dadosCompra.dias.length;
     const i=Math.floor((cx-pad)/bw);
@@ -2764,7 +2820,7 @@ const[semanaOffset,setSemanaOffset]=useState(0);
             ))}
           </div>
         </div>
-      <canvas ref={refBar1} width={700} height={200} style={{width:'100%',height:'auto',display:'block',cursor:'pointer'}} onClick={handleClickBar1}/>
+     <canvas ref={refBar1} width={840} height={240} style={{width:'100%',height:'auto',display:'block',cursor:'pointer'}} onClick={handleClickBar1}/>
         {diaSelecionado?.tipo==='pedidos'&&(()=>{
           const dSel=dadosDia.find(d=>d.date===diaSelecionado.date);
           if(!dSel||dSel.pedidos.length===0)return null;
@@ -2848,7 +2904,7 @@ const[semanaOffset,setSemanaOffset]=useState(0);
             ))}
           </div>
         </div>
-        <canvas ref={refBar2} width={700} height={200} style={{width:'100%',height:'auto',display:'block',cursor:'pointer'}} onClick={handleClickBar2}/>
+        <canvas ref={refBar2} width={840} height={240} style={{width:'100%',height:'auto',display:'block',cursor:'pointer'}} onClick={handleClickBar2}/>
         {diaSelecionado?.tipo==='compras'&&(()=>{
           const dSel=dadosCompra.dias.find(d=>d.date===diaSelecionado.date);
           if(!dSel||dSel.itens.length===0)return null;
@@ -2857,7 +2913,7 @@ const[semanaOffset,setSemanaOffset]=useState(0);
             const k=String(it.os).trim();
             if(!porOS[k])porOS[k]={os:k,itens:[],total:0};
             porOS[k].itens.push(it);
-            porOS[k].total+=parseFloat(it.price||0);
+            porOS[k].total+=parseFloat(it._preco||it.price||0);
           });
           const grupos=Object.values(porOS).sort((a,b)=>b.total-a.total);
           const totalDia=dSel.valor;
@@ -2899,7 +2955,7 @@ const[semanaOffset,setSemanaOffset]=useState(0);
                           </div>
                           <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
                             {it.supplier&&<span style={{fontSize:8,color:'var(--muted)',fontWeight:600}}>{it.supplier}</span>}
-                            <span style={{fontSize:10,fontWeight:800,color:'#059669'}}>{it.price>0?fmtBRL(it.price):'—'}</span>
+                            <span style={{fontSize:10,fontWeight:800,color:'#059669'}}>{(it._preco||parsePrice(it.price))>0?fmtBRL(it._preco||parsePrice(it.price)):'—'}</span>
                           </div>
                         </div>
                       ))}
