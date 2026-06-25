@@ -596,13 +596,49 @@ function DonorSystem({requests,vehicles,loggedInUser}){
   return{...base,id:String(Date.now())+String(Math.floor(Math.random()*9999)),status:novoStatus,donatedTo:targetOS};
 }).filter(Boolean);
       const doadoraDocs=requests.filter(r=>String(r.os).trim()===sourceOS.trim());
+     // Comprime fotos dos itens transferidos antes de salvar na doadora
+      const toTransferCompressed=await Promise.all(toTransfer.map(async it=>{
+        if(!it.photo)return it;
+        return new Promise(resolve=>{
+          const img=new Image();
+          img.onload=()=>{
+            const c=document.createElement('canvas');
+            let w=img.width,h=img.height;const mx=400;
+            if(w>h&&w>mx){h=Math.round(h*mx/w);w=mx;}else if(h>mx){w=Math.round(w*mx/h);h=mx;}
+            c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);
+            resolve({...it,photo:c.toDataURL('image/jpeg',0.35)});
+          };
+          img.onerror=()=>resolve({...it,photo:null});
+          img.src=it.photo;
+        });
+      }));
+
+      // Divide em partes se necessário (limite 900KB por documento)
+      const LIMITE_ITENS=10;
       if(doadoraDocs.length>0){
         const donorReq=doadoraDocs[0];
-        await col('requests').doc(donorReq.id).update({items:stripUndefined([...(donorReq.items||[]),...toTransfer])});
+        const todosItens=stripUndefined([...(donorReq.items||[]),...toTransferCompressed]);
+        const estimado=JSON.stringify(todosItens).length;
+        if(estimado>850000){
+          // Divide: mantém existentes no doc atual, adiciona transferidos em novo doc
+          for(let p=0;p<toTransferCompressed.length;p+=LIMITE_ITENS){
+            const parte=toTransferCompressed.slice(p,p+LIMITE_ITENS);
+            const vData=sourceVehicle||{os:sourceOS};const cleanVData={};
+            Object.entries(vData).forEach(([k,v])=>{if(v!==undefined)cleanVData[k]=v;});
+            await col('requests').add({os:sourceOS,responsavel:loggedInUser?.user||'Sistema',vehicleData:cleanVData,unidade:donorReq.unidade||'Unidade 1',items:stripUndefined(parte),timestamp:Date.now()+(p),status:'Pendente'});
+          }
+          await col('requests').doc(donorReq.id).update({items:stripUndefined(donorReq.items||[])});
+        }else{
+          await col('requests').doc(donorReq.id).update({items:todosItens});
+        }
       }else{
         const vData=sourceVehicle||{os:sourceOS};const cleanVData={};
         Object.entries(vData).forEach(([k,v])=>{if(v!==undefined)cleanVData[k]=v;});
-        await col('requests').add({os:sourceOS,responsavel:loggedInUser?.user||'Sistema',vehicleData:cleanVData,unidade:'Unidade 1',items:toTransfer,timestamp:Date.now(),status:'Pendente'});
+        // Divide em partes se muitos itens
+        for(let p=0;p<toTransferCompressed.length;p+=LIMITE_ITENS){
+          const parte=toTransferCompressed.slice(p,p+LIMITE_ITENS);
+          await col('requests').add({os:sourceOS,responsavel:loggedInUser?.user||'Sistema',vehicleData:cleanVData,unidade:'Unidade 1',items:stripUndefined(parte),timestamp:Date.now()+(p),status:'Pendente'});
+        }
       }
      col('donations').add(stripUndefined({
   receptoraOS:targetOS,
