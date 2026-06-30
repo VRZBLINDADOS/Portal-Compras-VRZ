@@ -1211,11 +1211,42 @@ function StatusView({requests,loggedInUser,vehicles}){
     doado:merged.filter(r=>r.items?.some(it=>it.status==='Doado'||it.receivedFrom||it.donatedTo)).length,
   }),[merged]);
 
-  const exportCSV=()=>{
+const exportCSV=()=>{
     const rows=[['Data','OS','Unidade','Chassi','Veiculo','Peca','Qtd','Status','Valor','Loja','Prazo','Entrega'].join(';')];
     filtered.forEach(r=>(r.items||[]).forEach(it=>rows.push([r.timestamp?new Date(r.timestamp).toLocaleDateString():'',r.os,r.unidade||'Unidade 1',r.vehicleData?.chassi||'-',r.vehicleData?.modelo||'-',it.description||'-',it.quantity||1,it.statusOriginal||it.status||'Pendente',it.price||0,it.supplier||'-',it.deliveryDate||'-',it.actualDeliveryDate||'-'].join(';'))));
     const blob=new Blob(['\uFEFF'+rows.join('\n')],{type:'text/csv;charset=utf-8;'});
     const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`Relatorio_VRZ_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.csv`;a.click();
+  };
+
+  // Status Semáforo — 1 linha por OS, todas as peças concatenadas em UMA célula, para uso com PROCV
+  const csvCell=(v)=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+  const exportSemaforo=()=>{
+    const rows=[[csvCell('OS'),csvCell('Unidade'),csvCell('Veiculo'),csvCell('Chassi'),csvCell('Status Semáforo')].join(';')];
+    filtered.forEach(r=>{
+      const linhas=(r.items||[]).map(it=>{
+        const desc=it.description||'(sem descrição)';
+        const qtd=it.quantity||1;
+        let situacao='Pendente';
+        if(it.status==='Doado'){
+          situacao=it.receivedFrom?`Doado (recebido da OS ${it.receivedFrom})`:`Doado (transferido para OS ${it.donatedTo||'?'})`;
+        }else if(it.status==='Concluído'){
+          const dt=it.actualDeliveryDate?new Date(it.actualDeliveryDate+'T00:00:00').toLocaleDateString('pt-BR'):'';
+          situacao='Entregue'+(dt?` (Entrega: ${dt})`:'');
+        }else if(it.status==='Comprado'){
+          const dt=it.deliveryDate?new Date(it.deliveryDate+'T00:00:00').toLocaleDateString('pt-BR'):'';
+          situacao='Comprado'+(dt?` (Entrega: ${dt})`:'');
+        }else if(it.status==='Em Cotação'){
+          situacao='Pendente (Em Cotação)';
+        }else{
+          situacao='Pendente';
+        }
+        return `${qtd}x ${desc} — ${situacao}`;
+      });
+      const celula=linhas.join('\n');
+      rows.push([csvCell(r.os),csvCell(r.unidade||'Unidade 1'),csvCell(r.vehicleData?.modelo||'-'),csvCell(r.vehicleData?.chassi||'-'),csvCell(celula)].join(';'));
+    });
+    const blob=new Blob(['\uFEFF'+rows.join('\r\n')],{type:'text/csv;charset=utf-8;'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`Status_Semaforo_VRZ_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.csv`;a.click();
   };
 
   const exportPDF=async req=>{
@@ -1293,9 +1324,14 @@ function StatusView({requests,loggedInUser,vehicles}){
             <option value="todas">Todas as Unidades</option>
             {UNIDADES.map(u=><option key={u} value={u}>{u}</option>)}
           </select>
-          {canDo(role,'delete')&&(
+         {canDo(role,'delete')&&(
             <button onClick={exportCSV} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 14px',background:'#059669',color:'#fff',border:'none',borderRadius:8,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}>
               <Icon name="file-text" size={13}/> Excel
+            </button>
+          )}
+          {canDo(role,'delete')&&(
+            <button onClick={exportSemaforo} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 14px',background:'#7C3AED',color:'#fff',border:'none',borderRadius:8,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}>
+              <Icon name="file-spreadsheet" size={13}/> Status Semáforo
             </button>
           )}
           <div style={{position:'relative',flex:1,minWidth:200}}>
