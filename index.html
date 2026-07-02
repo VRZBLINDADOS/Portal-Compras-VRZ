@@ -1218,25 +1218,6 @@ const exportCSV=()=>{
     const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`Relatorio_VRZ_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.csv`;a.click();
   };
 
-  const csvCell=(v)=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
-  const exportSemaforo=()=>{
-    const rows=[[csvCell('OS'),csvCell('Unidade'),csvCell('Veiculo'),csvCell('Chassi'),csvCell('Status Semáforo')].join(';')];
-    filtered.forEach(r=>{
-      const linhas=(r.items||[]).map(it=>{
-        const desc=it.description||'(sem descrição)';const qtd=it.quantity||1;
-        let sit='Pendente';
-        if(it.status==='Doado'){sit=it.receivedFrom?`Doado (recebido da OS ${it.receivedFrom})`:`Doado (transferido para OS ${it.donatedTo||'?'})`;}
-        else if(it.status==='Concluído'){const dt=it.actualDeliveryDate?new Date(it.actualDeliveryDate+'T00:00:00').toLocaleDateString('pt-BR'):'';sit='Entregue'+(dt?` (Entrega: ${dt})`:'');}
-        else if(it.status==='Comprado'){const dt=it.deliveryDate?new Date(it.deliveryDate+'T00:00:00').toLocaleDateString('pt-BR'):'';sit='Comprado'+(dt?` (Entrega: ${dt})`:'');}
-        else if(it.status==='Em Cotação'){sit='Pendente (Em Cotação)';}
-        return `${qtd}x ${desc} — ${sit}`;
-      });
-      rows.push([csvCell(r.os),csvCell(r.unidade||'Unidade 1'),csvCell(r.vehicleData?.modelo||'-'),csvCell(r.vehicleData?.chassi||'-'),csvCell(linhas.join('\n'))].join(';'));
-    });
-    const blob=new Blob(['\uFEFF'+rows.join('\r\n')],{type:'text/csv;charset=utf-8;'});
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`Status_Semaforo_VRZ_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.csv`;a.click();
-  };
-
   // Status Semáforo — 1 linha por OS, todas as peças concatenadas em UMA célula, para uso com PROCV
   const csvCell=(v)=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
   const exportSemaforo=()=>{
@@ -1343,11 +1324,6 @@ const exportCSV=()=>{
             <option value="todas">Todas as Unidades</option>
             {UNIDADES.map(u=><option key={u} value={u}>{u}</option>)}
           </select>
-         {canDo(role,'delete')&&(
-            <button onClick={exportCSV} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 14px',background:'#059669',color:'#fff',border:'none',borderRadius:8,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}>
-              <Icon name="file-text" size={13}/> Excel
-            </button>
-          )}
          {canDo(role,'delete')&&(
             <button onClick={exportCSV} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 14px',background:'#059669',color:'#fff',border:'none',borderRadius:8,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}>
               <Icon name="file-text" size={13}/> Excel
@@ -2577,295 +2553,391 @@ function DeletedItemsView({loggedInUser}){
 }
   
 // ── App Principal
-// ── Resumo Reunião ────────────────────────────────────────────────────────
+ // ── Resumo Reunião ────────────────────────────────────────────────────────
 function ResumoReuniaoView({requests}){
-  const[periodoTipo,setPeriodoTipo]=useState('semanal');
-  const[offset,setOffset]=useState(0);
-  const[diaSelecionado,setDiaSelecionado]=useState(null);
+  // semanaOffset: 0 = semana atual, -1 = semana passada, etc.
+const[semanaOffset,setSemanaOffset]=useState(0);
+  const[diaSelecionado,setDiaSelecionado]=useState(null); // {date, tipo: 'pedidos'|'compras'}
 
-  useEffect(()=>{setOffset(0);setDiaSelecionado(null);},[periodoTipo]);
+  // Calcula início (domingo) e fim (sábado) da semana selecionada
+  const{inicioSemana,fimSemana}=useMemo(()=>{
+    const agora=new Date();
+    const diaSem=agora.getDay(); // 0=dom
+    const ini=new Date(agora);
+    ini.setDate(agora.getDate()-diaSem+(semanaOffset*7));
+    ini.setHours(0,0,0,0);
+    const fim=new Date(ini);
+    fim.setDate(ini.getDate()+6);
+    fim.setHours(23,59,59,999);
+    return{inicioSemana:ini,fimSemana:fim};
+  },[semanaOffset]);
 
-  const DN=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
-  const MN=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  const isSemanaAtual=semanaOffset===0;
+  const diasSemana=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 
-  const mkDay=(d)=>({
-    label:DN[d.getDay()],
-    date:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`,
-    dd:`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`,
-    isHoje:d.toDateString()===new Date().toDateString(),
-  });
+  // Gera array dos 7 dias da semana selecionada
+  const diasDaSemana=useMemo(()=>{
+    return Array.from({length:7},(_,i)=>{
+      const d=new Date(inicioSemana);
+      d.setDate(inicioSemana.getDate()+i);
+      return{
+        label:diasSemana[d.getDay()],
+        date:d.toISOString().slice(0,10),
+        isHoje:d.toDateString()===new Date().toDateString(),
+        pedidos:[],
+        osSet:new Set(),
+      };
+    });
+  },[inicioSemana]);
 
-  const{ini,fim,dias,label}=useMemo(()=>{
-    const now=new Date();
-    if(periodoTipo==='semanal'){
-      const i=new Date(now);i.setDate(now.getDate()-now.getDay()+(offset*7));i.setHours(0,0,0,0);
-      const f=new Date(i);f.setDate(i.getDate()+6);f.setHours(23,59,59,999);
-      return{ini:i,fim:f,dias:Array.from({length:7},(_,x)=>{const d=new Date(i);d.setDate(i.getDate()+x);return mkDay(d);}),label:`${i.toLocaleDateString('pt-BR')} – ${f.toLocaleDateString('pt-BR')}`};
-    }
-    if(periodoTipo==='quinzenal'){
-      const dom=now.getDate();
-      let cur=new Date(now.getFullYear(),now.getMonth(),dom<=15?1:16);
-      const steps=Math.abs(offset),dir=offset<0?-1:1;
-      for(let s=0;s<steps;s++){
-        if(dir<0)cur=cur.getDate()===1?new Date(cur.getFullYear(),cur.getMonth()-1,16):new Date(cur.getFullYear(),cur.getMonth(),1);
-        else cur=cur.getDate()===1?new Date(cur.getFullYear(),cur.getMonth(),16):new Date(cur.getFullYear(),cur.getMonth()+1,1);
+  // ── Gráfico 1: pedidos por dia ─────────────────────────────────────────
+ const dadosDia=useMemo(()=>{
+    const map={};diasDaSemana.forEach(d=>{map[d.date]={...d,pedidos:[],osSet:new Set()};});
+    requests.forEach(r=>{
+      if(!r.timestamp)return;
+      // Usa horário local para comparar data
+      const ts=r.timestamp;
+      const dt=new Date(ts);
+      const key=`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+      if(map[key]){
+        map[key].pedidos.push(r);
+        if(r.os)map[key].osSet.add(String(r.os).trim());
       }
-      const f=cur.getDate()===1?new Date(cur.getFullYear(),cur.getMonth(),15,23,59,59,999):new Date(cur.getFullYear(),cur.getMonth()+1,0,23,59,59,999);
-      const nd=Math.round((f-cur)/86400000)+1;
-      return{ini:cur,fim:f,dias:Array.from({length:nd},(_,x)=>{const d=new Date(cur);d.setDate(cur.getDate()+x);return mkDay(d);}),label:`${cur.toLocaleDateString('pt-BR')} – ${f.toLocaleDateString('pt-BR')}`};
-    }
-    const i=new Date(now.getFullYear(),now.getMonth()+offset,1);
-    const f=new Date(i.getFullYear(),i.getMonth()+1,0,23,59,59,999);
-    return{ini:i,fim:f,dias:Array.from({length:f.getDate()},(_,x)=>{const d=new Date(i);d.setDate(x+1);return mkDay(d);}),label:`${MN[i.getMonth()]} de ${i.getFullYear()}`};
-  },[periodoTipo,offset]);
+    });
+    return Object.values(map);
+  },[requests,diasDaSemana]);
 
-  const isAtual=useMemo(()=>{const t=new Date();return t>=ini&&t<=fim;},[ini,fim]);
+  const totalPedidos=dadosDia.reduce((a,d)=>a+d.pedidos.length,0);
+  const osUnicas=new Set(dadosDia.flatMap(d=>[...d.osSet])).size;
+  const mediaPorCarro=osUnicas>0?(totalPedidos/osUnicas).toFixed(1):'0';
+  const maxPedDia=Math.max(...dadosDia.map(d=>d.pedidos.length),1);
 
-  const parseP=(v)=>{
-    if(!v&&v!==0)return 0;const s=String(v).trim().replace(/\s/g,'');
+  // ── Gráfico 2: compras por dia ─────────────────────────────────────────
+  // Converte price corretamente independente de vírgula ou ponto
+  const parsePrice=(v)=>{
+    if(!v&&v!==0)return 0;
+    const s=String(v).trim().replace(/\s/g,'');
+    // Se tem vírgula E ponto: formato brasileiro 1.234,56
     if(s.includes(',')&&s.includes('.'))return parseFloat(s.replace(/\./g,'').replace(',','.'));
-    if(s.includes(',')&&!s.includes('.')){const p=s.split(',');if(p.length===2&&p[1].length<=2)return parseFloat(s.replace(',','.'));return parseFloat(s.replace(',',''));}
+    // Só vírgula: pode ser decimal brasileiro (750,00) ou milhar (1,234)
+    if(s.includes(',')&&!s.includes('.')){
+      const parts=s.split(',');
+      // Se parte decimal tem 2 dígitos, é separador decimal
+      if(parts.length===2&&parts[1].length<=2)return parseFloat(s.replace(',','.'));
+      // Senão trata como separador de milhar
+      return parseFloat(s.replace(',',''));
+    }
     return parseFloat(s)||0;
   };
 
-  const n=dias.length;
-
-  const dpd=useMemo(()=>{
-    const m={};dias.forEach(d=>{m[d.date]={...d,pedidos:[],osSet:new Set()};});
-    requests.forEach(r=>{
-      if(!r.timestamp)return;
-      const dt=new Date(r.timestamp);
-      const k=`${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
-      if(m[k]){m[k].pedidos.push(r);if(r.os)m[k].osSet.add(String(r.os).trim());}
-    });
-    return Object.values(m);
-  },[requests,dias]);
-
-  const dcp=useMemo(()=>{
-    const m={};dias.forEach(d=>{m[d.date]={...d,itens:[],valor:0};});
-    const os=new Set();
+  const dadosCompra=useMemo(()=>{
+    const map={};diasDaSemana.forEach(d=>{map[d.date]={...d,itens:[],valor:0};});
+    const osComCompra=new Set();
     requests.forEach(r=>{
       (r.items||[]).forEach(it=>{
         if(it.status!=='Comprado'&&it.status!=='Concluído')return;
         if(!it.boughtAt)return;
-        const dk=String(it.boughtAt).trim().slice(0,10);
-        if(m[dk]){const p=parseP(it.price);m[dk].itens.push({...it,os:r.os,_p:p});m[dk].valor+=p;if(r.os)os.add(String(r.os).trim());}
+        // boughtAt já vem como YYYY-MM-DD, compara direto
+        const dateKey=String(it.boughtAt).trim().slice(0,10);
+        if(map[dateKey]){
+          const preco=parsePrice(it.price);
+          map[dateKey].itens.push({...it,os:r.os,_preco:preco});
+          map[dateKey].valor+=preco;
+          if(r.os)osComCompra.add(String(r.os).trim());
+        }
       });
     });
-    const d=Object.values(m);const tv=d.reduce((a,x)=>a+x.valor,0);
-    return{dias:d,totalItens:d.reduce((a,x)=>a+x.itens.length,0),osUnicas:os.size,totalValor:tv,mediaValorOS:os.size>0?tv/os.size:0};
-  },[requests,dias]);
+    const dias=Object.values(map);
+    const totalValor=dias.reduce((a,d)=>a+d.valor,0);
+    const totalItens=dias.reduce((a,d)=>a+d.itens.length,0);
+    const mediaValorOS=osComCompra.size>0?(totalValor/osComCompra.size):0;
+    return{dias,totalItens,osUnicas:osComCompra.size,totalValor,mediaValorOS};
+  },[requests,diasDaSemana]);
 
-  const totPed=dpd.reduce((a,d)=>a+d.pedidos.length,0);
-  const osUnicasPed=new Set(dpd.flatMap(d=>[...d.osSet])).size;
-  const maxPed=Math.max(...dpd.map(d=>d.pedidos.length),1);
-  const maxVal=Math.max(...dcp.dias.map(d=>d.valor),1);
+  const maxValDia=Math.max(...dadosCompra.dias.map(d=>d.valor),1);
 
-  const vFs=n<=7?14:n<=15?12:9;
-  const dFs=n<=7?12:n<=15?10:8;
-  const tFs=n<=7?10:n<=15?9:7;
-  const sFs=n<=7?9:n<=15?8:0;
-  const padB=n<=7?70:n<=15?65:56;
-  const pL1=52,pL2=76,pR=20,pT=36;
-
-  const r1=useRef(null);
+// ── Canvas gráfico 1 ────────────────────────────────────────────────────
+  const refBar1=useRef(null);
   useEffect(()=>{
-    if(!r1.current)return;
-    const cv=r1.current,ctx=cv.getContext('2d');
-    const W=cv.width,H=cv.height;
-    ctx.clearRect(0,0,W,H);ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
-    const cH=H-padB-pT,cW=W-pL1-pR,bw=cW/n;
-    const maxY=Math.max(Math.ceil(maxPed/5)*5,5);
-    for(let i=0;i<=5;i++){
-      const v=Math.round(maxY*i/5),y=pT+cH*(1-i/5);
-      ctx.beginPath();ctx.moveTo(pL1,y);ctx.lineTo(W-pR,y);
-      ctx.strokeStyle='#E8E3E0';ctx.lineWidth=1;ctx.setLineDash([4,4]);ctx.stroke();ctx.setLineDash([]);
-      ctx.fillStyle='#9A9189';ctx.font=`bold ${tFs}px sans-serif`;ctx.textAlign='right';ctx.fillText(String(v),pL1-6,y+tFs*.4);
-    }
-    dpd.forEach((d,i)=>{
-      const x=pL1+i*bw;const v=d.pedidos.length;
-      const bh=maxY>0?(v/maxY)*cH:0;
-      const bx=x+bw*.15,bw2=bw*.7;
+    if(!refBar1.current)return;
+    const ctx=refBar1.current.getContext('2d');
+    const W=refBar1.current.width,H=refBar1.current.height;
+    ctx.clearRect(0,0,W,H);
+    const pad=52,bot=56,top=32;
+    const chartH=H-bot-top,chartW=W-pad*2;
+    const bw=chartW/dadosDia.length;
+    // Grid lines
+    [0,.25,.5,.75,1].forEach(p=>{
+      const y=top+chartH*(1-p);
+      ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(W-pad,y);
+      ctx.strokeStyle='#EDEAE7';ctx.lineWidth=1;ctx.setLineDash([5,5]);ctx.stroke();ctx.setLineDash([]);
+      if(p>0){
+        ctx.fillStyle='#9A9189';ctx.font='bold 11px Plus Jakarta Sans';ctx.textAlign='right';
+        ctx.fillText(Math.round(maxPedDia*p),pad-8,y+4);
+      }
+    });
+    dadosDia.forEach((d,i)=>{
+      const x=pad+i*bw;
+      const bh=maxPedDia>0?(d.pedidos.length/maxPedDia)*chartH:0;
+      const bx=x+bw*.18,bwidth=bw*.64;
       const isSel=diaSelecionado?.date===d.date&&diaSelecionado?.tipo==='pedidos';
-      const barY=pT+cH-Math.max(bh,v>0?2:0),barH=Math.max(bh,v>0?2:1);
+      // Barra
       ctx.beginPath();
-      if(ctx.roundRect)ctx.roundRect(bx,barY,bw2,barH,Math.min(4,bw2/3));else ctx.rect(bx,barY,bw2,barH);
-      ctx.fillStyle=isSel?'#F59E0B':'#DC1F1F';ctx.globalAlpha=v>0?1:.12;ctx.fill();ctx.globalAlpha=1;
-      if(v>0){ctx.fillStyle='#1A1A1A';ctx.font=`bold ${vFs}px sans-serif`;ctx.textAlign='center';ctx.fillText(String(v),x+bw/2,barY-6);}
-      else{ctx.fillStyle='#C0B9B4';ctx.font=`${tFs}px sans-serif`;ctx.textAlign='center';ctx.fillText('0',x+bw/2,pT+cH-6);}
-      const yB=pT+cH+14;
-      ctx.fillStyle=d.isHoje?'#DC1F1F':isSel?'#D97706':'#1A1A1A';
-      ctx.font=`bold ${dFs}px sans-serif`;ctx.textAlign='center';ctx.fillText(d.label,x+bw/2,yB);
-      ctx.fillStyle='#9A9189';ctx.font=`${tFs}px sans-serif`;ctx.textAlign='center';ctx.fillText(d.dd,x+bw/2,yB+dFs+3);
-      if(sFs>0){const os=d.osSet.size;ctx.fillStyle=os>0?'#DC1F1F':'#C0B9B4';ctx.font=`bold ${sFs}px sans-serif`;ctx.textAlign='center';ctx.fillText(os>0?`${os} OS`:'—',x+bw/2,yB+dFs+3+tFs+3);}
+      const barY=top+chartH-Math.max(bh,3);
+      const barH=Math.max(bh,3);
+      if(ctx.roundRect)ctx.roundRect(bx,barY,bwidth,barH,6);else ctx.rect(bx,barY,bwidth,barH);
+      ctx.fillStyle=isSel?'#F59E0B':d.isHoje?'#DC1F1F':'#1A1A1A';
+      ctx.globalAlpha=bh>3?1:.2;ctx.fill();ctx.globalAlpha=1;
+      // Borda seleção
+      if(isSel&&bh>3){
+        ctx.beginPath();
+        if(ctx.roundRect)ctx.roundRect(bx-2,barY-2,bwidth+4,barH+2,6);else ctx.rect(bx-2,barY-2,bwidth+4,barH+2);
+        ctx.strokeStyle='#F59E0B';ctx.lineWidth=2.5;ctx.stroke();
+      }
+      // Valor acima da barra
+      if(d.pedidos.length>0){
+        ctx.fillStyle=isSel?'#D97706':d.isHoje?'#DC1F1F':'#1A1A1A';
+        ctx.font='bold 14px Plus Jakarta Sans';ctx.textAlign='center';
+        ctx.fillText(String(d.pedidos.length),x+bw/2,barY-10);
+      }
+      // Label dia
+      ctx.fillStyle=isSel?'#D97706':d.isHoje?'#DC1F1F':'#6B6560';
+      ctx.font=`${isSel||d.isHoje?'bold ':''} 12px Plus Jakarta Sans`;ctx.textAlign='center';
+      ctx.fillText(d.label,x+bw/2,H-34);
+      // Data DD/MM
+      ctx.fillStyle='#B0AAA5';ctx.font='11px Plus Jakarta Sans';
+      const dtParts=d.date.split('-');
+      ctx.fillText(`${dtParts[2]}/${dtParts[1]}`,x+bw/2,H-18);
+      // OS count
+      if(d.osSet.size>0){
+        ctx.fillStyle=isSel?'#F59E0B':'#9A9189';ctx.font='bold 10px Plus Jakarta Sans';
+        ctx.fillText(`${d.osSet.size} OS`,x+bw/2,H-4);
+      }
     });
-  },[dpd,maxPed,diaSelecionado,n,vFs,dFs,tFs,sFs,padB,pT,pL1,pR]);
+  },[dadosDia,maxPedDia,diaSelecionado]);
 
-  const r2=useRef(null);
+  const handleClickBar1=useCallback((e)=>{
+    if(!refBar1.current)return;
+    const rect=refBar1.current.getBoundingClientRect();
+    const scaleX=refBar1.current.width/rect.width;
+    const cx=(e.clientX-rect.left)*scaleX;
+    const pad=52;
+    const chartW=refBar1.current.width-pad*2;
+    const bw=chartW/dadosDia.length;
+    const i=Math.floor((cx-pad)/bw);
+    if(i<0||i>=dadosDia.length)return;
+    const d=dadosDia[i];
+    if(d.pedidos.length===0)return;
+    setDiaSelecionado(prev=>prev?.date===d.date&&prev?.tipo==='pedidos'?null:{date:d.date,tipo:'pedidos'});
+  },[dadosDia]);
+
+  // ── Canvas gráfico 2 ────────────────────────────────────────────────────
+  const refBar2=useRef(null);
   useEffect(()=>{
-    if(!r2.current)return;
-    const cv=r2.current,ctx=cv.getContext('2d');
-    const W=cv.width,H=cv.height;
-    ctx.clearRect(0,0,W,H);ctx.fillStyle='#fff';ctx.fillRect(0,0,W,H);
-    const cH=H-padB-pT,cW=W-pL2-pR,bw=cW/n;
-    const fmtV=(v)=>{if(v===0)return'R$ 0';if(v>=1000)return'R$ '+(v/1000).toFixed(1).replace('.',',')+'k';return'R$ '+Math.round(v);};
-    for(let i=0;i<=5;i++){
-      const v=maxVal*i/5,y=pT+cH*(1-i/5);
-      ctx.beginPath();ctx.moveTo(pL2,y);ctx.lineTo(W-pR,y);
-      ctx.strokeStyle='#E8E3E0';ctx.lineWidth=1;ctx.setLineDash([4,4]);ctx.stroke();ctx.setLineDash([]);
-      ctx.fillStyle='#9A9189';ctx.font=`bold ${tFs}px sans-serif`;ctx.textAlign='right';ctx.fillText(fmtV(v),pL2-6,y+tFs*.4);
-    }
-    dcp.dias.forEach((d,i)=>{
-      const x=pL2+i*bw;const v=d.valor;
-      const bh=maxVal>0?(v/maxVal)*cH:0;
-      const bx=x+bw*.15,bw2=bw*.7;
-      const isSel=diaSelecionado?.date===d.date&&diaSelecionado?.tipo==='compras';
-      const barY=pT+cH-Math.max(bh,v>0?2:0),barH=Math.max(bh,v>0?2:1);
-      ctx.beginPath();
-      if(ctx.roundRect)ctx.roundRect(bx,barY,bw2,barH,Math.min(4,bw2/3));else ctx.rect(bx,barY,bw2,barH);
-      ctx.fillStyle=isSel?'#F59E0B':'#DC1F1F';ctx.globalAlpha=v>0?1:.12;ctx.fill();ctx.globalAlpha=1;
-      const vF2=Math.min(vFs,bw*1.4>36?vFs:8);
-      if(v>0){ctx.fillStyle='#1A1A1A';ctx.font=`bold ${vF2}px sans-serif`;ctx.textAlign='center';ctx.fillText(fmtV(v),x+bw/2,barY-6);}
-      else{ctx.fillStyle='#C0B9B4';ctx.font=`${tFs}px sans-serif`;ctx.textAlign='center';ctx.fillText('R$ 0',x+bw/2,pT+cH-6);}
-      const yB=pT+cH+14;
-      ctx.fillStyle=d.isHoje?'#DC1F1F':isSel?'#D97706':'#1A1A1A';
-      ctx.font=`bold ${dFs}px sans-serif`;ctx.textAlign='center';ctx.fillText(d.label,x+bw/2,yB);
-      ctx.fillStyle='#9A9189';ctx.font=`${tFs}px sans-serif`;ctx.textAlign='center';ctx.fillText(d.dd,x+bw/2,yB+dFs+3);
-      if(sFs>0){const it=d.itens.length;ctx.fillStyle='#9A9189';ctx.font=`${sFs}px sans-serif`;ctx.textAlign='center';ctx.fillText(it>0?`${it} item${it!==1?'s':''}`:'—',x+bw/2,yB+dFs+3+tFs+3);}
+    if(!refBar2.current)return;
+    const ctx=refBar2.current.getContext('2d');
+    const W=refBar2.current.width,H=refBar2.current.height;
+    ctx.clearRect(0,0,W,H);
+    const pad=72,bot=56,top=32;
+    const chartH=H-bot-top,chartW=W-pad*2;
+    const bw=chartW/dadosCompra.dias.length;
+    // Grid lines
+    [0,.25,.5,.75,1].forEach(p=>{
+      const y=top+chartH*(1-p);
+      ctx.beginPath();ctx.moveTo(pad,y);ctx.lineTo(W-pad,y);
+      ctx.strokeStyle='#EDEAE7';ctx.lineWidth=1;ctx.setLineDash([5,5]);ctx.stroke();ctx.setLineDash([]);
+      if(p>0){
+        const v=maxValDia*p;
+        ctx.fillStyle='#9A9189';ctx.font='bold 11px Plus Jakarta Sans';ctx.textAlign='right';
+        const label=v>=1000?'R$'+(v/1000).toFixed(1).replace('.',',')+'k':'R$'+Math.round(v);
+        ctx.fillText(label,pad-8,y+4);
+      }
     });
-  },[dcp,maxVal,diaSelecionado,n,vFs,dFs,tFs,sFs,padB,pT,pL2,pR]);
+    dadosCompra.dias.forEach((d,i)=>{
+      const x=pad+i*bw;
+      const bh=maxValDia>0?(d.valor/maxValDia)*chartH:0;
+      const bx=x+bw*.18,bwidth=bw*.64;
+      const isSel=diaSelecionado?.date===d.date&&diaSelecionado?.tipo==='compras';
+      // Barra
+      ctx.beginPath();
+      const barY=top+chartH-Math.max(bh,3);
+      const barH=Math.max(bh,3);
+      if(ctx.roundRect)ctx.roundRect(bx,barY,bwidth,barH,6);else ctx.rect(bx,barY,bwidth,barH);
+      ctx.fillStyle=isSel?'#F59E0B':d.isHoje?'#059669':'#7C3AED';
+      ctx.globalAlpha=bh>3?1:.18;ctx.fill();ctx.globalAlpha=1;
+      // Borda seleção
+      if(isSel&&bh>3){
+        ctx.beginPath();
+        if(ctx.roundRect)ctx.roundRect(bx-2,barY-2,bwidth+4,barH+2,6);else ctx.rect(bx-2,barY-2,bwidth+4,barH+2);
+        ctx.strokeStyle='#F59E0B';ctx.lineWidth=2.5;ctx.stroke();
+      }
+      // Valor acima da barra
+      if(d.itens.length>0&&d.valor>0){
+        ctx.fillStyle=isSel?'#D97706':d.isHoje?'#059669':'#7C3AED';
+        ctx.font='bold 12px Plus Jakarta Sans';ctx.textAlign='center';
+        const vStr=d.valor>=1000?'R$'+(d.valor/1000).toFixed(1).replace('.',',')+'k':'R$'+d.valor.toFixed(0);
+        ctx.fillText(vStr,x+bw/2,barY-10);
+      }
+      // Label dia
+      ctx.fillStyle=isSel?'#D97706':d.isHoje?'#059669':'#6B6560';
+      ctx.font=`${isSel||d.isHoje?'bold ':''} 12px Plus Jakarta Sans`;ctx.textAlign='center';
+      ctx.fillText(d.label,x+bw/2,H-34);
+      // Data DD/MM
+      ctx.fillStyle='#B0AAA5';ctx.font='11px Plus Jakarta Sans';
+      const dtParts=d.date.split('-');
+      ctx.fillText(`${dtParts[2]}/${dtParts[1]}`,x+bw/2,H-18);
+      // Qtd itens
+      if(d.itens.length>0){
+        ctx.fillStyle=isSel?'#F59E0B':'#9A9189';ctx.font='bold 10px Plus Jakarta Sans';
+        ctx.fillText(`${d.itens.length} item${d.itens.length>1?'s':''}`,x+bw/2,H-4);
+      }
+    });
+  },[dadosCompra,maxValDia,diaSelecionado]);
 
-  const ck1=useCallback((e)=>{
-    if(!r1.current)return;
-    const rc=r1.current.getBoundingClientRect();
-    const cx=(e.clientX-rc.left)*(r1.current.width/rc.width);
-    const bw=(r1.current.width-pL1-pR)/n;
-    const i=Math.floor((cx-pL1)/bw);
-    if(i<0||i>=n)return;
-    const d=dpd[i];if(!d.pedidos.length)return;
-    setDiaSelecionado(p=>p?.date===d.date&&p?.tipo==='pedidos'?null:{date:d.date,tipo:'pedidos'});
-  },[dpd,n,pL1,pR]);
+  const handleClickBar2=useCallback((e)=>{
+    if(!refBar2.current)return;
+    const rect=refBar2.current.getBoundingClientRect();
+    const scaleX=refBar2.current.width/rect.width;
+    const cx=(e.clientX-rect.left)*scaleX;
+    const pad=72;
+    const chartW=refBar2.current.width-pad*2;
+    const bw=chartW/dadosCompra.dias.length;
+    const i=Math.floor((cx-pad)/bw);
+    if(i<0||i>=dadosCompra.dias.length)return;
+    const d=dadosCompra.dias[i];
+    if(d.itens.length===0)return;
+    setDiaSelecionado(prev=>prev?.date===d.date&&prev?.tipo==='compras'?null:{date:d.date,tipo:'compras'});
+  },[dadosCompra]);
 
-  const ck2=useCallback((e)=>{
-    if(!r2.current)return;
-    const rc=r2.current.getBoundingClientRect();
-    const cx=(e.clientX-rc.left)*(r2.current.width/rc.width);
-    const bw=(r2.current.width-pL2-pR)/n;
-    const i=Math.floor((cx-pL2)/bw);
-    if(i<0||i>=n)return;
-    const d=dcp.dias[i];if(!d.itens.length)return;
-    setDiaSelecionado(p=>p?.date===d.date&&p?.tipo==='compras'?null:{date:d.date,tipo:'compras'});
-  },[dcp,n,pL2,pR]);
-
-  const pNome=periodoTipo==='semanal'?'Semana':periodoTipo==='quinzenal'?'Quinzena':'Mês';
-  const kpis=[
-    {label:'Total de pedidos',v:totPed,sub:`${osUnicasPed} OS no período`,icon:'clipboard-list',dark:true},
-    {label:'Média por veículo',v:osUnicasPed>0?(totPed/osUnicasPed).toFixed(1):'0',sub:'pedidos / OS',icon:'car',red:true},
-    {label:'Itens comprados',v:dcp.totalItens,sub:`${dcp.osUnicas} OS com compra`,icon:'shopping-bag'},
-    {label:'Valor médio / OS',v:dcp.mediaValorOS>0?fmtBRL(dcp.mediaValorOS):'—',sub:'no período',icon:'trending-up'},
-    {label:'Total gasto',v:dcp.totalValor>0?fmtBRL(dcp.totalValor):'R$ 0',sub:'em compras',icon:'banknote'},
-  ];
+  const fmtSemana=`${inicioSemana.toLocaleDateString('pt-BR')} – ${fimSemana.toLocaleDateString('pt-BR')}`;
+  // Semana mais antiga com dados (para limitar navegação)
+  const minTs=requests.length?Math.min(...requests.map(r=>r.timestamp||Date.now())):Date.now();
+  const minOffset=Math.floor((minTs-Date.now())/(7*86400000))-1;
 
   return(
     <div className="fade-up" style={{paddingBottom:40}}>
+      {/* Header com navegação */}
       <div style={{marginBottom:24}}>
         <div style={{display:'inline-flex',alignItems:'center',gap:6,background:'#0D0D0D',borderRadius:8,padding:'4px 12px',marginBottom:12}}>
           <span className="pulse-beacon" style={{width:6,height:6,borderRadius:'50%',background:'var(--red)',display:'inline-block'}}/>
           <span style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.14em',color:'rgba(255,255,255,.6)'}}>Exclusivo · Lucas Sabino</span>
         </div>
-        <h2 style={{fontSize:34,fontWeight:800,margin:'0 0 20px',letterSpacing:'-.03em',lineHeight:1}}>Resumo para Reunião</h2>
-        <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)',width:'fit-content',marginBottom:16}}>
-          {['semanal','quinzenal','mensal'].map(t=>(
-            <button key={t} onClick={()=>setPeriodoTipo(t)} style={{padding:'9px 22px',borderRadius:9,fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:'.08em',border:'none',cursor:'pointer',transition:'all .15s',fontFamily:'Plus Jakarta Sans,sans-serif',background:periodoTipo===t?'#fff':'transparent',color:periodoTipo===t?'var(--red)':'var(--muted)',boxShadow:periodoTipo===t?'0 2px 8px rgba(0,0,0,.1)':'none',whiteSpace:'nowrap'}}>
-              {t.charAt(0).toUpperCase()+t.slice(1)}
-            </button>
-          ))}
-        </div>
+        <h2 style={{fontSize:34,fontWeight:800,margin:'0 0 16px',letterSpacing:'-.03em',lineHeight:1}}>Resumo da Semana</h2>
+
+        {/* Navegação de semana */}
         <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
           <div style={{display:'flex',alignItems:'center',background:'#fff',border:'1.5px solid var(--border)',borderRadius:12,overflow:'hidden'}}>
-            <button onClick={()=>setOffset(o=>o-1)} style={{padding:'10px 16px',background:'none',border:'none',cursor:'pointer',color:'var(--ink)',display:'flex',alignItems:'center',gap:5,fontFamily:'Plus Jakarta Sans,sans-serif',fontSize:11,fontWeight:700,transition:'background .15s'}}
-              onMouseEnter={e=>e.currentTarget.style.background='var(--smoke)'} onMouseLeave={e=>e.currentTarget.style.background='none'}>
-              <Icon name="chevron-left" size={16}/> {pNome} anterior
+            <button
+              onClick={()=>setSemanaOffset(o=>o-1)}
+              disabled={semanaOffset<=minOffset}
+              style={{padding:'10px 16px',background:'none',border:'none',cursor:semanaOffset<=minOffset?'not-allowed':'pointer',color:semanaOffset<=minOffset?'#D0C9C4':'var(--ink)',display:'flex',alignItems:'center',gap:5,fontFamily:'Plus Jakarta Sans,sans-serif',fontSize:11,fontWeight:700,transition:'background .15s'}}
+              onMouseEnter={e=>{if(semanaOffset>minOffset)e.currentTarget.style.background='var(--smoke)';}}
+              onMouseLeave={e=>{e.currentTarget.style.background='none';}}>
+              <Icon name="chevron-left" size={16}/> Anterior
             </button>
-            <div style={{padding:'10px 24px',borderLeft:'1px solid var(--border)',borderRight:'1px solid var(--border)',textAlign:'center',minWidth:220}}>
-              <p style={{fontSize:13,fontWeight:800,margin:0,color:'var(--ink)'}}>{label}</p>
-              {isAtual&&<p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--red)',margin:'2px 0 0'}}>{pNome} atual</p>}
-              {!isAtual&&<p style={{fontSize:8,fontWeight:700,color:'var(--muted)',margin:'2px 0 0',textTransform:'uppercase'}}>{pNome} anterior</p>}
+            <div style={{padding:'10px 20px',borderLeft:'1px solid var(--border)',borderRight:'1px solid var(--border)',textAlign:'center',minWidth:200}}>
+              <p style={{fontSize:12,fontWeight:800,margin:0,color:'var(--ink)'}}>{fmtSemana}</p>
+              {isSemanaAtual&&<p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--red)',margin:'2px 0 0'}}>Semana atual</p>}
+              {!isSemanaAtual&&<p style={{fontSize:8,fontWeight:700,color:'var(--muted)',margin:'2px 0 0'}}>{Math.abs(semanaOffset)} semana{Math.abs(semanaOffset)>1?'s':''} atrás</p>}
             </div>
-            <button onClick={()=>setOffset(o=>o+1)} disabled={isAtual} style={{padding:'10px 16px',background:'none',border:'none',cursor:isAtual?'not-allowed':'pointer',color:isAtual?'#D0C9C4':'var(--ink)',display:'flex',alignItems:'center',gap:5,fontFamily:'Plus Jakarta Sans,sans-serif',fontSize:11,fontWeight:700,transition:'background .15s'}}
-              onMouseEnter={e=>{if(!isAtual)e.currentTarget.style.background='var(--smoke)';}} onMouseLeave={e=>{e.currentTarget.style.background='none';}}>
+            <button
+              onClick={()=>setSemanaOffset(o=>o+1)}
+              disabled={isSemanaAtual}
+              style={{padding:'10px 16px',background:'none',border:'none',cursor:isSemanaAtual?'not-allowed':'pointer',color:isSemanaAtual?'#D0C9C4':'var(--ink)',display:'flex',alignItems:'center',gap:5,fontFamily:'Plus Jakarta Sans,sans-serif',fontSize:11,fontWeight:700,transition:'background .15s'}}
+              onMouseEnter={e=>{if(!isSemanaAtual)e.currentTarget.style.background='var(--smoke)';}}
+              onMouseLeave={e=>{e.currentTarget.style.background='none';}}>
               Próxima <Icon name="chevron-right" size={16}/>
             </button>
           </div>
-          {!isAtual&&(
-            <button onClick={()=>setOffset(0)} style={{display:'flex',alignItems:'center',gap:6,padding:'10px 16px',background:'var(--ink)',color:'#fff',border:'none',borderRadius:10,fontSize:10,fontWeight:800,textTransform:'uppercase',cursor:'pointer',letterSpacing:'.06em',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
-              <Icon name="rotate-ccw" size={13}/> {pNome} atual
+          {!isSemanaAtual&&(
+            <button onClick={()=>setSemanaOffset(0)} style={{display:'flex',alignItems:'center',gap:6,padding:'10px 16px',background:'var(--ink)',color:'#fff',border:'none',borderRadius:10,fontSize:10,fontWeight:800,textTransform:'uppercase',cursor:'pointer',letterSpacing:'.06em',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
+              <Icon name="rotate-ccw" size={13}/> Semana atual
             </button>
           )}
         </div>
       </div>
 
+      {/* KPIs */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10,marginBottom:24}}>
-        {kpis.map((k,i)=>(
+        {[
+          {label:'Pedidos na semana',v:totalPedidos,sub:`${osUnicas} OS únicas`,icon:'clipboard-list',dark:true},
+          {label:'Média por veículo',v:mediaPorCarro,sub:'pedidos / carro',icon:'car',red:true},
+          {label:'Itens comprados',v:dadosCompra.totalItens,sub:`${dadosCompra.osUnicas} OS com compra`,icon:'shopping-bag'},
+          {label:'Valor médio / OS',v:dadosCompra.mediaValorOS>0?fmtBRL(dadosCompra.mediaValorOS):'—',sub:'na semana',icon:'trending-up'},
+          {label:'Total gasto',v:dadosCompra.totalValor>0?fmtBRL(dadosCompra.totalValor):'—',sub:'em compras',icon:'banknote'},
+        ].map((k,i)=>(
           <div key={i} style={{background:k.dark?'#0D0D0D':k.red?'var(--red)':'var(--smoke)',color:k.dark||k.red?'#fff':'var(--ink)',borderRadius:14,padding:'16px 18px',border:(!k.dark&&!k.red)?'1.5px solid var(--border)':'none'}}>
             <div style={{width:28,height:28,borderRadius:7,background:k.dark||k.red?'rgba(255,255,255,.12)':'var(--border)',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:12}}><Icon name={k.icon} size={14}/></div>
-            <p style={{fontSize:String(k.v).length>7?16:26,fontWeight:800,lineHeight:1,margin:0,letterSpacing:'-.02em'}}>{k.v}</p>
+            <p style={{fontSize:String(k.v).length>7?18:28,fontWeight:800,lineHeight:1,margin:0,letterSpacing:'-.02em'}}>{k.v}</p>
             <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.08em',marginTop:5,opacity:.65}}>{k.label}</p>
             <p style={{fontSize:8,fontWeight:500,marginTop:2,opacity:.4}}>{k.sub}</p>
           </div>
         ))}
       </div>
 
-      <div className="card" style={{padding:0,marginBottom:16,overflow:'hidden'}}>
-        <div style={{padding:'20px 24px',borderBottom:'1px solid var(--smoke)',display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12}}>
-          <div style={{display:'flex',alignItems:'flex-start',gap:14}}>
-            <div style={{width:44,height:44,borderRadius:12,background:'var(--red)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="calendar" size={20}/></div>
-            <div>
-              <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.18em',color:'var(--red)',margin:'0 0 2px'}}>Pedidos por dia</p>
-              <h3 style={{fontSize:18,fontWeight:800,margin:'0 0 2px',color:'var(--ink)'}}>{label}</h3>
-              <p style={{fontSize:9,color:'var(--muted)',margin:0,fontWeight:600}}>Número de pedidos únicos cadastrados</p>
-            </div>
+      {/* Gráfico 1 */}
+      <div className="card" style={{padding:24,marginBottom:16}}>
+        <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',flexWrap:'wrap',gap:8,marginBottom:20}}>
+          <div>
+            <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.14em',color:'var(--red)',margin:'0 0 4px'}}>Pedidos por dia</p>
+            <h3 style={{fontSize:18,fontWeight:800,margin:0,letterSpacing:'-.02em'}}>{fmtSemana}</h3>
+            <p style={{fontSize:10,color:'var(--muted)',margin:'4px 0 0',fontWeight:600}}>Número acima = pedidos · abaixo = OS únicas do dia</p>
           </div>
-          <div style={{display:'flex',alignItems:'center',gap:5,flexShrink:0,paddingTop:4}}>
-            <div style={{width:10,height:10,borderRadius:2,background:'var(--red)'}}/><span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--ink)'}}>OS</span>
+          <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
+            {[{c:'#0D0D0D',l:'Dias passados'},{c:'#DC1F1F',l:'Hoje'}].map((lg,i)=>(
+              <div key={i} style={{display:'flex',alignItems:'center',gap:5}}>
+                <div style={{width:10,height:10,borderRadius:3,background:lg.c}}/>
+                <span style={{fontSize:8,fontWeight:700,color:'var(--muted)',textTransform:'uppercase'}}>{lg.l}</span>
+              </div>
+            ))}
           </div>
         </div>
-        <div style={{background:'#fff',paddingTop:8}}>
-          <canvas ref={r1} width={840} height={260} style={{width:'100%',height:'auto',display:'block',cursor:'pointer'}} onClick={ck1}/>
-        </div>
+     <canvas ref={refBar1} width={840} height={240} style={{width:'100%',height:'auto',display:'block',cursor:'pointer'}} onClick={handleClickBar1}/>
         {diaSelecionado?.tipo==='pedidos'&&(()=>{
-          const dS=dpd.find(d=>d.date===diaSelecionado.date);
-          if(!dS||!dS.pedidos.length)return null;
+          const dSel=dadosDia.find(d=>d.date===diaSelecionado.date);
+          if(!dSel||dSel.pedidos.length===0)return null;
           const porOS={};
-          dS.pedidos.forEach(r=>{const k=String(r.os).trim();if(!porOS[k])porOS[k]={os:k,modelo:r.vehicleData?.modelo||'—',resp:r.responsavel||'—',peds:[],itens:0};porOS[k].peds.push(r);porOS[k].itens+=(r.items?.length||0);});
-          const gs=Object.values(porOS);
+          dSel.pedidos.forEach(r=>{
+            const k=String(r.os).trim();
+            if(!porOS[k])porOS[k]={os:k,modelo:r.vehicleData?.modelo||'—',responsavel:r.responsavel||'—',pedidos:[],itens:0};
+            porOS[k].pedidos.push(r);
+            porOS[k].itens+=(r.items?.length||0);
+          });
+          const grupos=Object.values(porOS);
+          const dtParts=diaSelecionado.date.split('-');
           return(
-            <div style={{borderTop:'2px solid #F59E0B',padding:'16px 24px'}} className="fade-in">
+            <div style={{marginTop:16,borderTop:'2px solid #F59E0B',paddingTop:16}} className="fade-in">
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12,flexWrap:'wrap',gap:8}}>
                 <div style={{display:'flex',alignItems:'center',gap:8}}>
-                  <div style={{width:5,height:22,background:'#F59E0B',borderRadius:3}}/>
-                  <p style={{fontSize:12,fontWeight:800,margin:0}}>{dS.dd} — {dS.pedidos.length} pedido{dS.pedidos.length!==1?'s':''} · {gs.length} OS</p>
+                  <div style={{width:8,height:24,background:'#F59E0B',borderRadius:3}}/>
+                  <div>
+                    <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'#856A00',margin:0}}>Detalhes do dia</p>
+                    <p style={{fontSize:13,fontWeight:800,margin:0}}>{`${dtParts[2]}/${dtParts[1]}/${dtParts[0]}`} — {dSel.pedidos.length} pedido{dSel.pedidos.length!==1?'s':''} · {grupos.length} OS</p>
+                  </div>
                 </div>
-                <button onClick={()=>setDiaSelecionado(null)} style={{padding:'5px 12px',background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:8,fontSize:9,fontWeight:800,cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif',color:'var(--muted)'}}>Fechar ×</button>
+                <button onClick={()=>setDiaSelecionado(null)} style={{display:'flex',alignItems:'center',gap:4,padding:'5px 12px',background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:8,fontSize:9,fontWeight:800,cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif',color:'var(--muted)'}}>
+                  Fechar ×
+                </button>
               </div>
               <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                {gs.map((g,gi)=>(
-                  <div key={g.os} style={{background:'var(--smoke)',borderRadius:10,border:'1px solid var(--border)',overflow:'hidden'}}>
-                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 14px',background:gi===0?'#0D0D0D':'#fff',borderBottom:'1px solid var(--border)'}}>
+                {grupos.map((g,gi)=>(
+                  <div key={g.os} style={{background:'var(--smoke)',borderRadius:12,border:'1px solid var(--border)',overflow:'hidden'}}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',background:gi===0?'#0D0D0D':'#fff',borderBottom:'1px solid var(--border)'}}>
                       <div style={{display:'flex',alignItems:'center',gap:8}}>
-                        <span style={{fontSize:13,fontWeight:800,color:gi===0?'#fff':'var(--ink)'}}>OS #{g.os}</span>
-                        <span style={{fontSize:8,fontWeight:700,color:gi===0?'rgba(255,255,255,.4)':'var(--muted)',textTransform:'uppercase'}}>{g.modelo}</span>
+                        <span style={{fontSize:14,fontWeight:800,color:gi===0?'#fff':'var(--ink)'}}>OS #{g.os}</span>
+                        <span style={{fontSize:8,fontWeight:700,textTransform:'uppercase',color:gi===0?'rgba(255,255,255,.5)':'var(--muted)'}}>{g.modelo}</span>
                       </div>
                       <div style={{display:'flex',alignItems:'center',gap:8}}>
-                        <span style={{fontSize:8,fontWeight:800,padding:'2px 8px',borderRadius:999,background:gi===0?'rgba(255,255,255,.1)':'var(--border)',color:gi===0?'rgba(255,255,255,.7)':'var(--muted)'}}>{g.peds.length} pedido{g.peds.length!==1?'s':''} · {g.itens} item{g.itens!==1?'ns':''}</span>
-                        <span style={{fontSize:9,fontWeight:700,color:gi===0?'rgba(255,255,255,.45)':'var(--muted)',textTransform:'uppercase'}}>{g.resp}</span>
+                        <span style={{fontSize:8,fontWeight:800,padding:'3px 10px',borderRadius:999,background:gi===0?'rgba(255,255,255,.12)':'var(--border)',color:gi===0?'rgba(255,255,255,.7)':'var(--muted)'}}>{g.pedidos.length} pedido{g.pedidos.length!==1?'s':''} · {g.itens} item{g.itens!==1?'ns':''}</span>
+                        <span style={{fontSize:9,fontWeight:700,color:gi===0?'rgba(255,255,255,.5)':'var(--muted)',textTransform:'uppercase'}}>{g.responsavel}</span>
                       </div>
                     </div>
                     <div style={{padding:'8px 14px',display:'flex',flexWrap:'wrap',gap:5}}>
-                      {g.peds.flatMap(r=>r.items||[]).map((it,ii)=>(
-                        <span key={ii} style={{display:'inline-flex',alignItems:'center',gap:4,background:'#fff',border:'1px solid var(--border)',padding:'3px 8px',borderRadius:7,fontSize:9,fontWeight:700,textTransform:'uppercase'}}>
+                      {g.pedidos.flatMap(r=>r.items||[]).map((it,ii)=>(
+                        <span key={ii} style={{display:'inline-flex',alignItems:'center',gap:4,background:'#fff',border:'1px solid var(--border)',padding:'4px 10px',borderRadius:8,fontSize:9,fontWeight:700,textTransform:'uppercase'}}>
                           <span style={{fontSize:7,fontWeight:800,background:'var(--ink)',color:'#fff',borderRadius:3,padding:'1px 4px'}}>{it.quantity}</span>
-                          {it.description}<StatusBadge status={it.status||'Pendente'}/>
+                          {it.description}
+                          <StatusBadge status={it.status||'Pendente'}/>
                         </span>
                       ))}
                     </div>
@@ -2875,71 +2947,87 @@ function ResumoReuniaoView({requests}){
             </div>
           );
         })()}
-        <div style={{padding:'12px 24px',background:'var(--smoke)',borderTop:'1px solid var(--border)',display:'flex',gap:20,flexWrap:'wrap'}}>
+        <div style={{display:'flex',gap:16,marginTop:16,paddingTop:14,borderTop:'1px solid var(--border)',flexWrap:'wrap'}}>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
-            <div style={{width:28,height:28,borderRadius:7,background:'var(--red-light)',border:'1px solid #FFBDBD',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="clipboard-list" size={13}/></div>
-            <div><p style={{fontSize:8,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',margin:0}}>Total no período</p><p style={{fontSize:14,fontWeight:800,margin:0}}>{totPed} pedido{totPed!==1?'s':''} · {osUnicasPed} OS</p></div>
+            <div style={{width:32,height:32,borderRadius:8,background:'var(--red-light)',border:'1px solid #FFBDBD',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="clipboard-list" size={14}/></div>
+            <div><p style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',margin:0}}>Total no período</p><p style={{fontSize:16,fontWeight:800,margin:0}}>{totalPedidos} pedido{totalPedidos!==1?'s':''} · {osUnicas} OS</p></div>
           </div>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
-            <div style={{width:28,height:28,borderRadius:7,background:'var(--smoke)',border:'1px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="divide-circle" size={13}/></div>
-            <div><p style={{fontSize:8,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',margin:0}}>Média por veículo</p><p style={{fontSize:14,fontWeight:800,margin:0}}>{osUnicasPed>0?(totPed/osUnicasPed).toFixed(1):'0'} pedidos / OS</p></div>
+            <div style={{width:32,height:32,borderRadius:8,background:'var(--smoke)',border:'1px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="divide-circle" size={14}/></div>
+            <div><p style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',margin:0}}>Média de pedidos</p><p style={{fontSize:16,fontWeight:800,margin:0}}>{mediaPorCarro} pedido{mediaPorCarro!=='1.0'?'s':''} / veículo</p></div>
           </div>
         </div>
       </div>
 
-      <div className="card" style={{padding:0,overflow:'hidden'}}>
-        <div style={{padding:'20px 24px',borderBottom:'1px solid var(--smoke)',display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:12}}>
-          <div style={{display:'flex',alignItems:'flex-start',gap:14}}>
-            <div style={{width:44,height:44,borderRadius:12,background:'#7C3AED',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="shopping-bag" size={20}/></div>
-            <div>
-              <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.18em',color:'#7C3AED',margin:'0 0 2px'}}>Valor comprado por dia</p>
-              <h3 style={{fontSize:18,fontWeight:800,margin:'0 0 2px',color:'var(--ink)'}}>{label}</h3>
-              <p style={{fontSize:9,color:'var(--muted)',margin:0,fontWeight:600}}>Baseado na data de compra registrada em cada item</p>
-            </div>
+      {/* Gráfico 2 */}
+      <div className="card" style={{padding:24}}>
+        <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',flexWrap:'wrap',gap:8,marginBottom:20}}>
+          <div>
+            <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.14em',color:'#7C3AED',margin:'0 0 4px'}}>Compras realizadas</p>
+            <h3 style={{fontSize:18,fontWeight:800,margin:0,letterSpacing:'-.02em'}}>Valor comprado por dia</h3>
+            <p style={{fontSize:10,color:'var(--muted)',margin:'4px 0 0',fontWeight:600}}>Baseado na data de compra registrada em cada item</p>
           </div>
-          <div style={{display:'flex',alignItems:'center',gap:5,flexShrink:0,paddingTop:4}}>
-            <div style={{width:10,height:10,borderRadius:2,background:'var(--red)'}}/><span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--ink)'}}>Valor comprado (R$)</span>
+          <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
+            {[{c:'#7C3AED',l:'Dias passados'},{c:'#059669',l:'Hoje'}].map((lg,i)=>(
+              <div key={i} style={{display:'flex',alignItems:'center',gap:5}}>
+                <div style={{width:10,height:10,borderRadius:3,background:lg.c}}/>
+                <span style={{fontSize:8,fontWeight:700,color:'var(--muted)',textTransform:'uppercase'}}>{lg.l}</span>
+              </div>
+            ))}
           </div>
         </div>
-        <div style={{background:'#fff',paddingTop:8}}>
-          <canvas ref={r2} width={840} height={260} style={{width:'100%',height:'auto',display:'block',cursor:'pointer'}} onClick={ck2}/>
-        </div>
+        <canvas ref={refBar2} width={840} height={240} style={{width:'100%',height:'auto',display:'block',cursor:'pointer'}} onClick={handleClickBar2}/>
         {diaSelecionado?.tipo==='compras'&&(()=>{
-          const dS=dcp.dias.find(d=>d.date===diaSelecionado.date);
-          if(!dS||!dS.itens.length)return null;
+          const dSel=dadosCompra.dias.find(d=>d.date===diaSelecionado.date);
+          if(!dSel||dSel.itens.length===0)return null;
           const porOS={};
-          dS.itens.forEach(it=>{const k=String(it.os).trim();if(!porOS[k])porOS[k]={os:k,itens:[],total:0};porOS[k].itens.push(it);porOS[k].total+=it._p||0;});
-          const gs=Object.values(porOS).sort((a,b)=>b.total-a.total);const tD=dS.valor;
+          dSel.itens.forEach(it=>{
+            const k=String(it.os).trim();
+            if(!porOS[k])porOS[k]={os:k,itens:[],total:0};
+            porOS[k].itens.push(it);
+            porOS[k].total+=parseFloat(it._preco||it.price||0);
+          });
+          const grupos=Object.values(porOS).sort((a,b)=>b.total-a.total);
+          const totalDia=dSel.valor;
+          const dtParts=diaSelecionado.date.split('-');
           return(
-            <div style={{borderTop:'2px solid #F59E0B',padding:'16px 24px'}} className="fade-in">
+            <div style={{marginTop:16,borderTop:'2px solid #F59E0B',paddingTop:16}} className="fade-in">
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12,flexWrap:'wrap',gap:8}}>
                 <div style={{display:'flex',alignItems:'center',gap:8}}>
-                  <div style={{width:5,height:22,background:'#F59E0B',borderRadius:3}}/>
-                  <p style={{fontSize:12,fontWeight:800,margin:0}}>{dS.dd} — {dS.itens.length} item{dS.itens.length!==1?'ns':''} · {fmtBRL(tD)}</p>
+                  <div style={{width:8,height:24,background:'#F59E0B',borderRadius:3}}/>
+                  <div>
+                    <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'#856A00',margin:0}}>Compras do dia</p>
+                    <p style={{fontSize:13,fontWeight:800,margin:0}}>{`${dtParts[2]}/${dtParts[1]}/${dtParts[0]}`} — {dSel.itens.length} item{dSel.itens.length!==1?'ns':''} · {fmtBRL(totalDia)}</p>
+                  </div>
                 </div>
-                <button onClick={()=>setDiaSelecionado(null)} style={{padding:'5px 12px',background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:8,fontSize:9,fontWeight:800,cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif',color:'var(--muted)'}}>Fechar ×</button>
+                <button onClick={()=>setDiaSelecionado(null)} style={{display:'flex',alignItems:'center',gap:4,padding:'5px 12px',background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:8,fontSize:9,fontWeight:800,cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif',color:'var(--muted)'}}>
+                  Fechar ×
+                </button>
               </div>
               <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                {gs.map((g,gi)=>(
-                  <div key={g.os} style={{background:'var(--smoke)',borderRadius:10,border:'1px solid var(--border)',overflow:'hidden'}}>
-                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 14px',background:gi===0?'#7C3AED':'#fff',borderBottom:'1px solid var(--border)'}}>
-                      <span style={{fontSize:13,fontWeight:800,color:gi===0?'#fff':'var(--ink)'}}>OS #{g.os}</span>
+                {grupos.map((g,gi)=>(
+                  <div key={g.os} style={{background:'var(--smoke)',borderRadius:12,border:'1px solid var(--border)',overflow:'hidden'}}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',background:gi===0?'#7C3AED':'#fff',borderBottom:'1px solid var(--border)'}}>
+                      <span style={{fontSize:14,fontWeight:800,color:gi===0?'#fff':'var(--ink)'}}>OS #{g.os}</span>
                       <div style={{display:'flex',alignItems:'center',gap:10}}>
                         <span style={{fontSize:9,fontWeight:700,color:gi===0?'rgba(255,255,255,.6)':'var(--muted)'}}>{g.itens.length} item{g.itens.length!==1?'ns':''}</span>
                         <span style={{fontSize:13,fontWeight:800,color:gi===0?'#fff':'#059669'}}>{fmtBRL(g.total)}</span>
+                        <div style={{height:4,width:60,background:gi===0?'rgba(255,255,255,.2)':'var(--border)',borderRadius:999,overflow:'hidden'}}>
+                          <div style={{height:'100%',background:gi===0?'#fff':'#7C3AED',borderRadius:999,width:`${totalDia>0?(g.total/totalDia*100):0}%`}}/>
+                        </div>
                       </div>
                     </div>
-                    <div style={{padding:'8px 14px',display:'flex',flexDirection:'column',gap:4}}>
+                    <div style={{padding:'8px 14px',display:'flex',flexDirection:'column',gap:5}}>
                       {g.itens.map((it,ii)=>(
-                        <div key={ii} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'4px 8px',background:'#fff',borderRadius:7,border:'1px solid var(--border)'}}>
+                        <div key={ii} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'5px 8px',background:'#fff',borderRadius:8,border:'1px solid var(--border)'}}>
                           <div style={{display:'flex',alignItems:'center',gap:6,flex:1,minWidth:0}}>
-                            {it.photo&&<img src={it.photo} style={{width:26,height:26,borderRadius:5,objectFit:'cover',flexShrink:0}} alt=""/>}
-                            <span style={{fontSize:9,fontWeight:700,textTransform:'uppercase',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.description}</span>
+                            {it.photo&&<img src={it.photo} style={{width:28,height:28,borderRadius:5,objectFit:'cover',flexShrink:0}} alt=""/>}
+                            <span style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:'var(--ink)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{it.description}</span>
                             <span style={{fontSize:7,background:'rgba(0,0,0,.06)',padding:'1px 5px',borderRadius:3,fontWeight:700,color:'var(--muted)',flexShrink:0}}>×{it.quantity}</span>
                           </div>
                           <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0}}>
                             {it.supplier&&<span style={{fontSize:8,color:'var(--muted)',fontWeight:600}}>{it.supplier}</span>}
-                            <span style={{fontSize:10,fontWeight:800,color:'#059669'}}>{(it._p||0)>0?fmtBRL(it._p):'—'}</span>
+                            <span style={{fontSize:10,fontWeight:800,color:'#059669'}}>{(it._preco||parsePrice(it.price))>0?fmtBRL(it._preco||parsePrice(it.price)):'—'}</span>
                           </div>
                         </div>
                       ))}
@@ -2950,14 +3038,14 @@ function ResumoReuniaoView({requests}){
             </div>
           );
         })()}
-        <div style={{padding:'12px 24px',background:'var(--smoke)',borderTop:'1px solid var(--border)',display:'flex',gap:20,flexWrap:'wrap'}}>
+        <div style={{display:'flex',gap:16,marginTop:16,paddingTop:14,borderTop:'1px solid var(--border)',flexWrap:'wrap'}}>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
-            <div style={{width:28,height:28,borderRadius:7,background:'#F5F0FF',border:'1px solid #D8B4FE',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="shopping-bag" size={13}/></div>
-            <div><p style={{fontSize:8,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',margin:0}}>Itens comprados</p><p style={{fontSize:14,fontWeight:800,margin:0}}>{dcp.totalItens} {dcp.totalItens===1?'item':'itens'} · {dcp.osUnicas} OS</p></div>
+            <div style={{width:32,height:32,borderRadius:8,background:'#F5F0FF',border:'1px solid #D8B4FE',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="shopping-bag" size={14}/></div>
+            <div><p style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',margin:0}}>Itens comprados</p><p style={{fontSize:16,fontWeight:800,margin:0}}>{dadosCompra.totalItens} {dadosCompra.totalItens===1?'item':'itens'} · {dadosCompra.osUnicas} OS</p></div>
           </div>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
-            <div style={{width:28,height:28,borderRadius:7,background:'#EDFAF3',border:'1px solid #AAE6C5',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="trending-up" size={13}/></div>
-            <div><p style={{fontSize:8,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',margin:0}}>Total · Média por OS</p><p style={{fontSize:14,fontWeight:800,margin:0}}>{dcp.totalValor>0?fmtBRL(dcp.totalValor):'R$ 0'} · {dcp.mediaValorOS>0?fmtBRL(dcp.mediaValorOS):'—'}</p></div>
+            <div style={{width:32,height:32,borderRadius:8,background:'#EDFAF3',border:'1px solid #AAE6C5',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="trending-up" size={14}/></div>
+            <div><p style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',margin:0}}>Total · Média por OS</p><p style={{fontSize:16,fontWeight:800,margin:0}}>{dadosCompra.totalValor>0?fmtBRL(dadosCompra.totalValor):'R$ 0'} · {dadosCompra.mediaValorOS>0?fmtBRL(dadosCompra.mediaValorOS):'—'}</p></div>
           </div>
         </div>
       </div>
