@@ -192,12 +192,32 @@ function mergeByOS(requests){
   const map={};const order=[];
   requests.forEach(r=>{
     const k=String(r.os||'').trim();if(!k){order.push(r);return;}
-    if(!map[k]){map[k]={...r,_merged:false};order.push(map[k]);}
-    else{
-      const existing=map[k];const allItems=[...(existing.items||[]),...(r.items||[])];
-      const seen=new Set();const deduped=allItems.filter(it=>{const key=it.id||it.description;if(seen.has(key))return false;seen.add(key);return true;});
-      existing.items=deduped;existing._merged=true;
-      if((r.timestamp||0)>(existing.timestamp||0)){existing.vehicleData=r.vehicleData||existing.vehicleData;existing.responsavel=r.responsavel||existing.responsavel;}
+    // Adiciona o solicitante e data original em cada item antes de mesclar
+    const itemsWithMeta = (r.items||[]).map(it => ({
+      ...it,
+      _responsavel: r.responsavel,
+      _timestamp: r.timestamp
+    }));
+
+    if(!map[k]){
+      map[k]={...r, items: itemsWithMeta, _merged:false};
+      order.push(map[k]);
+    } else {
+      const existing=map[k];
+      const allItems=[...(existing.items||[]), ...itemsWithMeta];
+      const seen=new Set();
+      const deduped=allItems.filter(it=>{
+        const key=it.id||it.description;
+        if(seen.has(key))return false;
+        seen.add(key);
+        return true;
+      });
+      existing.items=deduped;
+      existing._merged=true;
+      if((r.timestamp||0)>(existing.timestamp||0)){
+        existing.vehicleData=r.vehicleData||existing.vehicleData;
+        existing.responsavel=r.responsavel||existing.responsavel;
+      }
     }
   });
   return order;
@@ -1404,6 +1424,12 @@ const exportCSV=()=>{
                         <span style={{fontSize:11,fontWeight:800,textTransform:'uppercase',color:'var(--ink)',wordBreak:'break-word'}}>{it.description||'(sem descrição)'}</span>
                         <StatusBadge status={it.status||'Pendente'} orig={it.statusOriginal}/>
                         <span style={{fontSize:8,background:'rgba(0,0,0,.06)',padding:'1px 6px',borderRadius:4,fontWeight:700,color:'var(--muted)'}}>×{it.quantity}</span>
+                        {/* Solicitante e Data do Item */}
+                        <span style={{fontSize:8,fontWeight:700,color:'var(--muted)',marginLeft:'auto',display:'flex',alignItems:'center',gap:4}}>
+                          <Icon name="user" size={10}/> {it._responsavel||'—'} 
+                          <span style={{opacity:0.5}}>•</span> 
+                          <Icon name="calendar" size={10}/> {it._timestamp ? new Date(it._timestamp).toLocaleDateString('pt-BR') : '—'}
+                        </span>
                       </div>
                       {/* Linha 2: infos de cotação */}
                       <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}>
@@ -2681,16 +2707,28 @@ function ResumoReuniaoView({requests}){
   const renderChart = (canvas, data, maxValue, type) => {
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    
+    // Ajuste de DPI para evitar embaçamento
+    if (canvas.width !== rect.width * dpr || canvas.height !== rect.height * dpr) {
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+    }
+    
     const W = canvas.width, H = canvas.height;
     ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    ctx.scale(dpr, dpr);
     
+    const displayW = rect.width, displayH = rect.height;
     const padL = 72, padR = 40, bot = 80, top = 40;
-    const chartH = H - bot - top, chartW = W - padL - padR;
+    const chartH = displayH - bot - top, chartW = displayW - padL - padR;
     const n = data.length;
     const bw = chartW / n;
-    const barGap = n > 15 ? 0.1 : 0.25; // Menos espaço se muitos dias
+    const barGap = n > 15 ? 0.1 : 0.25;
     
-    // Grid lines (Dashed)
+    // Grid lines
     ctx.setLineDash([3, 3]);
     ctx.strokeStyle = '#E5E7EB';
     ctx.lineWidth = 1;
@@ -2698,10 +2736,9 @@ function ResumoReuniaoView({requests}){
       const y = top + chartH * (1 - p);
       ctx.beginPath();
       ctx.moveTo(padL, y);
-      ctx.lineTo(W - padR, y);
+      ctx.lineTo(displayW - padR, y);
       ctx.stroke();
       
-      // Y-axis labels
       ctx.setLineDash([]);
       ctx.fillStyle = '#6B7280';
       ctx.font = '600 11px Plus Jakarta Sans';
@@ -2718,7 +2755,9 @@ function ResumoReuniaoView({requests}){
     });
     ctx.setLineDash([]);
 
-    // Bars
+    // Coordenadas das barras para detecção de clique
+    const barRects = [];
+
     data.forEach((d, i) => {
       const val = type === 'valor' ? d.valor : d.pedidos.length;
       const count = type === 'valor' ? d.itens.length : d.osSet.size;
@@ -2728,6 +2767,8 @@ function ResumoReuniaoView({requests}){
       const barY = top + chartH - Math.max(bh, 2);
       const barH = Math.max(bh, 2);
 
+      barRects.push({ x: bx, y: barY, w: bwidth, h: barH, data: d });
+
       // Draw Bar
       ctx.beginPath();
       if (ctx.roundRect) {
@@ -2735,13 +2776,13 @@ function ResumoReuniaoView({requests}){
       } else {
         ctx.rect(bx, barY, bwidth, barH);
       }
-      ctx.fillStyle = '#DC1F1F';
+      ctx.fillStyle = diaSelecionado?.date === d.date ? '#A81515' : '#DC1F1F';
       ctx.fill();
 
-      // Value on top
-      if (val > 0) {
+      // Value on top - Evitar sobreposição no mensal
+      if (val > 0 && (n <= 15 || diaSelecionado?.date === d.date)) {
         ctx.fillStyle = '#000';
-        ctx.font = 'bold 12px Plus Jakarta Sans';
+        ctx.font = 'bold 11px Plus Jakarta Sans';
         ctx.textAlign = 'center';
         let vStr;
         if (type === 'valor') {
@@ -2752,27 +2793,46 @@ function ResumoReuniaoView({requests}){
         ctx.fillText(vStr, x + bw / 2, barY - 8);
       }
 
-      // X-axis Labels
-      // Day Name
-      ctx.fillStyle = '#000';
-      ctx.font = 'bold 11px Plus Jakarta Sans';
-      ctx.textAlign = 'center';
-      ctx.fillText(d.label, x + bw / 2, H - 55);
-      
-      // Date
-      const dtParts = d.date.split('-');
-      ctx.fillStyle = '#6B7280';
-      ctx.font = '500 10px Plus Jakarta Sans';
-      ctx.fillText(`${dtParts[2]}/${dtParts[1]}`, x + bw / 2, H - 42);
+      // X-axis Labels - Mostrar apenas alguns no mensal para não poluir
+      if (n <= 15 || i % Math.ceil(n/10) === 0 || i === n - 1) {
+        ctx.fillStyle = '#000';
+        ctx.font = 'bold 10px Plus Jakarta Sans';
+        ctx.textAlign = 'center';
+        ctx.fillText(d.label, x + bw / 2, displayH - 55);
+        
+        const dtParts = d.date.split('-');
+        ctx.fillStyle = '#6B7280';
+        ctx.font = '500 9px Plus Jakarta Sans';
+        ctx.fillText(`${dtParts[2]}/${dtParts[1]}`, x + bw / 2, displayH - 42);
+      }
 
-      // Item count with brackets ⌊ 0 itens ⌋
-      if (n <= 15 || count > 0) {
+      // Item count - Evitar sobreposição
+      if ((n <= 15 || diaSelecionado?.date === d.date) && count > 0) {
         ctx.fillStyle = '#DC1F1F';
         ctx.font = 'bold 9px Plus Jakarta Sans';
         const label = type === 'valor' ? `${count} item${count !== 1 ? 's' : ''}` : `${count} OS`;
-        ctx.fillText(`⌊ ${label} ⌋`, x + bw / 2, H - 15);
+        ctx.fillText(`⌊ ${label} ⌋`, x + bw / 2, displayH - 15);
       }
     });
+    ctx.restore();
+
+    // Adicionar listener de clique (removendo anterior se houver)
+    canvas.onclick = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const clickY = e.clientY - rect.top;
+      
+      const clickedBar = barRects.find(r => 
+        clickX >= r.x && clickX <= r.x + r.w && 
+        clickY >= r.y - 20 && clickY <= r.y + r.h + 40
+      );
+      
+      if (clickedBar) {
+        setDiaSelecionado(clickedBar.data);
+      } else {
+        setDiaSelecionado(null);
+      }
+    };
   };
 
   const refBar1 = useRef(null);
@@ -2891,7 +2951,7 @@ function ResumoReuniaoView({requests}){
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
           <div>
             <p style={{ fontSize: 8, fontWeight: 800, textTransform: 'uppercase', color: 'var(--red)', margin: '0 0 4px' }}>Valor comprado por dia</p>
-            <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Investimento em Peças</h3>
+            <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Valor Gasto em Peças</h3>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ width: 12, height: 12, background: '#DC1F1F', borderRadius: 3 }} />
