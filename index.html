@@ -143,30 +143,23 @@ const parsePrice = (v) => {
   
   let s = String(v).trim().replace(/\s/g, '');
   
-  // Caso 1: Formato Brasileiro/Europeu com milhar e decimal (ex: 1.234,56)
-  if (s.includes('.') && s.includes(',')) {
-    if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
-      return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0;
-    } else {
-      return parseFloat(s.replace(/,/g, '')) || 0;
-    }
-  }
-  
-  // Caso 2: Apenas vírgula (ex: 92,27 ou 1.000)
+  // Se tiver vírgula, assume que ela é o separador decimal (Padrão BR)
   if (s.includes(',')) {
-    const parts = s.split(',');
-    if (parts.length === 2 && parts[1].length === 2) {
-      return parseFloat(s.replace(',', '.')) || 0;
-    }
-    return parseFloat(s.replace(',', '')) || 0;
+    // Remove pontos de milhar (ex: 1.234,56 -> 1234,56)
+    s = s.replace(/\./g, '');
+    // Troca a vírgula decimal por ponto para o parseFloat (ex: 1234,56 -> 1234.56)
+    return parseFloat(s.replace(',', '.')) || 0;
   }
   
-  // Caso 3: Apenas ponto (ex: 92.27 ou 1.590)
+  // Se NÃO tiver vírgula, mas tiver ponto
   if (s.includes('.')) {
     const parts = s.split('.');
+    // Se tiver exatamente 3 dígitos após o ponto, provavelmente é milhar (ex: 1.590)
+    // No contexto de peças, 1.590 reais é mais comum que 1 real e 59 centavos com 3 casas.
     if (parts.length === 2 && parts[1].length === 3) {
       return parseFloat(s.replace('.', '')) || 0;
     }
+    // Caso contrário, assume que o ponto é decimal (ex: 92.27)
     return parseFloat(s) || 0;
   }
   
@@ -205,7 +198,19 @@ const INIT_USERS=[
 ];
 const UNIDADES=['Unidade 1','Unidade 2','Unidade 3'];
 
-function fmtBRL(v){return v>0?'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2}):'—';}
+function fmtBRL(v){
+  if (v === null || v === undefined || isNaN(v)) return '—';
+  const val = Number(v);
+  if (val <= 0) return '—';
+  
+  // Usar Intl.NumberFormat explicitamente para garantir o formato R$ 1.234,56
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(val);
+}
 function fmtBytes(b){return b>=1073741824?(b/1073741824).toFixed(2)+'GB':b>=1048576?(b/1048576).toFixed(1)+'MB':(b/1024).toFixed(0)+'KB';}
 function estimarBytes(r){return r.reduce((a,x)=>a+(x.items?.some(i=>i.photo)?800000:30000),0);}
 
