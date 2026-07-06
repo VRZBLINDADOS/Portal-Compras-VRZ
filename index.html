@@ -137,6 +137,42 @@ const{useState,useEffect,useMemo,useRef,useCallback}=React;
 
 const MASTER_USER='Lucas.Sabino'; // Master 1 — pode promover/rebaixar qualquer um, inclusive outros masters
 
+const parsePrice = (v) => {
+  if (v === null || v === undefined || v === '') return 0;
+  if (typeof v === 'number') return v;
+  
+  let s = String(v).trim().replace(/\s/g, '');
+  
+  // Caso 1: Formato Brasileiro/Europeu com milhar e decimal (ex: 1.234,56)
+  if (s.includes('.') && s.includes(',')) {
+    if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
+      return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0;
+    } else {
+      return parseFloat(s.replace(/,/g, '')) || 0;
+    }
+  }
+  
+  // Caso 2: Apenas vírgula (ex: 92,27 ou 1.000)
+  if (s.includes(',')) {
+    const parts = s.split(',');
+    if (parts.length === 2 && parts[1].length === 2) {
+      return parseFloat(s.replace(',', '.')) || 0;
+    }
+    return parseFloat(s.replace(',', '')) || 0;
+  }
+  
+  // Caso 3: Apenas ponto (ex: 92.27 ou 1.590)
+  if (s.includes('.')) {
+    const parts = s.split('.');
+    if (parts.length === 2 && parts[1].length === 3) {
+      return parseFloat(s.replace('.', '')) || 0;
+    }
+    return parseFloat(s) || 0;
+  }
+  
+  return parseFloat(s) || 0;
+};
+
 const useFirestore=(collectionName)=>{
   const[data,setData]=useState([]);const[loading,setLoading]=useState(true);
   useEffect(()=>{
@@ -2688,47 +2724,7 @@ function ResumoReuniaoView({requests}){
   const mediaPorCarro = osUnicas > 0 ? (totalPedidos / osUnicas).toFixed(1) : '0';
   const maxPedDia = Math.max(...dadosDia.map(d => d.pedidos.length), 1);
 
-  const parsePrice = (v) => {
-    if (v === null || v === undefined || v === '') return 0;
-    if (typeof v === 'number') return v;
-    
-    let s = String(v).trim().replace(/\s/g, '');
-    
-    // Caso 1: Formato Brasileiro/Europeu com milhar e decimal (ex: 1.234,56)
-    if (s.includes('.') && s.includes(',')) {
-      // O último separador define se é decimal
-      if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
-        return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0;
-      } else {
-        return parseFloat(s.replace(/,/g, '')) || 0;
-      }
-    }
-    
-    // Caso 2: Apenas vírgula (ex: 92,27 ou 1.000)
-    if (s.includes(',')) {
-      const parts = s.split(',');
-      // Se tiver 2 partes e a segunda tiver 2 dígitos, é decimal (ex: 92,27)
-      if (parts.length === 2 && parts[1].length === 2) {
-        return parseFloat(s.replace(',', '.')) || 0;
-      }
-      // Caso contrário, tratamos como separador de milhar ou erro de digitação
-      return parseFloat(s.replace(',', '')) || 0;
-    }
-    
-    // Caso 3: Apenas ponto (ex: 92.27 ou 1.590)
-    if (s.includes('.')) {
-      const parts = s.split('.');
-      // Se tiver 2 partes e a segunda tiver 3 dígitos, provavelmente é milhar (ex: 1.590)
-      // a menos que seja um decimal de 3 casas, mas em compras VRZ usamos 2.
-      if (parts.length === 2 && parts[1].length === 3) {
-        // Se o valor for pequeno (ex: 1.590), no contexto de peças, 1590 é mais provável que 1.59
-        return parseFloat(s.replace('.', '')) || 0;
-      }
-      return parseFloat(s) || 0;
-    }
-    
-    return parseFloat(s) || 0;
-  };
+
 
   const dadosCompra = useMemo(() => {
     const map = {};
