@@ -1543,7 +1543,7 @@ const exportCSV=()=>{
 }
 
 // ── User Management — MELHORIA 3: 4 categorias (master fixo) ─────────────
-function UserManagement({users,onAdd,onDelete,onToggle,onRole,loggedInUser}){
+function UserManagement({users,onAdd,onDelete,onToggle,onRole,onFinalizacaoAccess,loggedInUser}){
   const[nu,setNu]=useState('');const[np,setNp]=useState('');const[nr,setNr]=useState('solicitante');const[showP,setShowP]=useState(false);
   const isMaster=loggedInUser?.role==='master';
 
@@ -1588,8 +1588,8 @@ function UserManagement({users,onAdd,onDelete,onToggle,onRole,loggedInUser}){
       )}
 
       <div className="card" style={{overflow:'hidden'}}>
-        <table className="vtable w-full">
-          <thead><tr><th>Usuário</th><th>Categoria</th><th>Status</th><th style={{textAlign:'right'}}>Ação</th></tr></thead>
+     <table className="vtable w-full">
+          <thead><tr><th>Usuário</th><th>Categoria</th><th>Status</th><th>Finalização</th><th style={{textAlign:'right'}}>Ação</th></tr></thead>
           <tbody>
             {users.map((u,i)=>{
               const isMasterUser=u.user===MASTER_USER;
@@ -1618,6 +1618,15 @@ function UserManagement({users,onAdd,onDelete,onToggle,onRole,loggedInUser}){
                     <button onClick={()=>onToggle(u)} style={{fontSize:9,fontWeight:800,textTransform:'uppercase',padding:'3px 10px',borderRadius:999,cursor:'pointer',border:'1px solid',background:u.active!==false?'#EDFAF3':'#FFF0F0',color:u.active!==false?'#0A6B34':'var(--red)',borderColor:u.active!==false?'#AAE6C5':'#FFBDBD'}}>{u.active!==false?'Ativo':'Desativado'}</button>
                   ):(
                     <span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',padding:'3px 10px',borderRadius:999,background:u.active!==false?'#EDFAF3':'#FFF0F0',color:u.active!==false?'#0A6B34':'var(--red)',border:`1px solid ${u.active!==false?'#AAE6C5':'#FFBDBD'}`}}>{u.active!==false?'Ativo':'Desativado'}</span>
+                  )}
+                </td>
+                <td>
+                  {isMasterUser?(
+                    <span style={{fontSize:9,color:'var(--muted)',fontWeight:700}}>Sempre</span>
+                  ):isMaster?(
+                    <button onClick={()=>onFinalizacaoAccess(u)} style={{fontSize:9,fontWeight:800,textTransform:'uppercase',padding:'3px 10px',borderRadius:999,cursor:'pointer',border:'1px solid',background:u.acessoFinalizacao===true?'#EDFAF3':'var(--smoke)',color:u.acessoFinalizacao===true?'#0A6B34':'var(--muted)',borderColor:u.acessoFinalizacao===true?'#AAE6C5':'var(--border)'}}>{u.acessoFinalizacao===true?'Liberado':'Bloqueado'}</button>
+                  ):(
+                    <span style={{fontSize:9,fontWeight:700,color:u.acessoFinalizacao===true?'#0A6B34':'var(--muted)'}}>{u.acessoFinalizacao===true?'Liberado':'Bloqueado'}</span>
                   )}
                 </td>
                 <td style={{textAlign:'right'}}>
@@ -2641,7 +2650,487 @@ function DeletedItemsView({loggedInUser}){
     </div>
   );
 }
-  
+
+// ── Finalização — Inspeção Final de Veículos ──────────────────────────────
+function compressPhotoDataURL(file, maxPx=700, quality=0.55){
+  return new Promise(resolve=>{
+    const r=new FileReader();
+    r.onload=e=>{
+      const img=new Image();
+      img.onload=()=>{
+        const c=document.createElement('canvas');
+        let w=img.width,h=img.height;
+        if(w>h&&w>maxPx){h=Math.round(h*maxPx/w);w=maxPx;}
+        else if(h>maxPx){w=Math.round(w*maxPx/h);h=maxPx;}
+        c.width=w;c.height=h;
+        c.getContext('2d').drawImage(img,0,0,w,h);
+        resolve(c.toDataURL('image/jpeg',quality));
+      };
+      img.onerror=()=>resolve(null);
+      img.src=e.target.result;
+    };
+    r.readAsDataURL(file);
+  });
+}
+
+function ProblemPhotoUpload({photo,onChange,compressing,setCompressing}){
+  const handleFile=async file=>{
+    if(!file)return;
+    setCompressing(true);
+    try{const d=await compressPhotoDataURL(file);onChange(d);}catch{alert('Erro ao processar imagem.');}
+    setCompressing(false);
+  };
+  if(photo)return(
+    <div style={{position:'relative',borderRadius:10,overflow:'hidden',border:'1.5px solid var(--border)',height:70,width:70,flexShrink:0}}>
+      <img src={photo} style={{height:'100%',width:'100%',objectFit:'cover'}} alt="Problema"/>
+      <button type="button" onClick={()=>onChange(null)} style={{position:'absolute',inset:0,background:'rgba(0,0,0,.55)',display:'flex',alignItems:'center',justifyContent:'center',border:'none',cursor:'pointer',color:'#fff'}}><Icon name="x" size={16}/></button>
+    </div>
+  );
+  return(
+    <label style={{height:70,width:70,flexShrink:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:3,border:'1.5px dashed var(--border)',borderRadius:10,cursor:compressing?'not-allowed':'pointer',background:'var(--smoke)',position:'relative'}}>
+      {compressing?<Icon name="loader" size={16} className="spin"/>:<Icon name="camera" size={16}/>}
+      <span style={{fontSize:6,fontWeight:800,textTransform:'uppercase',color:'var(--muted)'}}>Foto</span>
+      <input type="file" accept="image/*" onChange={e=>handleFile(e.target.files[0])} style={{position:'absolute',inset:0,opacity:0,cursor:compressing?'not-allowed':'pointer',width:'100%',height:'100%'}} disabled={compressing}/>
+    </label>
+  );
+}
+
+function ProblemCategoryEditor({title,icon,color,items,setItems}){
+  const[compressing,setCompressing]=useState(false);
+  const addProblem=()=>setItems([...items,{id:String(Date.now())+Math.floor(Math.random()*999),descricao:'',foto:null,status:'Pendente'}]);
+  const updateProblem=(id,key,val)=>setItems(items.map(p=>p.id===id?{...p,[key]:val}:p));
+  const removeProblem=(id)=>setItems(items.filter(p=>p.id!==id));
+  return(
+    <div className="card" style={{marginBottom:14}}>
+      <div style={{padding:'12px 16px',borderBottom:'1px solid var(--border)',background:'var(--smoke)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+        <div style={{display:'flex',alignItems:'center',gap:8}}>
+          <div style={{width:26,height:26,borderRadius:7,background:color,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name={icon} size={13} style={{color:'#fff'}}/></div>
+          <h4 style={{margin:0,fontSize:12,fontWeight:800,textTransform:'uppercase'}}>{title}</h4>
+          <span className="pill" style={{fontSize:7}}>{items.length}</span>
+        </div>
+        <button type="button" onClick={addProblem} className="btn-primary" style={{padding:'6px 12px',fontSize:9}}>+ Problema</button>
+      </div>
+      <div style={{padding:16,display:'flex',flexDirection:'column',gap:10}}>
+        {items.length===0&&<p style={{fontSize:10,color:'var(--muted)',textAlign:'center',margin:'8px 0'}}>Nenhum problema registrado</p>}
+        {items.map((p,idx)=>(
+          <div key={p.id} style={{display:'flex',gap:10,alignItems:'flex-start',background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:10,padding:10}}>
+            <ProblemPhotoUpload photo={p.foto} onChange={v=>updateProblem(p.id,'foto',v)} compressing={compressing} setCompressing={setCompressing}/>
+            <div style={{flex:1,minWidth:0}}>
+              <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',margin:'0 0 4px'}}>Problema {idx+1}</p>
+              <textarea value={p.descricao} onChange={e=>updateProblem(p.id,'descricao',sanitize(e.target.value))} placeholder="Descreva o problema..." className="input" style={{minHeight:50,resize:'vertical',fontSize:11,fontWeight:500}}/>
+            </div>
+            <button type="button" onClick={()=>removeProblem(p.id)} style={{background:'var(--red)',color:'#fff',border:'none',borderRadius:7,width:26,height:26,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}><Icon name="trash-2" size={12}/></button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PecasFinalizacaoSection({os, requests, novasPecas, setNovasPecas, excedentes, setExcedentes, pecasOpcao, setPecasOpcao}){
+  const existingItems=useMemo(()=>{
+    if(!os)return[];
+    const matching=requests.filter(r=>String(r.os).trim()===String(os).trim());
+    const all=[];const seen=new Set();
+    matching.forEach(r=>(r.items||[]).forEach(it=>{const k=it.id||it.description;if(!seen.has(k)){seen.add(k);all.push(it);}}));
+    return all;
+  },[requests,os]);
+
+  const toggleExcedente=(id)=>setExcedentes(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
+  const addNovaPeca=()=>setNovasPecas([...novasPecas,{id:String(Date.now())+Math.floor(Math.random()*999),description:'',quantity:1,photo:null}]);
+  const updateNovaPeca=(id,key,val)=>setNovasPecas(novasPecas.map(i=>i.id===id?{...i,[key]:val}:i));
+  const removeNovaPeca=(id)=>setNovasPecas(novasPecas.filter(i=>i.id!==id));
+  const[compressing,setCompressing]=useState(false);
+  const handlePecaPhoto=async(id,file)=>{
+    if(!file)return;setCompressing(true);
+    try{const d=await compressPhotoDataURL(file,700,0.55);updateNovaPeca(id,'photo',d);}catch{alert('Erro ao processar imagem.');}
+    setCompressing(false);
+  };
+
+  return(
+    <div className="card" style={{marginBottom:14}}>
+      <div style={{padding:'12px 16px',borderBottom:'1px solid var(--border)',background:'var(--smoke)',display:'flex',alignItems:'center',gap:8}}>
+        <div style={{width:26,height:26,borderRadius:7,background:'#7C3AED',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="package" size={13} style={{color:'#fff'}}/></div>
+        <h4 style={{margin:0,fontSize:12,fontWeight:800,textTransform:'uppercase'}}>Peças</h4>
+      </div>
+      <div style={{padding:16}}>
+        {existingItems.length===0?(
+          <p style={{fontSize:10,color:'var(--muted)',marginBottom:14}}>Nenhuma peça solicitada encontrada para esta OS ainda.</p>
+        ):(
+          <div style={{marginBottom:16}}>
+            <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',marginBottom:8}}>Peças já solicitadas nesta OS</p>
+            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+              {existingItems.map((it,i)=>{
+                const isExc=excedentes.includes(String(it.id));
+                const podeMarcar=pecasOpcao==='excedente';
+                return(
+                  <label key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',borderRadius:9,border:`1.5px solid ${isExc?'var(--red)':'var(--border)'}`,background:isExc?'var(--red-light)':'#fff',cursor:podeMarcar?'pointer':'default'}}>
+                    {podeMarcar&&<input type="checkbox" checked={isExc} onChange={()=>toggleExcedente(String(it.id))} style={{width:15,height:15,accentColor:'var(--red)',flexShrink:0}}/>}
+                    {it.photo?<img src={it.photo} style={{width:36,height:36,borderRadius:7,objectFit:'cover',flexShrink:0}}/>:<div style={{width:36,height:36,borderRadius:7,background:'var(--smoke)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="package" size={14}/></div>}
+                    <div style={{flex:1,minWidth:0}}>
+                      <p style={{fontSize:10,fontWeight:800,textTransform:'uppercase',margin:0}}>{it.description}</p>
+                      <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                        <span style={{fontSize:8,color:'var(--muted)'}}>Qtd: {it.quantity}</span>
+                        <StatusBadge status={it.status||'Pendente'}/>
+                      </div>
+                    </div>
+                    {isExc&&<span className="badge" style={{background:'var(--red)',color:'#fff'}}>Excedente</span>}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',marginBottom:8}}>O que deseja fazer?</p>
+        <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:16}}>
+          {[
+            {v:'suficiente',l:'As peças que preciso estão aqui',icon:'check-circle'},
+            {v:'novas',l:'Preciso adicionar um pedido',icon:'plus-circle'},
+            {v:'excedente',l:'Existem peças dessa lista que não são mais necessárias',icon:'package-minus'},
+          ].map(op=>(
+            <label key={op.v} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderRadius:10,border:`1.5px solid ${pecasOpcao===op.v?'var(--red)':'var(--border)'}`,background:pecasOpcao===op.v?'var(--red-light)':'#fff',cursor:'pointer'}}>
+              <input type="radio" name="pecasOpcao" checked={pecasOpcao===op.v} onChange={()=>setPecasOpcao(op.v)} style={{width:16,height:16,accentColor:'var(--red)'}}/>
+              <Icon name={op.icon} size={15}/>
+              <span style={{fontSize:11,fontWeight:700}}>{op.l}</span>
+            </label>
+          ))}
+        </div>
+
+        {pecasOpcao==='novas'&&(
+          <div style={{background:'var(--smoke)',borderRadius:12,padding:14}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+              <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--red)',margin:0}}>Novas peças a solicitar</p>
+              <button type="button" onClick={addNovaPeca} className="btn-primary" style={{padding:'6px 12px',fontSize:9}}>+ Peça</button>
+            </div>
+            {novasPecas.length===0&&<p style={{fontSize:10,color:'var(--muted)'}}>Nenhuma peça adicionada ainda.</p>}
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              {novasPecas.map(it=>(
+                <div key={it.id} style={{display:'flex',gap:10,alignItems:'center',background:'#fff',border:'1px solid var(--border)',borderRadius:9,padding:10}}>
+                  {it.photo?<img src={it.photo} style={{width:44,height:44,borderRadius:8,objectFit:'cover',flexShrink:0}}/>:(
+                    <label style={{width:44,height:44,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',border:'1.5px dashed var(--border)',borderRadius:8,cursor:'pointer',position:'relative'}}>
+                      <Icon name="camera" size={15}/>
+                      <input type="file" accept="image/*" onChange={e=>handlePecaPhoto(it.id,e.target.files[0])} style={{position:'absolute',inset:0,opacity:0,cursor:'pointer'}} disabled={compressing}/>
+                    </label>
+                  )}
+                  <input type="text" value={it.description} onChange={e=>updateNovaPeca(it.id,'description',sanitize(e.target.value))} placeholder="NOME DA PEÇA" className="input" style={{fontWeight:700,textTransform:'uppercase',flex:1}}/>
+                  <input type="number" min="1" value={it.quantity} onChange={e=>updateNovaPeca(it.id,'quantity',e.target.value)} className="input" style={{width:60,textAlign:'center'}}/>
+                  <button type="button" onClick={()=>removeNovaPeca(it.id)} style={{background:'var(--red)',color:'#fff',border:'none',borderRadius:7,width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}><Icon name="trash-2" size={12}/></button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function NovaFinalizacaoForm({vehiclesDB,requests,loggedInUser}){
+  const[os,setOs]=useState('');
+  const[vehicle,setVehicle]=useState(null);
+  const[unidade,setUnidade]=useState('Unidade 1');
+  const[ajuste,setAjuste]=useState([]);
+  const[pintura,setPintura]=useState([]);
+  const[pecasOpcao,setPecasOpcao]=useState('suficiente');
+  const[novasPecas,setNovasPecas]=useState([]);
+  const[excedentes,setExcedentes]=useState([]);
+  const[saving,setSaving]=useState(false);
+  const[done,setDone]=useState(false);
+
+  const onOSBlur=()=>{
+    const t=String(os).trim();if(!t)return;
+    const f=vehiclesDB.find(v=>String(v.os).trim()===t);
+    if(f){
+      setVehicle(f);
+      const req=requests.find(r=>String(r.os).trim()===t);
+      if(req)setUnidade(req.unidade||'Unidade 1');
+    }else{setVehicle(null);alert('OS não cadastrada.');}
+  };
+
+  const reset=()=>{
+    setOs('');setVehicle(null);setUnidade('Unidade 1');setAjuste([]);setPintura([]);
+    setPecasOpcao('suficiente');setNovasPecas([]);setExcedentes([]);setDone(false);
+  };
+
+  const salvar=async()=>{
+    if(!os.trim())return alert('Informe a OS.');
+    if(!vehicle)return alert('OS não cadastrada.');
+    setSaving(true);
+    try{
+      const now=Date.now();
+      if(pecasOpcao==='novas'&&novasPecas.length){
+        const validas=novasPecas.filter(p=>p.description.trim());
+        if(validas.length){
+          await col('requests').add(stripUndefined({
+            os,responsavel:loggedInUser.user,vehicleData:vehicle,unidade,
+            items:validas.map(p=>({id:String(Date.now())+Math.floor(Math.random()*999),description:p.description,quantity:p.quantity||1,photo:p.photo||null,status:'Pendente'})),
+            timestamp:now,status:'Pendente',origemFinalizacao:true,
+          }));
+        }
+      }
+      if(excedentes.length){
+        const matching=requests.filter(r=>String(r.os).trim()===String(os).trim());
+        for(const req of matching){
+          let changed=false;
+          const newItems=(req.items||[]).map(it=>{
+            if(excedentes.includes(String(it.id))){
+              changed=true;
+              return{...it,excedente:true,excedentePor:loggedInUser.user,excedenteEm:now};
+            }
+            return it;
+          });
+          if(changed)await col('requests').doc(req.id).update({items:stripUndefined(newItems)});
+        }
+      }
+      await col('finalizacoes').add(stripUndefined({
+        os,unidade,vehicleData:vehicle,
+        criadoPor:loggedInUser.user,criadoEm:now,
+        ajuste:ajuste.map(p=>({...p})),
+        pintura:pintura.map(p=>({...p})),
+        pecasOpcao,
+        pecasExcedentes:excedentes,
+        historico:[{acao:'Inspeção criada',usuario:loggedInUser.user,timestamp:now}],
+      }));
+      setDone(true);
+    }catch(e){alert('Erro ao salvar: '+e.message);}
+    setSaving(false);
+  };
+
+  if(done)return(
+    <div style={{maxWidth:420,margin:'0 auto',background:'#fff',borderRadius:20,border:'1.5px solid var(--border)',padding:40,textAlign:'center'}} className="fade-up">
+      <div style={{width:64,height:64,background:'#EDFAF3',borderRadius:18,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 20px'}}><Icon name="check-circle" size={32}/></div>
+      <h2 style={{fontSize:22,fontWeight:800,margin:'0 0 8px'}}>Inspeção Registrada!</h2>
+      <p style={{fontSize:12,color:'var(--muted)',marginBottom:24}}>OS #{os}</p>
+      <button onClick={reset} className="btn-primary" style={{width:'100%',padding:14}}>Nova Inspeção</button>
+    </div>
+  );
+
+  return(
+    <div className="fade-up" style={{paddingBottom:20}}>
+      <div className="card" style={{marginBottom:16}}>
+        <div style={{padding:20,display:'flex',flexDirection:'column',gap:16}}>
+          <div>
+            <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',display:'block',marginBottom:6}}>Número da OS</label>
+            <input type="text" inputMode="numeric" value={os} onChange={e=>setOs(sanitize(e.target.value))} onBlur={onOSBlur} placeholder="Nº da OS" className="input" style={{fontSize:22,fontWeight:800}}/>
+          </div>
+        </div>
+        <div style={{borderTop:'2px solid var(--border)',background:'var(--ink)',padding:20,minHeight:90,display:'flex',alignItems:'center'}}>
+          {vehicle?(
+            <div style={{width:'100%'}}>
+              <p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',letterSpacing:'.12em',color:'rgba(255,255,255,.3)',margin:'0 0 4px'}}>Veículo encontrado</p>
+              <p style={{fontSize:20,fontWeight:800,textTransform:'uppercase',color:'#fff',margin:'0 0 10px'}}>{vehicle.modelo}</p>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
+                {[['Etapa',vehicle.etapa],['Cor',vehicle.cor],['Chassi',vehicle.chassi]].map(([l,v])=>(
+                  <div key={l}><p style={{fontSize:7,color:'rgba(255,255,255,.3)',fontWeight:700,textTransform:'uppercase',margin:'0 0 2px'}}>{l}</p><p style={{fontSize:11,color:'rgba(255,255,255,.85)',fontWeight:600,margin:0,textTransform:'uppercase'}}>{v||'—'}</p></div>
+                ))}
+              </div>
+            </div>
+          ):(
+            <div style={{width:'100%',textAlign:'center',padding:'8px 0'}}>
+              <Icon name="car" size={26} style={{margin:'0 auto 6px',display:'block',color:'rgba(255,255,255,.15)'}}/>
+              <p style={{fontSize:9,color:'rgba(255,255,255,.25)',fontWeight:700,textTransform:'uppercase',margin:0}}>Digite a OS para carregar o veículo</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {vehicle&&(
+        <>
+          <ProblemCategoryEditor title="Ajuste" icon="wrench" color="#F59E0B" items={ajuste} setItems={setAjuste}/>
+          <ProblemCategoryEditor title="Pintura" icon="paintbrush" color="#2563EB" items={pintura} setItems={setPintura}/>
+          <PecasFinalizacaoSection os={os} requests={requests}
+            novasPecas={novasPecas} setNovasPecas={setNovasPecas} excedentes={excedentes} setExcedentes={setExcedentes}
+            pecasOpcao={pecasOpcao} setPecasOpcao={setPecasOpcao}/>
+
+          <button onClick={salvar} disabled={saving} className="btn-primary" style={{width:'100%',padding:16,fontSize:12}}>
+            {saving?<Icon name="refresh-cw" size={18} className="spin"/>:<><Icon name="save" size={16}/> Salvar Inspeção</>}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+function MeusCarrosView({loggedInUser,isMaster}){
+  const{data:finalizacoes,loading}=useFirestore('finalizacoes');
+  const[search,setSearch]=useState('');
+
+  const visiveis=useMemo(()=>{
+    let list=isMaster?finalizacoes:finalizacoes.filter(f=>f.criadoPor===loggedInUser.user);
+    if(search){
+      const t=search.toLowerCase();
+      list=list.filter(f=>String(f.os).toLowerCase().includes(t)||String(f.vehicleData?.modelo||'').toLowerCase().includes(t)||String(f.criadoPor||'').toLowerCase().includes(t));
+    }
+    return list.sort((a,b)=>b.criadoEm-a.criadoEm);
+  },[finalizacoes,loggedInUser,isMaster,search]);
+
+  const resolverPendencia=async(finId,categoria,itemId)=>{
+    const fin=finalizacoes.find(f=>f.id===finId);if(!fin)return;
+    const now=Date.now();
+    const newCat=(fin[categoria]||[]).map(p=>p.id===itemId?{...p,status:'Solucionado',resolvidoPor:loggedInUser.user,resolvidoEm:now}:p);
+    const novoHistorico=[...(fin.historico||[]),{acao:`Pendência resolvida (${categoria})`,usuario:loggedInUser.user,timestamp:now}];
+    try{await col('finalizacoes').doc(finId).update({[categoria]:stripUndefined(newCat),historico:stripUndefined(novoHistorico)});}
+    catch(e){alert('Erro: '+e.message);}
+  };
+
+  if(loading)return<Skeleton/>;
+
+  return(
+    <div className="fade-up" style={{paddingBottom:30}}>
+      <div style={{position:'relative',marginBottom:16}}>
+        <input type="text" placeholder="Buscar OS / Modelo / Usuário..." value={search} onChange={e=>setSearch(e.target.value)} className="input" style={{paddingLeft:36}}/>
+        <div style={{position:'absolute',left:11,top:'50%',transform:'translateY(-50%)',color:'var(--muted)'}}><Icon name="search" size={14}/></div>
+      </div>
+      {visiveis.length===0?(
+        <div style={{padding:'56px 20px',textAlign:'center',background:'#fff',borderRadius:16,border:'1.5px dashed var(--border)'}}>
+          <Icon name="clipboard-check" size={30} style={{margin:'0 auto 10px',display:'block',color:'var(--muted)'}}/>
+          <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',margin:0}}>Nenhuma inspeção encontrada</p>
+        </div>
+      ):(
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          {visiveis.map(fin=>{
+            const categorias=[['ajuste','Ajuste','#F59E0B','wrench'],['pintura','Pintura','#2563EB','paintbrush']];
+            const totalPend=['ajuste','pintura'].reduce((a,c)=>a+(fin[c]||[]).filter(p=>p.status!=='Solucionado').length,0);
+            return(
+              <div key={fin.id} className="card" style={{borderLeft:`3px solid ${totalPend>0?'var(--red)':'#059669'}`}}>
+                <div style={{padding:'14px 16px',borderBottom:'1px solid var(--border)',background:'var(--smoke)',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                    <span style={{fontSize:14,fontWeight:800}}>OS #{fin.os}</span>
+                    <span className="pill">{fin.unidade||'Unidade 1'}</span>
+                    <span style={{fontSize:9,color:'var(--muted)',fontWeight:700,textTransform:'uppercase'}}>{fin.vehicleData?.modelo||'—'}</span>
+                    {isMaster&&<span style={{fontSize:8,fontWeight:700,color:'var(--muted)'}}>por {fin.criadoPor}</span>}
+                  </div>
+                  <span style={{fontSize:9,fontWeight:800,padding:'3px 10px',borderRadius:999,background:totalPend>0?'var(--red-light)':'#EDFAF3',color:totalPend>0?'var(--red)':'#059669',border:`1px solid ${totalPend>0?'#FFBDBD':'#AAE6C5'}`}}>{totalPend>0?`${totalPend} pendente(s)`:'Tudo solucionado'}</span>
+                </div>
+                <div style={{padding:16,display:'flex',flexDirection:'column',gap:14}}>
+                  {categorias.map(([key,label,color,icon])=>{
+                    const items=fin[key]||[];
+                    if(!items.length)return null;
+                    return(
+                      <div key={key}>
+                        <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8}}>
+                          <div style={{width:20,height:20,borderRadius:6,background:color,display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name={icon} size={11} style={{color:'#fff'}}/></div>
+                          <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',margin:0}}>{label}</p>
+                        </div>
+                        <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                          {items.map(p=>(
+                            <div key={p.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',background:p.status==='Solucionado'?'#F0FBF5':'var(--smoke)',border:`1px solid ${p.status==='Solucionado'?'#AAE6C5':'var(--border)'}`,borderRadius:9}}>
+                              {p.foto?<img src={p.foto} style={{width:36,height:36,borderRadius:7,objectFit:'cover',flexShrink:0}}/>:<div style={{width:36,height:36,borderRadius:7,background:'#fff',border:'1px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name={icon} size={14}/></div>}
+                              <div style={{flex:1,minWidth:0}}>
+                                <p style={{fontSize:10,fontWeight:600,margin:0,color:'var(--ink)'}}>{p.descricao||'(sem descrição)'}</p>
+                                {p.status==='Solucionado'&&<p style={{fontSize:8,color:'#059669',fontWeight:700,margin:'2px 0 0'}}>✓ Resolvido {p.resolvidoPor?`por ${p.resolvidoPor}`:''} {p.resolvidoEm?'em '+new Date(p.resolvidoEm).toLocaleString('pt-BR'):''}</p>}
+                              </div>
+                              {p.status!=='Solucionado'?(
+                                <button onClick={()=>resolverPendencia(fin.id,key,p.id)} style={{padding:'5px 12px',background:'var(--ink)',color:'#fff',border:'none',borderRadius:7,fontSize:8,fontWeight:800,textTransform:'uppercase',cursor:'pointer',flexShrink:0,fontFamily:'Plus Jakarta Sans,sans-serif'}}>Resolver Pendência</button>
+                              ):(
+                                <span className="badge badge-done">Solucionado</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {fin.pecasOpcao&&(
+                    <div style={{fontSize:9,color:'var(--muted)',fontWeight:600}}>
+                      Peças: {fin.pecasOpcao==='suficiente'?'confirmadas como suficientes':fin.pecasOpcao==='novas'?'novo pedido gerado':'itens marcados como excedentes'}
+                      {fin.pecasExcedentes?.length>0&&` · ${fin.pecasExcedentes.length} excedente(s)`}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FinalizacaoView({vehiclesDB,requests,loggedInUser,isMaster}){
+  const[sub,setSub]=useState('nova');
+  return(
+    <div className="fade-up" style={{paddingBottom:16}}>
+      <div style={{marginBottom:16}}>
+        <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.15em',color:'var(--red)',marginBottom:4}}>Inspeção Final</p>
+        <h2 style={{fontSize:30,fontWeight:800,margin:'0 0 14px',letterSpacing:'-.02em'}}>Finalização</h2>
+        <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)',width:'fit-content'}}>
+          {[{k:'nova',l:'Nova Inspeção'},{k:'meus',l:'Meus Carros'}].map(t=>(
+            <button key={t.k} onClick={()=>setSub(t.k)} style={{padding:'8px 16px',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',border:'none',cursor:'pointer',letterSpacing:'.06em',fontFamily:'Plus Jakarta Sans,sans-serif',background:sub===t.k?'#fff':'transparent',color:sub===t.k?'var(--red)':'var(--muted)',boxShadow:sub===t.k?'0 2px 8px rgba(0,0,0,.08)':'none'}}>{t.l}</button>
+          ))}
+        </div>
+      </div>
+      {sub==='nova'&&<NovaFinalizacaoForm vehiclesDB={vehiclesDB} requests={requests} loggedInUser={loggedInUser}/>}
+      {sub==='meus'&&<MeusCarrosView loggedInUser={loggedInUser} isMaster={isMaster}/>}
+    </div>
+  );
+}
+
+function PedidosExcedentesView({requests}){
+  const excedentes=useMemo(()=>{
+    const list=[];
+    requests.forEach(req=>(req.items||[]).forEach(it=>{
+      if(it.excedente===true)list.push({reqId:req.id,os:req.os,unidade:req.unidade,vehicleData:req.vehicleData,item:it});
+    }));
+    return list.sort((a,b)=>(b.item.excedenteEm||0)-(a.item.excedenteEm||0));
+  },[requests]);
+
+  const manter=async(reqId,itemId)=>{
+    const req=requests.find(r=>r.id===reqId);if(!req)return;
+    const newItems=req.items.map(it=>{
+      if(String(it.id)!==String(itemId))return it;
+      const{excedente,excedentePor,excedenteEm,...rest}=it;
+      return rest;
+    });
+    try{await col('requests').doc(reqId).update({items:stripUndefined(newItems)});}
+    catch(e){alert('Erro: '+e.message);}
+  };
+
+  const excluir=async(reqId,itemId)=>{
+    if(!window.confirm('Excluir esta peça do pedido de compra?'))return;
+    const req=requests.find(r=>r.id===reqId);if(!req)return;
+    const newItems=req.items.filter(it=>String(it.id)!==String(itemId));
+    try{
+      if(newItems.length===0)await col('requests').doc(reqId).delete();
+      else await col('requests').doc(reqId).update({items:stripUndefined(newItems)});
+    }catch(e){alert('Erro: '+e.message);}
+  };
+
+  if(excedentes.length===0)return(
+    <div style={{padding:'56px 20px',textAlign:'center',background:'#fff',borderRadius:16,border:'1.5px dashed var(--border)'}}>
+      <Icon name="package-minus" size={30} style={{margin:'0 auto 10px',display:'block',color:'var(--muted)'}}/>
+      <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',margin:0}}>Nenhum pedido excedente registrado</p>
+    </div>
+  );
+
+  return(
+    <div className="card" style={{overflow:'hidden'}}>
+      <table className="vtable w-full">
+        <thead><tr><th>OS</th><th>Veículo</th><th>Peça</th><th>Qtd</th><th>Marcado por</th><th>Data</th><th style={{textAlign:'right'}}>Ação</th></tr></thead>
+        <tbody>
+          {excedentes.map((e,i)=>(
+            <tr key={i}>
+              <td style={{fontWeight:800}}>#{e.os}</td>
+              <td style={{textTransform:'uppercase',fontSize:10}}>{e.vehicleData?.modelo||'—'}</td>
+              <td style={{fontWeight:700,textTransform:'uppercase',fontSize:11}}>{e.item.description}</td>
+              <td style={{textAlign:'center'}}>{e.item.quantity}</td>
+              <td style={{fontSize:10,color:'var(--muted)'}}>{e.item.excedentePor||'—'}</td>
+              <td style={{fontSize:10,color:'var(--muted)'}}>{e.item.excedenteEm?new Date(e.item.excedenteEm).toLocaleDateString('pt-BR'):'—'}</td>
+              <td style={{textAlign:'right'}}>
+                <div style={{display:'flex',gap:6,justifyContent:'flex-end'}}>
+                  <button onClick={()=>manter(e.reqId,e.item.id)} style={{padding:'5px 12px',background:'#059669',color:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}>Manter</button>
+                  <button onClick={()=>excluir(e.reqId,e.item.id)} style={{padding:'5px 12px',background:'var(--red)',color:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}>Excluir</button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // ── App Principal
  // ── Resumo Reunião ────────────────────────────────────────────────────────
 function ResumoReuniaoView({requests}){
@@ -3138,10 +3627,11 @@ const[gestFab,setGestFab]=useState('');
 
   useEffect(()=>{const u=auth.onAuthStateChanged(u=>{if(u)setUser(u);else auth.signInAnonymously();});return u;},[]);
 
-  const role=loggedIn?.role||'solicitante';
+ const role=loggedIn?.role||'solicitante';
   const isMaster=role==='master';
   const isAdmin=role==='admin'||isMaster;
   const isSol=canDo(role,'newReq');
+  const canAccessFinalizacao=isMaster||loggedIn?.acessoFinalizacao===true;
 
   const addUser=async(u,p,r='solicitante')=>{
     // Só o Master 1 (Lucas.Sabino) pode criar masters
@@ -3165,12 +3655,18 @@ const[gestFab,setGestFab]=useState('');
     if(!u.id){setUsers(p=>p.map(x=>x.user===u.user?{...x,active:s}:x));return;}
     try{await col('users').doc(u.id).update({active:s});}catch(e){console.error(e);alert('Erro ao alterar status.');}
   };
-  const changeRole=async(u,r)=>{
+const changeRole=async(u,r)=>{
     if(u.user===MASTER_USER)return; // Master 1 nunca muda de role
     // Só Master 1 pode promover/rebaixar para/de master
     if((r==='master'||u.role==='master')&&loggedIn?.user!==MASTER_USER)return alert('Somente o Master 1 pode alterar a categoria Master.');
     if(!u.id){setUsers(p=>p.map(x=>x.user===u.user?{...x,role:r}:x));return;}
     try{await col('users').doc(u.id).update({role:r});}catch(e){console.error(e);alert('Erro ao alterar categoria.');}
+  };
+  const toggleFinalizacaoAccess=async(u)=>{
+    if(!isMaster)return;
+    const novo=!(u.acessoFinalizacao===true);
+    if(!u.id){setUsers(p=>p.map(x=>x.user===u.user?{...x,acessoFinalizacao:novo}:x));return;}
+    try{await col('users').doc(u.id).update({acessoFinalizacao:novo});}catch(e){console.error(e);alert('Erro ao alterar acesso à Finalização.');}
   };
 
   const defaultViewForRole=(r)=>{if(r==='leitor')return 'status';return 'request';};
@@ -3234,7 +3730,8 @@ const[gestFab,setGestFab]=useState('');
 
   // ── Todos os hooks ANTES de qualquer return condicional ──────────────────
   
-  const hoje=new Date();hoje.setHours(0,0,0,0);
+ const hoje=new Date();hoje.setHours(0,0,0,0);
+  const excedentesCount=requests.reduce((a,r)=>a+(r.items||[]).filter(it=>it.excedente===true).length,0);
   const tabCounts={
     pending:requests.filter(r=>r.items?.some(it=>it.status==='Pendente')).length,
     quoting:requests.filter(r=>r.items?.some(it=>it.status==='Em Cotação')).length,
@@ -3266,10 +3763,11 @@ const[gestFab,setGestFab]=useState('');
     return count;
   },[requests,lidasNav]);
 
-  const navItems=[
+const navItems=[
     isSol&&{key:'request',icon:'plus-circle',label:'Nova Peça'},
     {key:'status',icon:'search',label:'Histórico'},
     {key:'chegadas',icon:'package-check',label:'Chegadas',badge:chegadasNaoLidas},
+    canAccessFinalizacao&&{key:'finalizacao',icon:'clipboard-check',label:'Finalização'},
     canDo(role,'donor')&&{key:'donor',icon:'git-merge',label:'Doações'},
     canDo(role,'manage')&&{key:'admin',icon:'settings',label:'Gestão'},
     (isMaster||isAdmin)&&{key:'dashboard',icon:'bar-chart-2',label:'Análises'},
@@ -3354,7 +3852,8 @@ const[gestFab,setGestFab]=useState('');
                 {view==='request'&&isSol&&<RequestForm user={user} loggedInUser={loggedIn} vehiclesDB={vehicles} requests={requests}/>}
                 {view==='status'&&<StatusView requests={requests} loggedInUser={loggedIn} vehicles={vehicles}/>}
                 {view==='chegadas'&&<ChegadasView requests={requests} loggedInUser={loggedIn} vehicles={vehicles}/>}
-                {view==='donor'&&canDo(role,'donor')&&<DonorSystem requests={requests} vehicles={vehicles} loggedInUser={loggedIn}/>}
+               {view==='donor'&&canDo(role,'donor')&&<DonorSystem requests={requests} vehicles={vehicles} loggedInUser={loggedIn}/>}
+                {view==='finalizacao'&&canAccessFinalizacao&&<FinalizacaoView vehiclesDB={vehicles} requests={requests} loggedInUser={loggedIn} isMaster={isMaster}/>}
                 {view==='admin'&&canDo(role,'manage')&&(
                   <div className="fade-up" style={{paddingBottom:40}}>
                     <div style={{marginBottom:16}}>
@@ -3380,7 +3879,8 @@ const[gestFab,setGestFab]=useState('');
                        {key:'overdue',label:`⚠ Atrasados (${tabCounts.overdue||0})`,color:'#DC1F1F'},
                        {key:'completed',label:`Concluídos (${tabCounts.completed})`,color:'#0A6B34'},
                         {key:'donated',label:`Doados (${tabCounts.donated})`,color:'#A81515'},
-                        {key:'vehicles',label:`Veículos (${vehicles.length})`,color:'var(--ink)'},
+                       {key:'vehicles',label:`Veículos (${vehicles.length})`,color:'var(--ink)'},
+                        isMaster&&{key:'excedentes',label:`Pedidos Excedentes (${excedentesCount})`,color:'#DC2626'},
                         isMaster&&{key:'users',label:'Usuários',color:'var(--red)'},
                         isMaster&&{key:'storage',label:'Capacidade',color:'#7C3AED'},
                       ].filter(Boolean).map(t=>(
@@ -3390,10 +3890,11 @@ const[gestFab,setGestFab]=useState('');
                       ))}
                     </div>
 
-                   {subView==='users'&&isMaster&&<UserManagement users={users} onAdd={addUser} onDelete={deleteUser} onToggle={toggleUser} onRole={changeRole} loggedInUser={loggedIn}/>}
+                 {subView==='users'&&isMaster&&<UserManagement users={users} onAdd={addUser} onDelete={deleteUser} onToggle={toggleUser} onRole={changeRole} onFinalizacaoAccess={toggleFinalizacaoAccess} loggedInUser={loggedIn}/>}
 {subView==='storage'&&isMaster&&<StorageView requests={requests} loggedInUser={loggedIn}/>}
 {subView==='cancelDonation'&&isMaster&&<CancelDonationView requests={requests} loggedInUser={loggedIn}/>}
 {subView==='deletedItems'&&isMaster&&<DeletedItemsView loggedInUser={loggedIn}/>}
+{subView==='excedentes'&&isMaster&&<PedidosExcedentesView requests={requests}/>}
                     {subView==='vehicles'&&(
                       <div className="card" style={{overflow:'hidden'}}>
                         <div style={{overflowX:'auto',maxHeight:'60vh'}} className="scroll-y">
