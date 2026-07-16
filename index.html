@@ -248,7 +248,8 @@ function mergeByOS(requests){
     const itemsWithMeta = (r.items||[]).map(it => ({
       ...it,
       _responsavel: r.responsavel,
-      _timestamp: r.timestamp
+      _timestamp: r.timestamp,
+      _reqId: r.id
     }));
 
     if(!map[k]){
@@ -1887,7 +1888,7 @@ function EditingModal({req,onClose,onSave}){
     setSaving(true);
     try{
       const timeout=new Promise((_,rej)=>setTimeout(()=>rej(new Error('Tempo esgotado. Verifique sua conexão.')),12000));
-      await Promise.race([onSave(req.id,localItems),timeout]);
+     await Promise.race([onSave(req.id,localItems,req.os),timeout]);
       onClose();
     }catch(e){
       alert('Erro ao salvar: '+e.message);
@@ -4018,26 +4019,51 @@ const changeRole=async(u,r)=>{
     img.src=b64;
   });
 
-  const saveItems=async(reqId,newItems)=>{
+ const saveItems=async(reqId,newItems,os)=>{
     const req=requests.find(r=>r.id===reqId);if(!req)return;
-    let gs='Concluído';
-    if(newItems.some(it=>it.status==='Pendente'))gs='Pendente';
-    else if(newItems.some(it=>it.status==='Em Cotação'))gs='Em Cotação';
-    else if(newItems.some(it=>it.status==='Comprado'))gs='Comprado';
-    else if(newItems.some(it=>it.status==='Doado'))gs='Doado';
+
+    // Comprime fotos e remove os campos auxiliares (_responsavel/_timestamp/_reqId)
     const compressedItems=await Promise.all(newItems.map(async it=>{
-      if(!it.photo)return it;
-      const photo=await compressBase64(it.photo,600,0.45);
-      return{...it,photo};
+      const{_responsavel,_timestamp,_reqId,...clean}=it;
+      if(!clean.photo)return clean;
+      const photo=await compressBase64(clean.photo,600,0.45);
+      return{...clean,photo};
     }));
-    const payload=stripUndefined(compressedItems);
-    const estimado=JSON.stringify(payload).length;
-    if(estimado>900000){
-      alert(`Documento ainda grande (~${Math.round(estimado/1024)}KB). Remova algumas fotos ou reduza itens.`);
-      return;
-    }
-    try{await col('requests').doc(reqId).update({items:payload,status:gs});}
-    catch(e){console.error('Erro ao salvar:',e);alert('Erro ao salvar: '+e.message);}
+
+    // Reagrupa os itens pelo documento Firestore de origem, pois uma OS pode
+    // estar espalhada em mais de um documento (inclusão adicional, Finalização, etc.)
+    const grupos={};
+    compressedItems.forEach((it,idx)=>{
+      const origem=newItems[idx]._reqId||reqId;
+      if(!grupos[origem])grupos[origem]=[];
+      grupos[origem].push(it);
+    });
+
+    const alvoOS=os||req.os;
+    const todosDocs=requests.filter(r=>String(r.os).trim()===String(alvoOS).trim());
+
+    try{
+      for(const doc of todosDocs){
+        const itensDoDoc=grupos[doc.id]||[];
+        if(itensDoDoc.length===0){
+          // todos os itens deste documento foram excluídos → apaga o documento
+          await col('requests').doc(doc.id).delete();
+          continue;
+        }
+        let gs='Concluído';
+        if(itensDoDoc.some(it=>it.status==='Pendente'))gs='Pendente';
+        else if(itensDoDoc.some(it=>it.status==='Em Cotação'))gs='Em Cotação';
+        else if(itensDoDoc.some(it=>it.status==='Comprado'))gs='Comprado';
+        else if(itensDoDoc.some(it=>it.status==='Doado'))gs='Doado';
+        const payload=stripUndefined(itensDoDoc);
+        const estimado=JSON.stringify(payload).length;
+        if(estimado>900000){
+          alert(`Documento da OS ${alvoOS} ainda grande (~${Math.round(estimado/1024)}KB). Remova algumas fotos ou reduza itens.`);
+          return;
+        }
+        await col('requests').doc(doc.id).update({items:payload,status:gs});
+      }
+    }catch(e){console.error('Erro ao salvar:',e);alert('Erro ao salvar: '+e.message);}
   };
 
   // ── Todos os hooks ANTES de qualquer return condicional ──────────────────
