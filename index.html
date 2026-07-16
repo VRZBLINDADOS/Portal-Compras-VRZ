@@ -229,6 +229,17 @@ function canDo(role, action){
   return !!(perms[role||'solicitante']?.[action]);
 }
 
+function getPecasParaOS(os, requests){
+  if(!os)return[];
+  const matching=requests.filter(r=>String(r.os).trim()===String(os).trim());
+  const all=[];const seen=new Set();
+  matching.forEach(r=>(r.items||[]).forEach(it=>{
+    const k=it.id||it.description;
+    if(!seen.has(k)){seen.add(k);all.push({...it,_responsavel:r.responsavel,_timestamp:r.timestamp});}
+  }));
+  return all;
+}
+
 function mergeByOS(requests){
   const map={};const order=[];
   requests.forEach(r=>{
@@ -2673,53 +2684,137 @@ function compressPhotoDataURL(file, maxPx=700, quality=0.55){
   });
 }
 
-function ProblemPhotoUpload({photo,onChange,compressing,setCompressing}){
+function PhotoDropzone({photo,onChange,disabled}){
+  const[isDragging,setIsDragging]=useState(false);
+  const[compressing,setCompressing]=useState(false);
   const handleFile=async file=>{
-    if(!file)return;
+    if(!file||disabled)return;
     setCompressing(true);
     try{const d=await compressPhotoDataURL(file);onChange(d);}catch{alert('Erro ao processar imagem.');}
     setCompressing(false);
   };
+  const onDrop=e=>{
+    e.preventDefault();setIsDragging(false);if(disabled)return;
+    const f=e.dataTransfer.files?.[0];
+    if(f&&f.type.startsWith('image/'))handleFile(f);
+  };
   if(photo)return(
-    <div style={{position:'relative',borderRadius:10,overflow:'hidden',border:'1.5px solid var(--border)',height:70,width:70,flexShrink:0}}>
-      <img src={photo} style={{height:'100%',width:'100%',objectFit:'cover'}} alt="Problema"/>
-      <button type="button" onClick={()=>onChange(null)} style={{position:'absolute',inset:0,background:'rgba(0,0,0,.55)',display:'flex',alignItems:'center',justifyContent:'center',border:'none',cursor:'pointer',color:'#fff'}}><Icon name="x" size={16}/></button>
+    <div style={{position:'relative',borderRadius:12,overflow:'hidden',border:'1.5px solid var(--border)',height:110}}>
+      <img src={photo} style={{width:'100%',height:'100%',objectFit:'cover'}} alt="Foto"/>
+      {!disabled&&(
+        <div style={{position:'absolute',top:6,right:6,display:'flex',gap:6}}>
+          <label style={{width:28,height:28,background:'rgba(13,13,13,.75)',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'#fff'}}>
+            <Icon name="refresh-cw" size={13}/>
+            <input type="file" accept="image/*" onChange={e=>handleFile(e.target.files[0])} style={{display:'none'}}/>
+          </label>
+          <button type="button" onClick={()=>onChange(null)} style={{width:28,height:28,background:'var(--red)',border:'none',borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'#fff'}}><Icon name="x" size={13}/></button>
+        </div>
+      )}
     </div>
   );
   return(
-    <label style={{height:70,width:70,flexShrink:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:3,border:'1.5px dashed var(--border)',borderRadius:10,cursor:compressing?'not-allowed':'pointer',background:'var(--smoke)',position:'relative'}}>
-      {compressing?<Icon name="loader" size={16} className="spin"/>:<Icon name="camera" size={16}/>}
-      <span style={{fontSize:6,fontWeight:800,textTransform:'uppercase',color:'var(--muted)'}}>Foto</span>
-      <input type="file" accept="image/*" onChange={e=>handleFile(e.target.files[0])} style={{position:'absolute',inset:0,opacity:0,cursor:compressing?'not-allowed':'pointer',width:'100%',height:'100%'}} disabled={compressing}/>
+    <label
+      onDragOver={e=>{e.preventDefault();if(!disabled)setIsDragging(true);}}
+      onDragLeave={()=>setIsDragging(false)}
+      onDrop={onDrop}
+      style={{height:110,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:6,border:`2px dashed ${isDragging?'var(--red)':'var(--border)'}`,borderRadius:12,cursor:disabled?'not-allowed':'pointer',background:isDragging?'var(--red-light)':'var(--smoke)',transition:'all .15s',position:'relative',opacity:disabled?.5:1}}>
+      {compressing?<Icon name="loader" size={20} className="spin"/>:<Icon name="camera" size={20} style={{color:'var(--muted)'}}/>}
+      <span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',textAlign:'center'}}>{compressing?'Processando...':'Clique para adicionar uma foto'}</span>
+      <span style={{fontSize:8,color:'var(--muted)'}}>ou arraste e solte aqui</span>
+      <input type="file" accept="image/*" onChange={e=>handleFile(e.target.files[0])} style={{position:'absolute',inset:0,opacity:0,cursor:disabled?'not-allowed':'pointer'}} disabled={disabled}/>
     </label>
   );
 }
 
-function ProblemCategoryEditor({title,icon,color,items,setItems}){
-  const[compressing,setCompressing]=useState(false);
-  const addProblem=()=>setItems([...items,{id:String(Date.now())+Math.floor(Math.random()*999),descricao:'',foto:null,status:'Pendente'}]);
+function buildFinalizacaoPDF(fin, pecasItems){
+  const{jsPDF}=window.jspdf;const doc=new jsPDF();
+  doc.setFillColor(13,13,13);doc.rect(0,0,210,34,'F');
+  doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(15);
+  doc.text('VRZ — INSPEÇÃO DE FINALIZAÇÃO',10,15);
+  doc.setFont('helvetica','normal');doc.setFontSize(8);
+  doc.text(`OS #${fin.os}  ·  ${fin.unidade||'Unidade 1'}  ·  Gerado em ${new Date().toLocaleString('pt-BR')}`,10,24);
+  doc.setTextColor(0,0,0);
+  let y=44;
+  doc.setFont('helvetica','bold');doc.setFontSize(11);doc.text('Dados do Veículo',10,y);y+=7;
+  doc.setFont('helvetica','normal');doc.setFontSize(9);
+  const vd=fin.vehicleData||{};
+  [['Modelo',vd.modelo],['Chassi',vd.chassi],['Cor',vd.cor],['Etapa',vd.etapa],['Criado por',fin.criadoPor],['Criado em',fin.criadoEm?new Date(fin.criadoEm).toLocaleString('pt-BR'):'—']].forEach(([l,v])=>{doc.text(`${l}: ${v||'—'}`,10,y);y+=6;});
+  y+=4;
+  const secao=(titulo,items)=>{
+    if(y>260){doc.addPage();y=15;}
+    doc.setFont('helvetica','bold');doc.setFontSize(11);doc.text(titulo,10,y);y+=7;
+    if(!items||!items.length){doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text('Nenhum problema registrado.',12,y);y+=8;return;}
+    items.forEach((p,i)=>{
+      if(y>255){doc.addPage();y=15;}
+      doc.setFont('helvetica','bold');doc.setFontSize(9);
+      doc.text(`${i+1}. ${p.status==='Solucionado'?'[SOLUCIONADO] ':'[PENDENTE] '}${p.descricao||'(sem descrição)'}`,12,y);y+=6;
+      if(p.status==='Solucionado'&&p.resolvidoPor){doc.setFont('helvetica','normal');doc.setFontSize(8);doc.text(`Resolvido por ${p.resolvidoPor} em ${p.resolvidoEm?new Date(p.resolvidoEm).toLocaleString('pt-BR'):''}`,14,y);y+=6;}
+      if(p.foto){try{doc.addImage(p.foto,'JPEG',12,y,40,26);y+=30;}catch(e){}}
+    });
+    y+=4;
+  };
+  secao('Ajuste',fin.ajuste);
+  secao('Pintura',fin.pintura);
+  if(y>250){doc.addPage();y=15;}
+  doc.setFont('helvetica','bold');doc.setFontSize(11);doc.text('Peças',10,y);y+=7;
+  if(!pecasItems||!pecasItems.length){doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text('Nenhuma peça vinculada.',12,y);y+=8;}
+  else pecasItems.forEach((it,i)=>{
+    if(y>255){doc.addPage();y=15;}
+    doc.setFont('helvetica','bold');doc.setFontSize(9);
+    doc.text(`${i+1}. ${it.description||''} (Qtd ${it.quantity||1})${it.excedente?' [EXCEDENTE]':''}`,12,y);y+=5;
+    doc.setFont('helvetica','normal');doc.setFontSize(8);
+    let info=`Status: ${it.statusOriginal||it.status||'Pendente'}  ·  Solicitado por ${it._responsavel||'—'}`;
+    if(it.status==='Comprado')info+=`  ·  Comprado em ${it.boughtAt?new Date(it.boughtAt+'T00:00:00').toLocaleDateString('pt-BR'):'—'}  ·  Previsão ${it.deliveryDate?new Date(it.deliveryDate+'T00:00:00').toLocaleDateString('pt-BR'):'—'}`;
+    if(it.status==='Concluído')info+=`  ·  Recebido em ${it.actualDeliveryDate?new Date(it.actualDeliveryDate+'T00:00:00').toLocaleDateString('pt-BR'):'—'}`;
+    doc.text(info,14,y);y+=7;
+  });
+  return doc;
+}
+function ProblemCategoryEditor({title,icon,color,items,setItems,disabled}){
+  const addProblem=()=>{if(disabled)return;setItems([...items,{id:String(Date.now())+Math.floor(Math.random()*999),descricao:'',foto:null,status:'Pendente'}]);};
   const updateProblem=(id,key,val)=>setItems(items.map(p=>p.id===id?{...p,[key]:val}:p));
-  const removeProblem=(id)=>setItems(items.filter(p=>p.id!==id));
+  const[confirmDel,setConfirmDel]=useState(null);
+  const removeProblem=(id)=>{setItems(items.filter(p=>p.id!==id));setConfirmDel(null);};
   return(
-    <div className="card" style={{marginBottom:14}}>
-      <div style={{padding:'12px 16px',borderBottom:'1px solid var(--border)',background:'var(--smoke)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-        <div style={{display:'flex',alignItems:'center',gap:8}}>
-          <div style={{width:26,height:26,borderRadius:7,background:color,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name={icon} size={13} style={{color:'#fff'}}/></div>
-          <h4 style={{margin:0,fontSize:12,fontWeight:800,textTransform:'uppercase'}}>{title}</h4>
-          <span className="pill" style={{fontSize:7}}>{items.length}</span>
+    <div className="card" style={{marginBottom:16,opacity:disabled?.6:1}}>
+      <div style={{padding:'16px 20px',borderBottom:'1px solid var(--border)',background:`linear-gradient(135deg, ${color}12, transparent)`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+        <div style={{display:'flex',alignItems:'center',gap:10}}>
+          <div style={{width:34,height:34,borderRadius:10,background:color,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,boxShadow:`0 4px 10px ${color}55`}}><Icon name={icon} size={16} style={{color:'#fff'}}/></div>
+          <div>
+            <h4 style={{margin:0,fontSize:13,fontWeight:800,textTransform:'uppercase',letterSpacing:'.02em'}}>{title}</h4>
+            <p style={{margin:0,fontSize:9,color:'var(--muted)',fontWeight:600}}>{items.length} problema(s) registrado(s)</p>
+          </div>
         </div>
-        <button type="button" onClick={addProblem} className="btn-primary" style={{padding:'6px 12px',fontSize:9}}>+ Problema</button>
+        <button type="button" onClick={addProblem} disabled={disabled} className="btn-primary" style={{padding:'8px 14px',fontSize:9}}>+ Adicionar</button>
       </div>
-      <div style={{padding:16,display:'flex',flexDirection:'column',gap:10}}>
-        {items.length===0&&<p style={{fontSize:10,color:'var(--muted)',textAlign:'center',margin:'8px 0'}}>Nenhum problema registrado</p>}
+      <div style={{padding:18,display:'flex',flexDirection:'column',gap:12}}>
+        {items.length===0&&(
+          <div style={{textAlign:'center',padding:'20px 0'}}>
+            <Icon name={icon} size={22} style={{color:'var(--border)',margin:'0 auto 6px',display:'block'}}/>
+            <p style={{fontSize:10,color:'var(--muted)',margin:0}}>Nenhum problema registrado ainda</p>
+          </div>
+        )}
         {items.map((p,idx)=>(
-          <div key={p.id} style={{display:'flex',gap:10,alignItems:'flex-start',background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:10,padding:10}}>
-            <ProblemPhotoUpload photo={p.foto} onChange={v=>updateProblem(p.id,'foto',v)} compressing={compressing} setCompressing={setCompressing}/>
-            <div style={{flex:1,minWidth:0}}>
-              <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',margin:'0 0 4px'}}>Problema {idx+1}</p>
-              <textarea value={p.descricao} onChange={e=>updateProblem(p.id,'descricao',sanitize(e.target.value))} placeholder="Descreva o problema..." className="input" style={{minHeight:50,resize:'vertical',fontSize:11,fontWeight:500}}/>
+          <div key={p.id} className="finaliz-problem-row" style={{display:'grid',gridTemplateColumns:'150px 1fr',gap:12,background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:12,padding:12}}>
+            <style>{`@media(max-width:600px){.finaliz-problem-row{grid-template-columns:1fr!important}}`}</style>
+            <PhotoDropzone photo={p.foto} onChange={v=>updateProblem(p.id,'foto',v)} disabled={disabled}/>
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)'}}>Problema {idx+1}</span>
+                {confirmDel===p.id?(
+                  <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                    <span style={{fontSize:8,fontWeight:700,color:'var(--red)'}}>Excluir?</span>
+                    <button type="button" onClick={()=>setConfirmDel(null)} className="btn-ghost" style={{padding:'4px 8px',fontSize:8}}>Não</button>
+                    <button type="button" onClick={()=>removeProblem(p.id)} style={{padding:'4px 10px',background:'var(--red)',color:'#fff',border:'none',borderRadius:6,fontSize:8,fontWeight:800,cursor:'pointer'}}>Sim, excluir</button>
+                  </div>
+                ):(
+                  <button type="button" onClick={()=>setConfirmDel(p.id)} disabled={disabled} style={{display:'flex',alignItems:'center',gap:5,padding:'5px 10px',background:'#fff',border:'1px solid #FFBDBD',borderRadius:7,fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--red)',cursor:disabled?'not-allowed':'pointer'}}>
+                    <Icon name="trash-2" size={11}/> Cancelar
+                  </button>
+                )}
+              </div>
+              <textarea value={p.descricao} onChange={e=>updateProblem(p.id,'descricao',sanitize(e.target.value))} placeholder="Descreva o problema encontrado..." className="input" disabled={disabled} style={{minHeight:56,resize:'vertical',fontSize:12,fontWeight:500,flex:1}}/>
             </div>
-            <button type="button" onClick={()=>removeProblem(p.id)} style={{background:'var(--red)',color:'#fff',border:'none',borderRadius:7,width:26,height:26,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}><Icon name="trash-2" size={12}/></button>
           </div>
         ))}
       </div>
@@ -2727,70 +2822,78 @@ function ProblemCategoryEditor({title,icon,color,items,setItems}){
   );
 }
 
-function PecasFinalizacaoSection({os, requests, novasPecas, setNovasPecas, excedentes, setExcedentes, pecasOpcao, setPecasOpcao}){
-  const existingItems=useMemo(()=>{
-    if(!os)return[];
-    const matching=requests.filter(r=>String(r.os).trim()===String(os).trim());
-    const all=[];const seen=new Set();
-    matching.forEach(r=>(r.items||[]).forEach(it=>{const k=it.id||it.description;if(!seen.has(k)){seen.add(k);all.push(it);}}));
-    return all;
-  },[requests,os]);
+function PecasFinalizacaoSection({os, requests, novasPecas, setNovasPecas, excedentes, setExcedentes, pecasOpcao, setPecasOpcao, disabled}){
+  const existingItems=useMemo(()=>getPecasParaOS(os,requests),[requests,os]);
+  const ativos=useMemo(()=>existingItems.filter(it=>!it.excedente),[existingItems]);
+  const jaExcedentes=useMemo(()=>existingItems.filter(it=>it.excedente),[existingItems]);
 
-  const toggleExcedente=(id)=>setExcedentes(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
-  const addNovaPeca=()=>setNovasPecas([...novasPecas,{id:String(Date.now())+Math.floor(Math.random()*999),description:'',quantity:1,photo:null}]);
+  const toggleExcedente=(id)=>{if(disabled)return;setExcedentes(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);};
+  const addNovaPeca=()=>{if(disabled)return;setNovasPecas([...novasPecas,{id:String(Date.now())+Math.floor(Math.random()*999),description:'',quantity:1,photo:null}]);};
   const updateNovaPeca=(id,key,val)=>setNovasPecas(novasPecas.map(i=>i.id===id?{...i,[key]:val}:i));
   const removeNovaPeca=(id)=>setNovasPecas(novasPecas.filter(i=>i.id!==id));
-  const[compressing,setCompressing]=useState(false);
-  const handlePecaPhoto=async(id,file)=>{
-    if(!file)return;setCompressing(true);
-    try{const d=await compressPhotoDataURL(file,700,0.55);updateNovaPeca(id,'photo',d);}catch{alert('Erro ao processar imagem.');}
-    setCompressing(false);
+
+  const ItemRow=({it,selectable})=>{
+    const isSel=selectable&&excedentes.includes(String(it.id));
+    return(
+      <div onClick={()=>selectable&&toggleExcedente(String(it.id))} style={{display:'flex',gap:10,alignItems:'flex-start',padding:'10px 12px',borderRadius:10,border:`1.5px solid ${isSel?'var(--red)':'var(--border)'}`,background:isSel?'var(--red-light)':'#fff',cursor:selectable&&!disabled?'pointer':'default'}}>
+        {selectable&&<input type="checkbox" checked={isSel} onChange={()=>toggleExcedente(String(it.id))} disabled={disabled} style={{width:15,height:15,accentColor:'var(--red)',marginTop:2,flexShrink:0}}/>}
+        {it.photo?<img src={it.photo} style={{width:40,height:40,borderRadius:8,objectFit:'cover',flexShrink:0}}/>:<div style={{width:40,height:40,borderRadius:8,background:'var(--smoke)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="package" size={16}/></div>}
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:3}}>
+            <span style={{fontSize:11,fontWeight:800,textTransform:'uppercase'}}>{it.description}</span>
+            <StatusBadge status={it.status||'Pendente'} orig={it.statusOriginal}/>
+            <span style={{fontSize:8,background:'rgba(0,0,0,.06)',padding:'1px 6px',borderRadius:4,fontWeight:700,color:'var(--muted)'}}>×{it.quantity}</span>
+          </div>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center',fontSize:9,color:'var(--muted)',fontWeight:600}}>
+            <span>{it._responsavel||'—'}</span>
+            <span>{it._timestamp?new Date(it._timestamp).toLocaleDateString('pt-BR'):'—'}</span>
+          </div>
+          {it.status==='Comprado'&&(
+            <p style={{fontSize:9,fontWeight:700,color:'#6B21A8',margin:'4px 0 0'}}>🛍 Comprado {it.boughtAt?new Date(it.boughtAt+'T00:00:00').toLocaleDateString('pt-BR'):''} · Previsão {it.deliveryDate?new Date(it.deliveryDate+'T00:00:00').toLocaleDateString('pt-BR'):'—'}</p>
+          )}
+          {it.status==='Concluído'&&(
+            <p style={{fontSize:9,fontWeight:700,color:'#059669',margin:'4px 0 0'}}>✓ Recebido em {it.actualDeliveryDate?new Date(it.actualDeliveryDate+'T00:00:00').toLocaleDateString('pt-BR'):'—'}</p>
+          )}
+        </div>
+      </div>
+    );
   };
 
   return(
-    <div className="card" style={{marginBottom:14}}>
-      <div style={{padding:'12px 16px',borderBottom:'1px solid var(--border)',background:'var(--smoke)',display:'flex',alignItems:'center',gap:8}}>
-        <div style={{width:26,height:26,borderRadius:7,background:'#7C3AED',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="package" size={13} style={{color:'#fff'}}/></div>
-        <h4 style={{margin:0,fontSize:12,fontWeight:800,textTransform:'uppercase'}}>Peças</h4>
+    <div className="card" style={{marginBottom:16,opacity:disabled?.6:1}}>
+      <div style={{padding:'16px 20px',borderBottom:'1px solid var(--border)',background:'linear-gradient(135deg,#7C3AED12,transparent)',display:'flex',alignItems:'center',gap:10}}>
+        <div style={{width:34,height:34,borderRadius:10,background:'#7C3AED',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,boxShadow:'0 4px 10px #7C3AED55'}}><Icon name="package" size={16} style={{color:'#fff'}}/></div>
+        <div><h4 style={{margin:0,fontSize:13,fontWeight:800,textTransform:'uppercase'}}>Peças</h4><p style={{margin:0,fontSize:9,color:'var(--muted)',fontWeight:600}}>{existingItems.length} peça(s) vinculada(s) a esta OS</p></div>
       </div>
-      <div style={{padding:16}}>
-        {existingItems.length===0?(
-          <p style={{fontSize:10,color:'var(--muted)',marginBottom:14}}>Nenhuma peça solicitada encontrada para esta OS ainda.</p>
-        ):(
+      <div style={{padding:18}}>
+        {ativos.length>0&&(
           <div style={{marginBottom:16}}>
-            <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',marginBottom:8}}>Peças já solicitadas nesta OS</p>
+            <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',marginBottom:8}}>Peças solicitadas</p>
             <div style={{display:'flex',flexDirection:'column',gap:6}}>
-              {existingItems.map((it,i)=>{
-                const isExc=excedentes.includes(String(it.id));
-                const podeMarcar=pecasOpcao==='excedente';
-                return(
-                  <label key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',borderRadius:9,border:`1.5px solid ${isExc?'var(--red)':'var(--border)'}`,background:isExc?'var(--red-light)':'#fff',cursor:podeMarcar?'pointer':'default'}}>
-                    {podeMarcar&&<input type="checkbox" checked={isExc} onChange={()=>toggleExcedente(String(it.id))} style={{width:15,height:15,accentColor:'var(--red)',flexShrink:0}}/>}
-                    {it.photo?<img src={it.photo} style={{width:36,height:36,borderRadius:7,objectFit:'cover',flexShrink:0}}/>:<div style={{width:36,height:36,borderRadius:7,background:'var(--smoke)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="package" size={14}/></div>}
-                    <div style={{flex:1,minWidth:0}}>
-                      <p style={{fontSize:10,fontWeight:800,textTransform:'uppercase',margin:0}}>{it.description}</p>
-                      <div style={{display:'flex',gap:6,alignItems:'center'}}>
-                        <span style={{fontSize:8,color:'var(--muted)'}}>Qtd: {it.quantity}</span>
-                        <StatusBadge status={it.status||'Pendente'}/>
-                      </div>
-                    </div>
-                    {isExc&&<span className="badge" style={{background:'var(--red)',color:'#fff'}}>Excedente</span>}
-                  </label>
-                );
-              })}
+              {ativos.map((it,i)=><ItemRow key={i} it={it} selectable={pecasOpcao==='excedente'}/>)}
             </div>
           </div>
         )}
+        {jaExcedentes.length>0&&(
+          <div style={{marginBottom:16,background:'var(--red-light)',border:'1px solid #FFBDBD',borderRadius:12,padding:12}}>
+            <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--red)',marginBottom:8,display:'flex',alignItems:'center',gap:6}}><Icon name="package-minus" size={13}/> Peças Solicitadas para Exclusão</p>
+            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+              {jaExcedentes.map((it,i)=><ItemRow key={i} it={it} selectable={false}/>)}
+            </div>
+            <p style={{fontSize:8,color:'var(--red)',fontWeight:600,marginTop:8,marginBottom:0}}>Aguardando decisão do Master em Gestão → Pedidos Excedentes.</p>
+          </div>
+        )}
+        {existingItems.length===0&&<p style={{fontSize:10,color:'var(--muted)',marginBottom:16}}>Nenhuma peça solicitada encontrada para esta OS ainda.</p>}
 
-        <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',marginBottom:8}}>O que deseja fazer?</p>
-        <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:16}}>
+        <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',marginBottom:8}}>O que deseja fazer?</p>
+        <div style={{display:'flex',flexDirection:'column',gap:8}}>
           {[
             {v:'suficiente',l:'As peças que preciso estão aqui',icon:'check-circle'},
             {v:'novas',l:'Preciso adicionar um pedido',icon:'plus-circle'},
             {v:'excedente',l:'Existem peças dessa lista que não são mais necessárias',icon:'package-minus'},
           ].map(op=>(
-            <label key={op.v} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderRadius:10,border:`1.5px solid ${pecasOpcao===op.v?'var(--red)':'var(--border)'}`,background:pecasOpcao===op.v?'var(--red-light)':'#fff',cursor:'pointer'}}>
-              <input type="radio" name="pecasOpcao" checked={pecasOpcao===op.v} onChange={()=>setPecasOpcao(op.v)} style={{width:16,height:16,accentColor:'var(--red)'}}/>
+            <label key={op.v} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderRadius:10,border:`1.5px solid ${pecasOpcao===op.v?'var(--red)':'var(--border)'}`,background:pecasOpcao===op.v?'var(--red-light)':'#fff',cursor:disabled?'not-allowed':'pointer'}}>
+              <input type="radio" name="pecasOpcao" checked={pecasOpcao===op.v} disabled={disabled} onChange={()=>setPecasOpcao(op.v)} style={{width:16,height:16,accentColor:'var(--red)'}}/>
               <Icon name={op.icon} size={15}/>
               <span style={{fontSize:11,fontWeight:700}}>{op.l}</span>
             </label>
@@ -2798,24 +2901,32 @@ function PecasFinalizacaoSection({os, requests, novasPecas, setNovasPecas, exced
         </div>
 
         {pecasOpcao==='novas'&&(
-          <div style={{background:'var(--smoke)',borderRadius:12,padding:14}}>
+          <div style={{background:'var(--smoke)',borderRadius:12,padding:14,marginTop:16}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
               <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--red)',margin:0}}>Novas peças a solicitar</p>
-              <button type="button" onClick={addNovaPeca} className="btn-primary" style={{padding:'6px 12px',fontSize:9}}>+ Peça</button>
+              <button type="button" onClick={addNovaPeca} disabled={disabled} className="btn-primary" style={{padding:'7px 14px',fontSize:9}}>+ Item</button>
             </div>
             {novasPecas.length===0&&<p style={{fontSize:10,color:'var(--muted)'}}>Nenhuma peça adicionada ainda.</p>}
-            <div style={{display:'flex',flexDirection:'column',gap:8}}>
-              {novasPecas.map(it=>(
-                <div key={it.id} style={{display:'flex',gap:10,alignItems:'center',background:'#fff',border:'1px solid var(--border)',borderRadius:9,padding:10}}>
-                  {it.photo?<img src={it.photo} style={{width:44,height:44,borderRadius:8,objectFit:'cover',flexShrink:0}}/>:(
-                    <label style={{width:44,height:44,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',border:'1.5px dashed var(--border)',borderRadius:8,cursor:'pointer',position:'relative'}}>
-                      <Icon name="camera" size={15}/>
-                      <input type="file" accept="image/*" onChange={e=>handlePecaPhoto(it.id,e.target.files[0])} style={{position:'absolute',inset:0,opacity:0,cursor:'pointer'}} disabled={compressing}/>
-                    </label>
-                  )}
-                  <input type="text" value={it.description} onChange={e=>updateNovaPeca(it.id,'description',sanitize(e.target.value))} placeholder="NOME DA PEÇA" className="input" style={{fontWeight:700,textTransform:'uppercase',flex:1}}/>
-                  <input type="number" min="1" value={it.quantity} onChange={e=>updateNovaPeca(it.id,'quantity',e.target.value)} className="input" style={{width:60,textAlign:'center'}}/>
-                  <button type="button" onClick={()=>removeNovaPeca(it.id)} style={{background:'var(--red)',color:'#fff',border:'none',borderRadius:7,width:28,height:28,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',flexShrink:0}}><Icon name="trash-2" size={12}/></button>
+            <div style={{display:'flex',flexDirection:'column',gap:10}}>
+              {novasPecas.map((it,idx)=>(
+                <div key={it.id} className="card" style={{border:'1.5px solid var(--border)'}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 14px',borderBottom:'1px solid var(--border)',background:'#fff'}}>
+                    <span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)'}}>Item {idx+1}</span>
+                    <button type="button" onClick={()=>removeNovaPeca(it.id)} disabled={disabled} style={{display:'flex',alignItems:'center',gap:5,padding:'4px 10px',background:'var(--red-light)',border:'1px solid #FFBDBD',borderRadius:7,fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--red)',cursor:'pointer'}}><Icon name="x" size={11}/> Remover</button>
+                  </div>
+                  <div style={{padding:14,display:'flex',flexDirection:'column',gap:10}}>
+                    <input type="text" value={it.description} onChange={e=>updateNovaPeca(it.id,'description',sanitize(e.target.value))} placeholder="NOME DA PEÇA" className="input" disabled={disabled} style={{fontWeight:700,textTransform:'uppercase'}}/>
+                    <div style={{display:'flex',gap:12}}>
+                      <div style={{width:90}}>
+                        <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',display:'block',marginBottom:6}}>Qtd</label>
+                        <input type="number" min="1" value={it.quantity} onChange={e=>updateNovaPeca(it.id,'quantity',e.target.value)} className="input" disabled={disabled} style={{fontSize:16,fontWeight:800,textAlign:'center'}}/>
+                      </div>
+                      <div style={{flex:1}}>
+                        <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--red)',display:'block',marginBottom:6}}>📷 Foto</label>
+                        <PhotoDropzone photo={it.photo} onChange={v=>updateNovaPeca(it.id,'photo',v)} disabled={disabled}/>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -2826,7 +2937,7 @@ function PecasFinalizacaoSection({os, requests, novasPecas, setNovasPecas, exced
   );
 }
 
-function NovaFinalizacaoForm({vehiclesDB,requests,loggedInUser}){
+function NovaFinalizacaoForm({vehiclesDB,requests,loggedInUser,isMaster,finalizacoes}){
   const[os,setOs]=useState('');
   const[vehicle,setVehicle]=useState(null);
   const[unidade,setUnidade]=useState('Unidade 1');
@@ -2837,6 +2948,26 @@ function NovaFinalizacaoForm({vehiclesDB,requests,loggedInUser}){
   const[excedentes,setExcedentes]=useState([]);
   const[saving,setSaving]=useState(false);
   const[done,setDone]=useState(false);
+  const[existingFin,setExistingFin]=useState(null);
+  const[readOnly,setReadOnly]=useState(false);
+
+  const disabled=!vehicle||readOnly;
+
+  const carregarFin=(t)=>{
+    const fin=finalizacoes.find(f=>String(f.os).trim()===t&&!f.arquivada);
+    if(fin){
+      setExistingFin(fin);
+      setAjuste(fin.ajuste||[]);
+      setPintura(fin.pintura||[]);
+      setPecasOpcao(fin.pecasOpcao||'suficiente');
+      setExcedentes([]);setNovasPecas([]);
+      setReadOnly(!(isMaster||fin.criadoPor===loggedInUser.user));
+    }else{
+      setExistingFin(null);
+      setAjuste([]);setPintura([]);setPecasOpcao('suficiente');setNovasPecas([]);setExcedentes([]);
+      setReadOnly(false);
+    }
+  };
 
   const onOSBlur=()=>{
     const t=String(os).trim();if(!t)return;
@@ -2845,15 +2976,17 @@ function NovaFinalizacaoForm({vehiclesDB,requests,loggedInUser}){
       setVehicle(f);
       const req=requests.find(r=>String(r.os).trim()===t);
       if(req)setUnidade(req.unidade||'Unidade 1');
-    }else{setVehicle(null);alert('OS não cadastrada.');}
+      carregarFin(t);
+    }else{setVehicle(null);setExistingFin(null);setReadOnly(false);alert('OS não cadastrada.');}
   };
 
   const reset=()=>{
     setOs('');setVehicle(null);setUnidade('Unidade 1');setAjuste([]);setPintura([]);
-    setPecasOpcao('suficiente');setNovasPecas([]);setExcedentes([]);setDone(false);
+    setPecasOpcao('suficiente');setNovasPecas([]);setExcedentes([]);setDone(false);setExistingFin(null);setReadOnly(false);
   };
 
   const salvar=async()=>{
+    if(readOnly)return;
     if(!os.trim())return alert('Informe a OS.');
     if(!vehicle)return alert('OS não cadastrada.');
     setSaving(true);
@@ -2874,24 +3007,30 @@ function NovaFinalizacaoForm({vehiclesDB,requests,loggedInUser}){
         for(const req of matching){
           let changed=false;
           const newItems=(req.items||[]).map(it=>{
-            if(excedentes.includes(String(it.id))){
-              changed=true;
-              return{...it,excedente:true,excedentePor:loggedInUser.user,excedenteEm:now};
-            }
+            if(excedentes.includes(String(it.id))){changed=true;return{...it,excedente:true,excedentePor:loggedInUser.user,excedenteEm:now};}
             return it;
           });
           if(changed)await col('requests').doc(req.id).update({items:stripUndefined(newItems)});
         }
       }
-      await col('finalizacoes').add(stripUndefined({
-        os,unidade,vehicleData:vehicle,
-        criadoPor:loggedInUser.user,criadoEm:now,
-        ajuste:ajuste.map(p=>({...p})),
-        pintura:pintura.map(p=>({...p})),
-        pecasOpcao,
-        pecasExcedentes:excedentes,
-        historico:[{acao:'Inspeção criada',usuario:loggedInUser.user,timestamp:now}],
-      }));
+      const historicoEntry={acao:existingFin?'Inspeção atualizada':'Inspeção criada',usuario:loggedInUser.user,timestamp:now};
+      if(existingFin){
+        await col('finalizacoes').doc(existingFin.id).update(stripUndefined({
+          ajuste:ajuste.map(p=>({...p})),
+          pintura:pintura.map(p=>({...p})),
+          pecasOpcao,
+          historico:[...(existingFin.historico||[]),historicoEntry],
+        }));
+      }else{
+        await col('finalizacoes').add(stripUndefined({
+          os,unidade,vehicleData:vehicle,
+          criadoPor:loggedInUser.user,criadoEm:now,
+          ajuste:ajuste.map(p=>({...p})),
+          pintura:pintura.map(p=>({...p})),
+          pecasOpcao,
+          historico:[historicoEntry],
+        }));
+      }
       setDone(true);
     }catch(e){alert('Erro ao salvar: '+e.message);}
     setSaving(false);
@@ -2914,6 +3053,15 @@ function NovaFinalizacaoForm({vehiclesDB,requests,loggedInUser}){
             <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',display:'block',marginBottom:6}}>Número da OS</label>
             <input type="text" inputMode="numeric" value={os} onChange={e=>setOs(sanitize(e.target.value))} onBlur={onOSBlur} placeholder="Nº da OS" className="input" style={{fontSize:22,fontWeight:800}}/>
           </div>
+          {existingFin&&(
+            <div style={{background:readOnly?'#FFFBE6':'#EAF0FF',border:`1px solid ${readOnly?'#FFE680':'#C0D0F5'}`,borderRadius:10,padding:'10px 14px',display:'flex',alignItems:'center',gap:10}}>
+              <Icon name={readOnly?'lock':'info'} size={16} style={{color:readOnly?'#856A00':'#1A4EC2',flexShrink:0}}/>
+              <p style={{fontSize:10,fontWeight:700,color:readOnly?'#856A00':'#1A4EC2',margin:0}}>
+                Esta Ordem de Serviço já possui uma inspeção criada por <strong>{existingFin.criadoPor}</strong>.
+                {readOnly?' Você pode apenas consultar (somente leitura).':' Você pode continuar editando.'}
+              </p>
+            </div>
+          )}
         </div>
         <div style={{borderTop:'2px solid var(--border)',background:'var(--ink)',padding:20,minHeight:90,display:'flex',alignItems:'center'}}>
           {vehicle?(
@@ -2929,41 +3077,43 @@ function NovaFinalizacaoForm({vehiclesDB,requests,loggedInUser}){
           ):(
             <div style={{width:'100%',textAlign:'center',padding:'8px 0'}}>
               <Icon name="car" size={26} style={{margin:'0 auto 6px',display:'block',color:'rgba(255,255,255,.15)'}}/>
-              <p style={{fontSize:9,color:'rgba(255,255,255,.25)',fontWeight:700,textTransform:'uppercase',margin:0}}>Digite a OS para carregar o veículo</p>
+              <p style={{fontSize:9,color:'rgba(255,255,255,.25)',fontWeight:700,textTransform:'uppercase',margin:0}}>Digite a OS para carregar o veículo e habilitar os campos</p>
             </div>
           )}
         </div>
       </div>
 
-      {vehicle&&(
-        <>
-          <ProblemCategoryEditor title="Ajuste" icon="wrench" color="#F59E0B" items={ajuste} setItems={setAjuste}/>
-          <ProblemCategoryEditor title="Pintura" icon="paintbrush" color="#2563EB" items={pintura} setItems={setPintura}/>
-          <PecasFinalizacaoSection os={os} requests={requests}
-            novasPecas={novasPecas} setNovasPecas={setNovasPecas} excedentes={excedentes} setExcedentes={setExcedentes}
-            pecasOpcao={pecasOpcao} setPecasOpcao={setPecasOpcao}/>
+      <ProblemCategoryEditor title="Ajuste" icon="wrench" color="#F59E0B" items={ajuste} setItems={setAjuste} disabled={disabled}/>
+      <ProblemCategoryEditor title="Pintura" icon="paintbrush" color="#2563EB" items={pintura} setItems={setPintura} disabled={disabled}/>
+      <PecasFinalizacaoSection os={os} requests={requests}
+        novasPecas={novasPecas} setNovasPecas={setNovasPecas} excedentes={excedentes} setExcedentes={setExcedentes}
+        pecasOpcao={pecasOpcao} setPecasOpcao={setPecasOpcao} disabled={disabled}/>
 
-          <button onClick={salvar} disabled={saving} className="btn-primary" style={{width:'100%',padding:16,fontSize:12}}>
-            {saving?<Icon name="refresh-cw" size={18} className="spin"/>:<><Icon name="save" size={16}/> Salvar Inspeção</>}
-          </button>
-        </>
+      {!readOnly&&(
+        <button onClick={salvar} disabled={saving||!vehicle} className="btn-primary" style={{width:'100%',padding:16,fontSize:12}}>
+          {saving?<Icon name="refresh-cw" size={18} className="spin"/>:<><Icon name="save" size={16}/> Salvar Inspeção</>}
+        </button>
       )}
     </div>
   );
 }
 
-function MeusCarrosView({loggedInUser,isMaster}){
-  const{data:finalizacoes,loading}=useFirestore('finalizacoes');
+function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
   const[search,setSearch]=useState('');
+  const[confirmDelFin,setConfirmDelFin]=useState(null);
+  const[confirmDelProb,setConfirmDelProb]=useState(null);
 
   const visiveis=useMemo(()=>{
     let list=isMaster?finalizacoes:finalizacoes.filter(f=>f.criadoPor===loggedInUser.user);
+    list=list.filter(f=>!f.arquivada);
     if(search){
       const t=search.toLowerCase();
       list=list.filter(f=>String(f.os).toLowerCase().includes(t)||String(f.vehicleData?.modelo||'').toLowerCase().includes(t)||String(f.criadoPor||'').toLowerCase().includes(t));
     }
     return list.sort((a,b)=>b.criadoEm-a.criadoEm);
   },[finalizacoes,loggedInUser,isMaster,search]);
+
+  const podeEditar=(fin)=>isMaster||fin.criadoPor===loggedInUser.user;
 
   const resolverPendencia=async(finId,categoria,itemId)=>{
     const fin=finalizacoes.find(f=>f.id===finId);if(!fin)return;
@@ -2974,7 +3124,28 @@ function MeusCarrosView({loggedInUser,isMaster}){
     catch(e){alert('Erro: '+e.message);}
   };
 
-  if(loading)return<Skeleton/>;
+  const excluirProblema=async()=>{
+    if(!confirmDelProb)return;
+    const{finId,categoria,itemId}=confirmDelProb;
+    const fin=finalizacoes.find(f=>f.id===finId);if(!fin)return;
+    const newCat=(fin[categoria]||[]).filter(p=>p.id!==itemId);
+    const now=Date.now();
+    try{await col('finalizacoes').doc(finId).update({[categoria]:stripUndefined(newCat),historico:stripUndefined([...(fin.historico||[]),{acao:`Problema excluído (${categoria}) por ${loggedInUser.user}`,usuario:loggedInUser.user,timestamp:now}])});}
+    catch(e){alert('Erro: '+e.message);}
+    setConfirmDelProb(null);
+  };
+
+  const excluirInspecao=async()=>{
+    if(!confirmDelFin)return;
+    try{await col('finalizacoes').doc(confirmDelFin).delete();}catch(e){alert('Erro: '+e.message);}
+    setConfirmDelFin(null);
+  };
+
+  const exportarPDF=(fin)=>{
+    const pecasItems=getPecasParaOS(fin.os,requests);
+    const doc=buildFinalizacaoPDF(fin,pecasItems);
+    doc.save(`Finalizacao_OS_${fin.os}.pdf`);
+  };
 
   return(
     <div className="fade-up" style={{paddingBottom:30}}>
@@ -2992,6 +3163,10 @@ function MeusCarrosView({loggedInUser,isMaster}){
           {visiveis.map(fin=>{
             const categorias=[['ajuste','Ajuste','#F59E0B','wrench'],['pintura','Pintura','#2563EB','paintbrush']];
             const totalPend=['ajuste','pintura'].reduce((a,c)=>a+(fin[c]||[]).filter(p=>p.status!=='Solucionado').length,0);
+            const editar=podeEditar(fin);
+            const pecasItems=getPecasParaOS(fin.os,requests);
+            const pecasAtivas=pecasItems.filter(it=>!it.excedente);
+            const pecasExc=pecasItems.filter(it=>it.excedente);
             return(
               <div key={fin.id} className="card" style={{borderLeft:`3px solid ${totalPend>0?'var(--red)':'#059669'}`}}>
                 <div style={{padding:'14px 16px',borderBottom:'1px solid var(--border)',background:'var(--smoke)',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
@@ -3000,8 +3175,22 @@ function MeusCarrosView({loggedInUser,isMaster}){
                     <span className="pill">{fin.unidade||'Unidade 1'}</span>
                     <span style={{fontSize:9,color:'var(--muted)',fontWeight:700,textTransform:'uppercase'}}>{fin.vehicleData?.modelo||'—'}</span>
                     {isMaster&&<span style={{fontSize:8,fontWeight:700,color:'var(--muted)'}}>por {fin.criadoPor}</span>}
+                    {!editar&&<span className="badge" style={{background:'var(--muted)',color:'#fff'}}>Somente leitura</span>}
                   </div>
-                  <span style={{fontSize:9,fontWeight:800,padding:'3px 10px',borderRadius:999,background:totalPend>0?'var(--red-light)':'#EDFAF3',color:totalPend>0?'var(--red)':'#059669',border:`1px solid ${totalPend>0?'#FFBDBD':'#AAE6C5'}`}}>{totalPend>0?`${totalPend} pendente(s)`:'Tudo solucionado'}</span>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{fontSize:9,fontWeight:800,padding:'3px 10px',borderRadius:999,background:totalPend>0?'var(--red-light)':'#EDFAF3',color:totalPend>0?'var(--red)':'#059669',border:`1px solid ${totalPend>0?'#FFBDBD':'#AAE6C5'}`}}>{totalPend>0?`${totalPend} pendente(s)`:'Tudo solucionado'}</span>
+                    <button onClick={()=>exportarPDF(fin)} style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',background:'#2563EB',color:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}><Icon name="file-down" size={12}/> PDF</button>
+                    {isMaster&&(
+                      confirmDelFin===fin.id?(
+                        <div style={{display:'flex',gap:5}}>
+                          <button onClick={()=>setConfirmDelFin(null)} className="btn-ghost" style={{padding:'5px 10px',fontSize:8}}>Não</button>
+                          <button onClick={excluirInspecao} style={{padding:'5px 10px',background:'var(--red)',color:'#fff',border:'none',borderRadius:7,fontSize:8,fontWeight:800,cursor:'pointer'}}>Confirmar</button>
+                        </div>
+                      ):(
+                        <button onClick={()=>setConfirmDelFin(fin.id)} style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',background:'var(--red)',color:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}><Icon name="trash-2" size={12}/> Excluir</button>
+                      )
+                    )}
+                  </div>
                 </div>
                 <div style={{padding:16,display:'flex',flexDirection:'column',gap:14}}>
                   {categorias.map(([key,label,color,icon])=>{
@@ -3021,10 +3210,19 @@ function MeusCarrosView({loggedInUser,isMaster}){
                                 <p style={{fontSize:10,fontWeight:600,margin:0,color:'var(--ink)'}}>{p.descricao||'(sem descrição)'}</p>
                                 {p.status==='Solucionado'&&<p style={{fontSize:8,color:'#059669',fontWeight:700,margin:'2px 0 0'}}>✓ Resolvido {p.resolvidoPor?`por ${p.resolvidoPor}`:''} {p.resolvidoEm?'em '+new Date(p.resolvidoEm).toLocaleString('pt-BR'):''}</p>}
                               </div>
-                              {p.status!=='Solucionado'?(
+                              {p.status!=='Solucionado'&&editar&&(
                                 <button onClick={()=>resolverPendencia(fin.id,key,p.id)} style={{padding:'5px 12px',background:'var(--ink)',color:'#fff',border:'none',borderRadius:7,fontSize:8,fontWeight:800,textTransform:'uppercase',cursor:'pointer',flexShrink:0,fontFamily:'Plus Jakarta Sans,sans-serif'}}>Resolver Pendência</button>
-                              ):(
-                                <span className="badge badge-done">Solucionado</span>
+                              )}
+                              {p.status==='Solucionado'&&<span className="badge badge-done">Solucionado</span>}
+                              {isMaster&&(
+                                confirmDelProb?.finId===fin.id&&confirmDelProb?.categoria===key&&confirmDelProb?.itemId===p.id?(
+                                  <div style={{display:'flex',gap:4,flexShrink:0}}>
+                                    <button onClick={()=>setConfirmDelProb(null)} className="btn-ghost" style={{padding:'4px 8px',fontSize:7}}>Não</button>
+                                    <button onClick={excluirProblema} style={{padding:'4px 8px',background:'var(--red)',color:'#fff',border:'none',borderRadius:6,fontSize:7,fontWeight:800,cursor:'pointer'}}>Sim</button>
+                                  </div>
+                                ):(
+                                  <button onClick={()=>setConfirmDelProb({finId:fin.id,categoria:key,itemId:p.id})} style={{width:24,height:24,background:'#fff',border:'1px solid #FFBDBD',borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'var(--red)',flexShrink:0}}><Icon name="trash-2" size={11}/></button>
+                                )
                               )}
                             </div>
                           ))}
@@ -3032,10 +3230,42 @@ function MeusCarrosView({loggedInUser,isMaster}){
                       </div>
                     );
                   })}
+
+                  {pecasItems.length>0&&(
+                    <div>
+                      <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8}}>
+                        <div style={{width:20,height:20,borderRadius:6,background:'#7C3AED',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="package" size={11} style={{color:'#fff'}}/></div>
+                        <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',margin:0}}>Peças ({pecasAtivas.length})</p>
+                      </div>
+                      <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:pecasExc.length?10:0}}>
+                        {pecasAtivas.map((it,i)=>(
+                          <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:9}}>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}}>
+                                <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase'}}>{it.description}</span>
+                                <StatusBadge status={it.status||'Pendente'}/>
+                                <span style={{fontSize:8,color:'var(--muted)'}}>×{it.quantity}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {pecasExc.length>0&&(
+                        <div style={{background:'var(--red-light)',border:'1px solid #FFBDBD',borderRadius:10,padding:10}}>
+                          <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--red)',marginBottom:6}}>Peças Solicitadas para Exclusão</p>
+                          <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                            {pecasExc.map((it,i)=>(
+                              <div key={i} style={{fontSize:9,fontWeight:700,color:'var(--red)'}}>{it.quantity}× {it.description} — marcado por {it.excedentePor||'—'}</div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {fin.pecasOpcao&&(
                     <div style={{fontSize:9,color:'var(--muted)',fontWeight:600}}>
-                      Peças: {fin.pecasOpcao==='suficiente'?'confirmadas como suficientes':fin.pecasOpcao==='novas'?'novo pedido gerado':'itens marcados como excedentes'}
-                      {fin.pecasExcedentes?.length>0&&` · ${fin.pecasExcedentes.length} excedente(s)`}
+                      Opção escolhida: {fin.pecasOpcao==='suficiente'?'peças confirmadas como suficientes':fin.pecasOpcao==='novas'?'novo pedido gerado':'itens marcados como excedentes'}
                     </div>
                   )}
                 </div>
@@ -3048,21 +3278,103 @@ function MeusCarrosView({loggedInUser,isMaster}){
   );
 }
 
+function FinalizacaoHistoricoView(){
+  const{data:historico,loading}=useFirestore('finalizacoesHistorico');
+  const[search,setSearch]=useState('');
+  const visiveis=useMemo(()=>{
+    let list=historico;
+    if(search){const t=search.toLowerCase();list=list.filter(h=>String(h.os).toLowerCase().includes(t)||String(h.vehicleData?.modelo||'').toLowerCase().includes(t));}
+    return list.sort((a,b)=>b.arquivadoEm-a.arquivadoEm);
+  },[historico,search]);
+  if(loading)return<Skeleton/>;
+  return(
+    <div className="fade-up" style={{paddingBottom:30}}>
+      <div style={{position:'relative',marginBottom:16}}>
+        <input type="text" placeholder="Buscar OS / Modelo..." value={search} onChange={e=>setSearch(e.target.value)} className="input" style={{paddingLeft:36}}/>
+        <div style={{position:'absolute',left:11,top:'50%',transform:'translateY(-50%)',color:'var(--muted)'}}><Icon name="search" size={14}/></div>
+      </div>
+      {visiveis.length===0?(
+        <div style={{padding:'56px 20px',textAlign:'center',background:'#fff',borderRadius:16,border:'1.5px dashed var(--border)'}}>
+          <Icon name="archive" size={30} style={{margin:'0 auto 10px',display:'block',color:'var(--muted)'}}/>
+          <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',margin:0}}>Nenhuma inspeção arquivada ainda</p>
+          <p style={{fontSize:9,color:'var(--muted)',marginTop:4}}>Inspeções são arquivadas automaticamente 5 dias após o veículo ser marcado como Entregue.</p>
+        </div>
+      ):(
+        <div className="card" style={{overflow:'hidden'}}>
+          <table className="vtable w-full">
+            <thead><tr><th>OS</th><th>Veículo</th><th>Criado por</th><th>Arquivado em</th><th style={{textAlign:'right'}}>PDF</th></tr></thead>
+            <tbody>
+              {visiveis.map(h=>(
+                <tr key={h.id}>
+                  <td style={{fontWeight:800}}>#{h.os}</td>
+                  <td style={{textTransform:'uppercase',fontSize:10}}>{h.vehicleData?.modelo||'—'}</td>
+                  <td style={{fontSize:10,color:'var(--muted)'}}>{h.criadoPor||'—'}</td>
+                  <td style={{fontSize:10,color:'var(--muted)'}}>{h.arquivadoEm?new Date(h.arquivadoEm).toLocaleDateString('pt-BR'):'—'}</td>
+                  <td style={{textAlign:'right'}}>
+                    {h.pdfDataUrl?(
+                      <a href={h.pdfDataUrl} download={`Finalizacao_OS_${h.os}.pdf`} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'5px 12px',background:'#2563EB',color:'#fff',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',textDecoration:'none'}}><Icon name="file-down" size={12}/> Baixar</a>
+                    ):<span style={{fontSize:9,color:'var(--muted)'}}>Indisponível</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FinalizacaoView({vehiclesDB,requests,loggedInUser,isMaster}){
   const[sub,setSub]=useState('nova');
+  const{data:finalizacoes,loading}=useFirestore('finalizacoes');
+
+  useEffect(()=>{
+    if(loading||!finalizacoes.length||!vehiclesDB.length)return;
+    const sweep=async()=>{
+      const now=Date.now();
+      for(const fin of finalizacoes){
+        if(fin.arquivada)continue;
+        const v=vehiclesDB.find(vv=>String(vv.os).trim()===String(fin.os).trim());
+        const entregue=v&&(String(v.etapa||'').trim().toLowerCase()==='entregue'||String(v.localizacao||'').trim().toLowerCase()==='entregue');
+        if(!entregue)continue;
+        if(!fin.entregueDetectadoEm){
+          try{await col('finalizacoes').doc(fin.id).update({entregueDetectadoEm:now});}catch(e){}
+          continue;
+        }
+        if(now-fin.entregueDetectadoEm<5*86400000)continue;
+        try{
+          const pecasItems=getPecasParaOS(fin.os,requests);
+          const doc=buildFinalizacaoPDF(fin,pecasItems);
+          let pdfDataUrl=null;
+          try{pdfDataUrl=doc.output('datauristring');}catch(e){}
+          await col('finalizacoesHistorico').add(stripUndefined({os:fin.os,unidade:fin.unidade,vehicleData:fin.vehicleData,criadoPor:fin.criadoPor,criadoEm:fin.criadoEm,arquivadoEm:now,pdfDataUrl}));
+          await col('finalizacoes').doc(fin.id).update({arquivada:true,ajuste:[],pintura:[],historico:[...(fin.historico||[]),{acao:'Inspeção arquivada automaticamente (5 dias após entrega)',usuario:'Sistema',timestamp:now}]});
+        }catch(e){console.warn('Arquivamento automático falhou para OS',fin.os,e);}
+      }
+    };
+    sweep();
+    // eslint-disable-next-line
+  },[finalizacoes.length,vehiclesDB.length]);
+
   return(
     <div className="fade-up" style={{paddingBottom:16}}>
       <div style={{marginBottom:16}}>
         <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.15em',color:'var(--red)',marginBottom:4}}>Inspeção Final</p>
         <h2 style={{fontSize:30,fontWeight:800,margin:'0 0 14px',letterSpacing:'-.02em'}}>Finalização</h2>
-        <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)',width:'fit-content'}}>
-          {[{k:'nova',l:'Nova Inspeção'},{k:'meus',l:'Meus Carros'}].map(t=>(
+        <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)',width:'fit-content',flexWrap:'wrap'}}>
+          {[{k:'nova',l:'Nova Inspeção'},{k:'meus',l:'Meus Carros'},isMaster&&{k:'historico',l:'Histórico'}].filter(Boolean).map(t=>(
             <button key={t.k} onClick={()=>setSub(t.k)} style={{padding:'8px 16px',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',border:'none',cursor:'pointer',letterSpacing:'.06em',fontFamily:'Plus Jakarta Sans,sans-serif',background:sub===t.k?'#fff':'transparent',color:sub===t.k?'var(--red)':'var(--muted)',boxShadow:sub===t.k?'0 2px 8px rgba(0,0,0,.08)':'none'}}>{t.l}</button>
           ))}
         </div>
       </div>
-      {sub==='nova'&&<NovaFinalizacaoForm vehiclesDB={vehiclesDB} requests={requests} loggedInUser={loggedInUser}/>}
-      {sub==='meus'&&<MeusCarrosView loggedInUser={loggedInUser} isMaster={isMaster}/>}
+      {loading?<Skeleton/>:(
+        <>
+          {sub==='nova'&&<NovaFinalizacaoForm vehiclesDB={vehiclesDB} requests={requests} loggedInUser={loggedInUser} isMaster={isMaster} finalizacoes={finalizacoes}/>}
+          {sub==='meus'&&<MeusCarrosView loggedInUser={loggedInUser} isMaster={isMaster} finalizacoes={finalizacoes} requests={requests}/>}
+          {sub==='historico'&&isMaster&&<FinalizacaoHistoricoView/>}
+        </>
+      )}
     </div>
   );
 }
