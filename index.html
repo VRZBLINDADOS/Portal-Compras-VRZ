@@ -12,7 +12,7 @@
   --red:#DC1F1F;--red-deep:#A81515;--red-light:#FFF0F0;
   --black:#0D0D0D;--ink:#1A1A1A;--smoke:#F7F5F3;--border:#E8E3E0;--muted:#9A9189;
 }
-body{font-family:'Plus Jakarta Sans',sans-serif;margin:0;background:#fff;overflow:hidden;color:var(--ink)}
+body{font-family:'Plus Jakarta Sans',sans-serif;margin:0;background:#fff;overflow:hidden;color:var(--ink);overscroll-behavior-y:contain}
 .mono{font-family:'JetBrains Mono',monospace}
 
 @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
@@ -44,10 +44,10 @@ body{font-family:'Plus Jakarta Sans',sans-serif;margin:0;background:#fff;overflo
 .nav-item.active .nav-icon{background:var(--red)}
 .nav-item:hover:not(.active) .nav-icon{background:rgba(255,255,255,.18)}
 
-.bottom-nav{position:fixed;bottom:0;left:0;right:0;z-index:90;background:#fff;border-top:1px solid var(--border);display:flex;padding-bottom:env(safe-area-inset-bottom);box-shadow:0 -8px 30px rgba(0,0,0,.06)}
-.bottom-nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px 4px 8px;gap:4px;border:none;background:transparent;color:var(--muted);cursor:pointer;transition:color .2s;-webkit-tap-highlight-color:transparent;min-width:0;font-family:'Plus Jakarta Sans',sans-serif}
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;z-index:90;background:#fff;border-top:1px solid var(--border);display:flex;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:env(safe-area-inset-bottom);box-shadow:0 -8px 30px rgba(0,0,0,.06)}
+.bottom-nav-btn{flex:0 0 auto;width:66px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px 2px 7px;gap:3px;border:none;background:transparent;color:var(--muted);cursor:pointer;transition:color .2s;-webkit-tap-highlight-color:transparent;font-family:'Plus Jakarta Sans',sans-serif}
 .bottom-nav-btn.active{color:var(--red)}
-.bottom-nav-btn span{font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;line-height:1}
+.bottom-nav-btn span{font-size:7.5px;font-weight:800;text-transform:uppercase;letter-spacing:.02em;line-height:1.1;text-align:center;white-space:normal;max-width:62px}
 
 .input{width:100%;padding:12px 16px;border:1.5px solid var(--border);border-radius:10px;font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;font-weight:600;outline:none;background:#fff;transition:border-color .2s,box-shadow .2s;color:var(--ink)}
 .input:focus{border-color:var(--red);box-shadow:0 0 0 3px rgba(220,31,31,.08)}
@@ -1567,9 +1567,20 @@ const exportCSV=()=>{
 }
 
 // ── User Management — MELHORIA 3: 4 categorias (master fixo) ─────────────
-function UserManagement({users,onAdd,onDelete,onToggle,onRole,onFinalizacaoAccess,loggedInUser}){
+function UserManagement({users,onAdd,onDelete,onToggle,onRole,onFinalizacaoAccess,onCleanDuplicates,loggedInUser}){
   const[nu,setNu]=useState('');const[np,setNp]=useState('');const[nr,setNr]=useState('solicitante');const[showP,setShowP]=useState(false);
   const isMaster=loggedInUser?.role==='master';
+
+  const uniqueUsers=useMemo(()=>{
+    const seen={};
+    return users.filter(u=>{
+      const key=(u.user||'').trim().toLowerCase();
+      if(!key||seen[key])return false;
+      seen[key]=true;
+      return true;
+    });
+  },[users]);
+  const hasDuplicates=uniqueUsers.length<users.length;
 
   return(
     <div className="fade-in" style={{display:'flex',flexDirection:'column',gap:20}}>
@@ -1591,11 +1602,19 @@ function UserManagement({users,onAdd,onDelete,onToggle,onRole,onFinalizacaoAcces
         ))}
       </div>
 
+      {hasDuplicates&&isMaster&&(
+        <div style={{background:'#FFFBE6',border:'1px solid #FFE680',borderRadius:12,padding:'14px 16px',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+          <Icon name="alert-triangle" size={18} style={{color:'#856A00',flexShrink:0}}/>
+          <p style={{fontSize:10,fontWeight:700,color:'#856A00',margin:0,flex:1,minWidth:200}}>Foram encontradas contas de usuário duplicadas (mesmo nome). Isso pode acontecer se o portal foi aberto em vários lugares ao mesmo tempo.</p>
+          <button onClick={onCleanDuplicates} style={{padding:'8px 16px',background:'#856A00',color:'#fff',border:'none',borderRadius:8,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif',whiteSpace:'nowrap'}}>Limpar Duplicados</button>
+        </div>
+      )}
+
       {/* Criar novo acesso — apenas master pode criar */}
       {isMaster&&(
         <div className="card" style={{padding:20,display:'flex',flexDirection:'column',gap:16}}>
           <h3 style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--red)',margin:0}}>Cadastrar Novo Acesso</h3>
-      <div className="grid-3col" style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12}}>
+          <div className="grid-3col" style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12}}>
             <div><label style={{fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',display:'block',marginBottom:6}}>Usuário</label><input type="text" value={nu} onChange={e=>setNu(e.target.value)} className="input" placeholder="Nome.Sobrenome" style={{fontSize:12}}/></div>
             <div><label style={{fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',display:'block',marginBottom:6}}>Senha</label>
               <div style={{position:'relative'}}><input type={showP?'text':'password'} value={np} onChange={e=>setNp(e.target.value)} className="input" placeholder="Senha" style={{fontSize:12,paddingRight:36}}/><button type="button" onClick={()=>setShowP(!showP)} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',fontSize:12}}>{showP?'👁':'👁‍🗨'}</button></div></div>
@@ -1611,13 +1630,12 @@ function UserManagement({users,onAdd,onDelete,onToggle,onRole,onFinalizacaoAcces
         </div>
       )}
 
-     return(
-    <div className="card" style={{overflow:'hidden'}}>
-      <div className="table-scroll">
-    <table className="vtable w-full" style={{minWidth:700}}>
-        <thead><tr><th>Usuário</th><th>Categoria</th><th>Status</th><th>Finalização</th><th style={{textAlign:'right'}}>Ação</th></tr></thead>
+      <div className="card" style={{overflow:'hidden'}}>
+        <div className="table-scroll">
+        <table className="vtable w-full" style={{minWidth:700}}>
+          <thead><tr><th>Usuário</th><th>Categoria</th><th>Status</th><th>Finalização</th><th style={{textAlign:'right'}}>Ação</th></tr></thead>
           <tbody>
-            {users.map((u,i)=>{
+            {uniqueUsers.map((u,i)=>{
               const isMasterUser=u.user===MASTER_USER;
               return(
               <tr key={i}>
@@ -1674,7 +1692,6 @@ function UserManagement({users,onAdd,onDelete,onToggle,onRole,onFinalizacaoAcces
     </div>
   );
 }
-
 // ── Storage View ──────────────────────────────────────────────────────────
 function StorageView({requests,loggedInUser}){
   const LIM=1000;
@@ -4136,11 +4153,33 @@ const changeRole=async(u,r)=>{
     if(!u.id){setUsers(p=>p.map(x=>x.user===u.user?{...x,role:r}:x));return;}
     try{await col('users').doc(u.id).update({role:r});}catch(e){console.error(e);alert('Erro ao alterar categoria.');}
   };
-  const toggleFinalizacaoAccess=async(u)=>{
+ const toggleFinalizacaoAccess=async(u)=>{
     if(!isMaster)return;
     const novo=!(u.acessoFinalizacao===true);
     if(!u.id){setUsers(p=>p.map(x=>x.user===u.user?{...x,acessoFinalizacao:novo}:x));return;}
     try{await col('users').doc(u.id).update({acessoFinalizacao:novo});}catch(e){console.error(e);alert('Erro ao alterar acesso à Finalização.');}
+  };
+  const cleanDuplicateUsers=async()=>{
+    if(!isMaster)return;
+    const groups={};
+    users.forEach(u=>{
+      const key=(u.user||'').trim().toLowerCase();
+      if(!key)return;
+      if(!groups[key])groups[key]=[];
+      groups[key].push(u);
+    });
+    const toDelete=[];
+    Object.values(groups).forEach(group=>{
+      if(group.length<=1)return;
+      const keep=group.find(u=>u.user===MASTER_USER)||group.find(u=>u.role==='master')||group[0];
+      group.forEach(u=>{if(u.id&&u.id!==keep.id)toDelete.push(u);});
+    });
+    if(!toDelete.length){alert('Nenhum usuário duplicado encontrado.');return;}
+    if(!window.confirm(`Remover ${toDelete.length} conta(s) de usuário duplicada(s)? Esta ação é irreversível.`))return;
+    try{
+      for(const u of toDelete)await col('users').doc(u.id).delete();
+      alert(`${toDelete.length} conta(s) duplicada(s) removida(s) com sucesso.`);
+    }catch(e){alert('Erro ao limpar duplicados: '+e.message);}
   };
 
   const defaultViewForRole=(r)=>{if(r==='leitor')return 'status';return 'request';};
@@ -4325,7 +4364,7 @@ const navItems=[
 
       {/* Mobile Header */}
       <div id="mobile-header"><style>{`@media(min-width:768px){#mobile-header{display:none!important}}`}</style>
-        <div style={{position:'fixed',top:0,left:0,right:0,zIndex:100,background:'#fff',borderBottom:'1px solid var(--border)',padding:'10px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',boxShadow:'0 2px 16px rgba(0,0,0,.06)'}}>
+      <div style={{position:'fixed',top:0,left:0,right:0,zIndex:100,background:'#fff',borderBottom:'1px solid var(--border)',padding:'calc(env(safe-area-inset-top) + 10px) 16px 10px',display:'flex',alignItems:'center',justifyContent:'space-between',boxShadow:'0 2px 16px rgba(0,0,0,.06)'}}>
           <div style={{display:'flex',alignItems:'center',gap:10}}>
             <div style={{width:32,height:32,background:'var(--red)',borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="shopping-cart" size={15}/></div>
             <h1 style={{fontSize:20,fontWeight:800,margin:0}}>VRZ</h1>
@@ -4342,7 +4381,7 @@ const navItems=[
       {/* Main */}
       <main style={{flex:1,overflowY:'auto',minWidth:0}} className="scroll-y">
         <div style={{padding:16,paddingTop:0}} id="main-pad">
-          <style>{`@media(min-width:768px){#main-pad{padding:28px!important}}@media(max-width:767px){#main-pad{padding-top:64px!important;padding-bottom:80px!important}}`}</style>
+         <style>{`@media(min-width:768px){#main-pad{padding:28px!important}}@media(max-width:767px){#main-pad{padding-top:calc(env(safe-area-inset-top) + 68px)!important;padding-bottom:90px!important}}`}</style>
           <div style={{maxWidth:1100,margin:'0 auto'}}>
             {loading?<Skeleton/>:(
               <>
@@ -4389,7 +4428,7 @@ const navItems=[
                       ))}
                     </div>
 
-                 {subView==='users'&&isMaster&&<UserManagement users={users} onAdd={addUser} onDelete={deleteUser} onToggle={toggleUser} onRole={changeRole} onFinalizacaoAccess={toggleFinalizacaoAccess} loggedInUser={loggedIn}/>}
+                {subView==='users'&&isMaster&&<UserManagement users={users} onAdd={addUser} onDelete={deleteUser} onToggle={toggleUser} onRole={changeRole} onFinalizacaoAccess={toggleFinalizacaoAccess} onCleanDuplicates={cleanDuplicateUsers} loggedInUser={loggedIn}/>}
 {subView==='storage'&&isMaster&&<StorageView requests={requests} loggedInUser={loggedIn}/>}
 {subView==='cancelDonation'&&isMaster&&<CancelDonationView requests={requests} loggedInUser={loggedIn}/>}
 {subView==='deletedItems'&&isMaster&&<DeletedItemsView loggedInUser={loggedIn}/>}
