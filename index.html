@@ -98,9 +98,21 @@ canvas{display:block}
   .hist-meta{grid-template-columns:1fr 1fr!important}
   /* Gestão modal — full screen no mobile */
   .edit-modal-inner{border-radius:16px!important;max-height:92vh!important}
-  /* Dashboard grid */
-  .dash-grid-3{grid-template-columns:1fr!important}
+  /* Grids que colapsam para 1 coluna no mobile */
+  .dash-grid-3,.grid-2col,.grid-3col,.grid-4col,.finaliz-peca-row,.finaliz-problem-row{grid-template-columns:1fr!important}
+  /* Nenhum título pode cortar */
+  #main-pad h1{font-size:26px!important;line-height:1.15!important}
+  #main-pad h2{font-size:22px!important;line-height:1.2!important}
+  #main-pad h3{font-size:16px!important}
+  #main-pad h4{font-size:13px!important}
 }
+@media(max-width:480px){
+  #main-pad h2{font-size:19px!important}
+  .btn-primary{padding:11px 14px!important;font-size:9px!important}
+  .btn-ghost{padding:9px 14px!important;font-size:9px!important}
+}
+/* Tabelas sempre roláveis horizontalmente para nunca cortar conteúdo */
+.table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
 
 .divider{display:flex;align-items:center;gap:10px}
 .divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border)}
@@ -437,7 +449,7 @@ function DashboardView({requests}){
           </div>
         ))}
       </div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:16}}>
+      <div className="dash-grid-3" style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:16}}>
         <div className="card" style={{padding:20}}>
           <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:16}}>Pipeline</p>
           <div style={{display:'flex',alignItems:'center',gap:16}}>
@@ -466,7 +478,7 @@ function DashboardView({requests}){
           <MiniBar data={stats.pedDia} color="#1A4EC2"/>
         </div>
       </div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+      <div className="grid-2col" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
         <div className="card" style={{padding:20}}>
           <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:16}}>Top Solicitantes</p>
           {stats.rankSol.map(([nome,qtd],i)=>(
@@ -1162,7 +1174,7 @@ const salvar=async()=>{
               <div style={{width:'100%'}}>
                 <p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',letterSpacing:'.12em',color:'rgba(255,255,255,.3)',margin:'0 0 4px'}}>Veículo encontrado</p>
                 <p style={{fontSize:22,fontWeight:800,textTransform:'uppercase',color:'#fff',margin:'0 0 12px'}}>{vehicle.modelo}</p>
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:10}}>
+               <div className="grid-3col" style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:10}}>
                   {[['Etapa',vehicle.etapa],['Cor',vehicle.cor],['Local',vehicle.localizacao]].map(([l,v])=>(
                     <div key={l}><p style={{fontSize:7,color:'rgba(255,255,255,.3)',fontWeight:700,textTransform:'uppercase',margin:'0 0 2px'}}>{l}</p><p style={{fontSize:11,color:'rgba(255,255,255,.85)',fontWeight:600,margin:0,textTransform:'uppercase'}}>{v||'—'}</p></div>
                   ))}
@@ -1562,7 +1574,7 @@ function UserManagement({users,onAdd,onDelete,onToggle,onRole,onFinalizacaoAcces
   return(
     <div className="fade-in" style={{display:'flex',flexDirection:'column',gap:20}}>
       {/* Tabela de permissões — 4 colunas */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10}}>
+      <div className="grid-4col" style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10}}>
         {[
           {role:'master',items:['✓ Nova Req.','✓ Histórico','✓ Doações','✓ Excluir','✓ Gestão','✓ Usuários'],note:'Único: Lucas.Sabino'},
           {role:'admin',items:['✓ Nova Req.','✓ Histórico','✓ Doações','✗ Excluir','✗ Gestão','✗ Usuários']},
@@ -1583,7 +1595,7 @@ function UserManagement({users,onAdd,onDelete,onToggle,onRole,onFinalizacaoAcces
       {isMaster&&(
         <div className="card" style={{padding:20,display:'flex',flexDirection:'column',gap:16}}>
           <h3 style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--red)',margin:0}}>Cadastrar Novo Acesso</h3>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12}}>
+      <div className="grid-3col" style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12}}>
             <div><label style={{fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',display:'block',marginBottom:6}}>Usuário</label><input type="text" value={nu} onChange={e=>setNu(e.target.value)} className="input" placeholder="Nome.Sobrenome" style={{fontSize:12}}/></div>
             <div><label style={{fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',display:'block',marginBottom:6}}>Senha</label>
               <div style={{position:'relative'}}><input type={showP?'text':'password'} value={np} onChange={e=>setNp(e.target.value)} className="input" placeholder="Senha" style={{fontSize:12,paddingRight:36}}/><button type="button" onClick={()=>setShowP(!showP)} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',fontSize:12}}>{showP?'👁':'👁‍🗨'}</button></div></div>
@@ -1599,9 +1611,11 @@ function UserManagement({users,onAdd,onDelete,onToggle,onRole,onFinalizacaoAcces
         </div>
       )}
 
-      <div className="card" style={{overflow:'hidden'}}>
-     <table className="vtable w-full">
-          <thead><tr><th>Usuário</th><th>Categoria</th><th>Status</th><th>Finalização</th><th style={{textAlign:'right'}}>Ação</th></tr></thead>
+     return(
+    <div className="card" style={{overflow:'hidden'}}>
+      <div className="table-scroll">
+      <table className="vtable w-full" style={{minWidth:700}}>
+        <thead><tr><th>OS</th><th>Veículo</th><th>Peça</th><th>Qtd</th><th>Marcado por</th><th>Data</th><th style={{textAlign:'right'}}>Ação</th></tr></thead>
           <tbody>
             {users.map((u,i)=>{
               const isMasterUser=u.user===MASTER_USER;
@@ -1655,6 +1669,7 @@ function UserManagement({users,onAdd,onDelete,onToggle,onRole,onFinalizacaoAcces
             })}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
@@ -1752,7 +1767,7 @@ function StorageView({requests,loggedInUser}){
           </div>
         </div>
       )}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
+     <div className="grid-2col" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
         <div style={{background:'var(--ink)',borderRadius:16,padding:24,color:'#fff'}}>
           <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:20}}>
             <div style={{width:40,height:40,background:'#7C3AED',borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="database" size={18}/></div>
@@ -2721,7 +2736,6 @@ function PhotoDropzone({photo,onChange,disabled}){
       style={{height:110,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:6,border:`2px dashed ${isDragging?'var(--red)':'var(--border)'}`,borderRadius:12,cursor:disabled?'not-allowed':'pointer',background:isDragging?'var(--red-light)':'var(--smoke)',transition:'all .15s',position:'relative',opacity:disabled?.5:1}}>
       {compressing?<Icon name="loader" size={20} className="spin"/>:<Icon name="camera" size={20} style={{color:'var(--muted)'}}/>}
       <span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',textAlign:'center'}}>{compressing?'Processando...':'Clique para adicionar uma foto'}</span>
-      <span style={{fontSize:8,color:'var(--muted)'}}>ou arraste e solte aqui</span>
       <input type="file" accept="image/*" onChange={e=>handleFile(e.target.files[0])} style={{position:'absolute',inset:0,opacity:0,cursor:disabled?'not-allowed':'pointer'}} disabled={disabled}/>
     </label>
   );
@@ -2823,7 +2837,7 @@ function ProblemCategoryEditor({title,icon,color,items,setItems,disabled}){
   );
 }
 
-function PecasFinalizacaoSection({os, requests, novasPecas, setNovasPecas, excedentes, setExcedentes, pecasOpcao, setPecasOpcao, disabled}){
+function PecasFinalizacaoSection({os, requests, novasPecas, setNovasPecas, excedentes, setExcedentes, pecasOpcao, mostrarNovas, setMostrarNovas, mostrarExcedente, setMostrarExcedente, onSetOpcao, disabled}){
   const existingItems=useMemo(()=>getPecasParaOS(os,requests),[requests,os]);
   const ativos=useMemo(()=>existingItems.filter(it=>!it.excedente),[existingItems]);
   const jaExcedentes=useMemo(()=>existingItems.filter(it=>it.excedente),[existingItems]);
@@ -2869,9 +2883,9 @@ function PecasFinalizacaoSection({os, requests, novasPecas, setNovasPecas, exced
       <div style={{padding:18}}>
         {ativos.length>0&&(
           <div style={{marginBottom:16}}>
-            <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',marginBottom:8}}>Peças solicitadas</p>
+            <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',marginBottom:8}}>Peças solicitadas{mostrarExcedente?' (marque as que não são mais necessárias)':''}</p>
             <div style={{display:'flex',flexDirection:'column',gap:6}}>
-              {ativos.map((it,i)=><ItemRow key={i} it={it} selectable={pecasOpcao==='excedente'}/>)}
+              {ativos.map((it,i)=><ItemRow key={i} it={it} selectable={mostrarExcedente}/>)}
             </div>
           </div>
         )}
@@ -2887,22 +2901,22 @@ function PecasFinalizacaoSection({os, requests, novasPecas, setNovasPecas, exced
         {existingItems.length===0&&<p style={{fontSize:10,color:'var(--muted)',marginBottom:16}}>Nenhuma peça solicitada encontrada para esta OS ainda.</p>}
 
         <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',marginBottom:8}}>O que deseja fazer?</p>
-        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+        <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:16}}>
           {[
             {v:'suficiente',l:'As peças que preciso estão aqui',icon:'check-circle'},
             {v:'novas',l:'Preciso adicionar um pedido',icon:'plus-circle'},
             {v:'excedente',l:'Existem peças dessa lista que não são mais necessárias',icon:'package-minus'},
           ].map(op=>(
             <label key={op.v} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderRadius:10,border:`1.5px solid ${pecasOpcao===op.v?'var(--red)':'var(--border)'}`,background:pecasOpcao===op.v?'var(--red-light)':'#fff',cursor:disabled?'not-allowed':'pointer'}}>
-              <input type="radio" name="pecasOpcao" checked={pecasOpcao===op.v} disabled={disabled} onChange={()=>setPecasOpcao(op.v)} style={{width:16,height:16,accentColor:'var(--red)'}}/>
+              <input type="radio" name="pecasOpcao" checked={pecasOpcao===op.v} disabled={disabled} onChange={()=>onSetOpcao(op.v)} style={{width:16,height:16,accentColor:'var(--red)'}}/>
               <Icon name={op.icon} size={15}/>
               <span style={{fontSize:11,fontWeight:700}}>{op.l}</span>
             </label>
           ))}
         </div>
 
-        {pecasOpcao==='novas'&&(
-          <div style={{background:'var(--smoke)',borderRadius:12,padding:14,marginTop:16}}>
+        {mostrarNovas&&(
+          <div style={{background:'var(--smoke)',borderRadius:12,padding:14,marginBottom:mostrarExcedente?16:0}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
               <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--red)',margin:0}}>Novas peças a solicitar</p>
               <button type="button" onClick={addNovaPeca} disabled={disabled} className="btn-primary" style={{padding:'7px 14px',fontSize:9}}>+ Item</button>
@@ -2917,19 +2931,38 @@ function PecasFinalizacaoSection({os, requests, novasPecas, setNovasPecas, exced
                   </div>
                   <div style={{padding:14,display:'flex',flexDirection:'column',gap:10}}>
                     <input type="text" value={it.description} onChange={e=>updateNovaPeca(it.id,'description',sanitize(e.target.value))} placeholder="NOME DA PEÇA" className="input" disabled={disabled} style={{fontWeight:700,textTransform:'uppercase'}}/>
-                    <div style={{display:'flex',gap:12}}>
+                    <div style={{display:'flex',gap:12}} className="finaliz-peca-row">
                       <div style={{width:90}}>
                         <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',display:'block',marginBottom:6}}>Qtd</label>
                         <input type="number" min="1" value={it.quantity} onChange={e=>updateNovaPeca(it.id,'quantity',e.target.value)} className="input" disabled={disabled} style={{fontSize:16,fontWeight:800,textAlign:'center'}}/>
                       </div>
                       <div style={{flex:1}}>
-                        <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--red)',display:'block',marginBottom:6}}>📷 Foto</label>
+                        <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--red)',display:'block',marginBottom:6}}>📷 Foto (Obrigatória)</label>
                         <PhotoDropzone photo={it.photo} onChange={v=>updateNovaPeca(it.id,'photo',v)} disabled={disabled}/>
                       </div>
                     </div>
                   </div>
                 </div>
               ))}
+            </div>
+            {!mostrarExcedente&&(
+              <div style={{marginTop:14,background:'#fff',border:'1px solid var(--border)',borderRadius:10,padding:'12px 14px'}}>
+                <p style={{fontSize:10,fontWeight:700,margin:'0 0 10px'}}>Existem peças dessa lista que não são mais necessárias?</p>
+                <div style={{display:'flex',gap:10}}>
+                  <button type="button" onClick={()=>setMostrarExcedente(true)} disabled={disabled} className="btn-primary" style={{padding:'8px 16px',fontSize:9}}>Sim</button>
+                  <button type="button" onClick={()=>{}} disabled={disabled} className="btn-ghost" style={{padding:'8px 16px',fontSize:9}}>Não</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {mostrarExcedente&&!mostrarNovas&&(
+          <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:10,padding:'12px 14px'}}>
+            <p style={{fontSize:10,fontWeight:700,margin:'0 0 10px'}}>Deseja adicionar algum novo pedido?</p>
+            <div style={{display:'flex',gap:10}}>
+              <button type="button" onClick={()=>setMostrarNovas(true)} disabled={disabled} className="btn-primary" style={{padding:'8px 16px',fontSize:9}}>Sim</button>
+              <button type="button" onClick={()=>{}} disabled={disabled} className="btn-ghost" style={{padding:'8px 16px',fontSize:9}}>Não</button>
             </div>
           </div>
         )}
@@ -2945,14 +2978,23 @@ function NovaFinalizacaoForm({vehiclesDB,requests,loggedInUser,isMaster,finaliza
   const[ajuste,setAjuste]=useState([]);
   const[pintura,setPintura]=useState([]);
   const[pecasOpcao,setPecasOpcao]=useState('suficiente');
+  const[mostrarNovas,setMostrarNovas]=useState(false);
+  const[mostrarExcedente,setMostrarExcedente]=useState(false);
   const[novasPecas,setNovasPecas]=useState([]);
   const[excedentes,setExcedentes]=useState([]);
   const[saving,setSaving]=useState(false);
   const[done,setDone]=useState(false);
   const[existingFin,setExistingFin]=useState(null);
   const[readOnly,setReadOnly]=useState(false);
+  const[showFotoAlert,setShowFotoAlert]=useState(false);
 
   const disabled=!vehicle||readOnly;
+
+  const onSetOpcao=(v)=>{
+    setPecasOpcao(v);
+    if(v==='novas')setMostrarNovas(true);
+    if(v==='excedente')setMostrarExcedente(true);
+  };
 
   const carregarFin=(t)=>{
     const fin=finalizacoes.find(f=>String(f.os).trim()===t&&!f.arquivada);
@@ -2961,11 +3003,13 @@ function NovaFinalizacaoForm({vehiclesDB,requests,loggedInUser,isMaster,finaliza
       setAjuste(fin.ajuste||[]);
       setPintura(fin.pintura||[]);
       setPecasOpcao(fin.pecasOpcao||'suficiente');
+      setMostrarNovas(fin.pecasOpcao==='novas'||fin.pecasOpcao==='ambos');
+      setMostrarExcedente(fin.pecasOpcao==='excedente'||fin.pecasOpcao==='ambos');
       setExcedentes([]);setNovasPecas([]);
       setReadOnly(!(isMaster||fin.criadoPor===loggedInUser.user));
     }else{
       setExistingFin(null);
-      setAjuste([]);setPintura([]);setPecasOpcao('suficiente');setNovasPecas([]);setExcedentes([]);
+      setAjuste([]);setPintura([]);setPecasOpcao('suficiente');setMostrarNovas(false);setMostrarExcedente(false);setNovasPecas([]);setExcedentes([]);
       setReadOnly(false);
     }
   };
@@ -2983,27 +3027,26 @@ function NovaFinalizacaoForm({vehiclesDB,requests,loggedInUser,isMaster,finaliza
 
   const reset=()=>{
     setOs('');setVehicle(null);setUnidade('Unidade 1');setAjuste([]);setPintura([]);
-    setPecasOpcao('suficiente');setNovasPecas([]);setExcedentes([]);setDone(false);setExistingFin(null);setReadOnly(false);
+    setPecasOpcao('suficiente');setMostrarNovas(false);setMostrarExcedente(false);setNovasPecas([]);setExcedentes([]);setDone(false);setExistingFin(null);setReadOnly(false);
   };
 
   const salvar=async()=>{
     if(readOnly)return;
     if(!os.trim())return alert('Informe a OS.');
     if(!vehicle)return alert('OS não cadastrada.');
+    const pecasValidas=novasPecas.filter(p=>p.description.trim());
+    if(mostrarNovas&&pecasValidas.some(p=>!p.photo)){setShowFotoAlert(true);return;}
     setSaving(true);
     try{
       const now=Date.now();
-      if(pecasOpcao==='novas'&&novasPecas.length){
-        const validas=novasPecas.filter(p=>p.description.trim());
-        if(validas.length){
-          await col('requests').add(stripUndefined({
-            os,responsavel:loggedInUser.user,vehicleData:vehicle,unidade,
-            items:validas.map(p=>({id:String(Date.now())+Math.floor(Math.random()*999),description:p.description,quantity:p.quantity||1,photo:p.photo||null,status:'Pendente'})),
-            timestamp:now,status:'Pendente',origemFinalizacao:true,
-          }));
-        }
+      if(mostrarNovas&&pecasValidas.length){
+        await col('requests').add(stripUndefined({
+          os,responsavel:loggedInUser.user,vehicleData:vehicle,unidade,
+          items:pecasValidas.map(p=>({id:String(Date.now())+Math.floor(Math.random()*999),description:p.description,quantity:p.quantity||1,photo:p.photo||null,status:'Pendente'})),
+          timestamp:now,status:'Pendente',origemFinalizacao:true,
+        }));
       }
-      if(excedentes.length){
+      if(mostrarExcedente&&excedentes.length){
         const matching=requests.filter(r=>String(r.os).trim()===String(os).trim());
         for(const req of matching){
           let changed=false;
@@ -3014,12 +3057,13 @@ function NovaFinalizacaoForm({vehiclesDB,requests,loggedInUser,isMaster,finaliza
           if(changed)await col('requests').doc(req.id).update({items:stripUndefined(newItems)});
         }
       }
+      const opcaoFinal=mostrarNovas&&mostrarExcedente?'ambos':mostrarExcedente?'excedente':mostrarNovas?'novas':'suficiente';
       const historicoEntry={acao:existingFin?'Inspeção atualizada':'Inspeção criada',usuario:loggedInUser.user,timestamp:now};
       if(existingFin){
         await col('finalizacoes').doc(existingFin.id).update(stripUndefined({
           ajuste:ajuste.map(p=>({...p})),
           pintura:pintura.map(p=>({...p})),
-          pecasOpcao,
+          pecasOpcao:opcaoFinal,
           historico:[...(existingFin.historico||[]),historicoEntry],
         }));
       }else{
@@ -3028,7 +3072,7 @@ function NovaFinalizacaoForm({vehiclesDB,requests,loggedInUser,isMaster,finaliza
           criadoPor:loggedInUser.user,criadoEm:now,
           ajuste:ajuste.map(p=>({...p})),
           pintura:pintura.map(p=>({...p})),
-          pecasOpcao,
+          pecasOpcao:opcaoFinal,
           historico:[historicoEntry],
         }));
       }
@@ -3048,6 +3092,17 @@ function NovaFinalizacaoForm({vehiclesDB,requests,loggedInUser,isMaster,finaliza
 
   return(
     <div className="fade-up" style={{paddingBottom:20}}>
+      {showFotoAlert&&(
+        <div style={{position:'fixed',inset:0,zIndex:600,background:'rgba(0,0,0,.8)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+          <div style={{background:'#fff',borderRadius:20,overflow:'hidden',maxWidth:360,width:'100%'}}>
+            <div style={{background:'var(--red)',padding:'24px 20px',textAlign:'center',color:'#fff'}}>
+              <div style={{width:52,height:52,background:'rgba(255,255,255,.2)',borderRadius:14,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 12px'}}><Icon name="camera" size={26}/></div>
+              <h3 style={{margin:0,fontSize:17,fontWeight:800}}>Foto Obrigatória</h3>
+            </div>
+            <div style={{padding:20}}><p style={{fontSize:12,color:'var(--muted)',textAlign:'center',marginBottom:16}}>Todas as novas peças precisam de uma foto anexada.</p><button onClick={()=>setShowFotoAlert(false)} className="btn-primary" style={{width:'100%'}}>Entendido</button></div>
+          </div>
+        </div>
+      )}
       <div className="card" style={{marginBottom:16}}>
         <div style={{padding:20,display:'flex',flexDirection:'column',gap:16}}>
           <div>
@@ -3069,7 +3124,7 @@ function NovaFinalizacaoForm({vehiclesDB,requests,loggedInUser,isMaster,finaliza
             <div style={{width:'100%'}}>
               <p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',letterSpacing:'.12em',color:'rgba(255,255,255,.3)',margin:'0 0 4px'}}>Veículo encontrado</p>
               <p style={{fontSize:20,fontWeight:800,textTransform:'uppercase',color:'#fff',margin:'0 0 10px'}}>{vehicle.modelo}</p>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
+              <div className="grid-3col" style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
                 {[['Etapa',vehicle.etapa],['Cor',vehicle.cor],['Chassi',vehicle.chassi]].map(([l,v])=>(
                   <div key={l}><p style={{fontSize:7,color:'rgba(255,255,255,.3)',fontWeight:700,textTransform:'uppercase',margin:'0 0 2px'}}>{l}</p><p style={{fontSize:11,color:'rgba(255,255,255,.85)',fontWeight:600,margin:0,textTransform:'uppercase'}}>{v||'—'}</p></div>
                 ))}
@@ -3088,7 +3143,8 @@ function NovaFinalizacaoForm({vehiclesDB,requests,loggedInUser,isMaster,finaliza
       <ProblemCategoryEditor title="Pintura" icon="paintbrush" color="#2563EB" items={pintura} setItems={setPintura} disabled={disabled}/>
       <PecasFinalizacaoSection os={os} requests={requests}
         novasPecas={novasPecas} setNovasPecas={setNovasPecas} excedentes={excedentes} setExcedentes={setExcedentes}
-        pecasOpcao={pecasOpcao} setPecasOpcao={setPecasOpcao} disabled={disabled}/>
+        pecasOpcao={pecasOpcao} mostrarNovas={mostrarNovas} setMostrarNovas={setMostrarNovas}
+        mostrarExcedente={mostrarExcedente} setMostrarExcedente={setMostrarExcedente} onSetOpcao={onSetOpcao} disabled={disabled}/>
 
       {!readOnly&&(
         <button onClick={salvar} disabled={saving||!vehicle} className="btn-primary" style={{width:'100%',padding:16,fontSize:12}}>
@@ -3116,11 +3172,24 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
 
   const podeEditar=(fin)=>isMaster||fin.criadoPor===loggedInUser.user;
 
-  const resolverPendencia=async(finId,categoria,itemId)=>{
+ const resolverPendencia=async(finId,categoria,itemId)=>{
     const fin=finalizacoes.find(f=>f.id===finId);if(!fin)return;
     const now=Date.now();
     const newCat=(fin[categoria]||[]).map(p=>p.id===itemId?{...p,status:'Solucionado',resolvidoPor:loggedInUser.user,resolvidoEm:now}:p);
     const novoHistorico=[...(fin.historico||[]),{acao:`Pendência resolvida (${categoria})`,usuario:loggedInUser.user,timestamp:now}];
+    try{await col('finalizacoes').doc(finId).update({[categoria]:stripUndefined(newCat),historico:stripUndefined(novoHistorico)});}
+    catch(e){alert('Erro: '+e.message);}
+  };
+
+  const cancelarSolucao=async(finId,categoria,itemId)=>{
+    const fin=finalizacoes.find(f=>f.id===finId);if(!fin)return;
+    const now=Date.now();
+    const newCat=(fin[categoria]||[]).map(p=>{
+      if(p.id!==itemId)return p;
+      const{resolvidoPor,resolvidoEm,...rest}=p;
+      return{...rest,status:'Pendente',canceladoSolucaoPor:loggedInUser.user,canceladoSolucaoEm:now};
+    });
+    const novoHistorico=[...(fin.historico||[]),{acao:`Solução cancelada (${categoria})`,usuario:loggedInUser.user,timestamp:now}];
     try{await col('finalizacoes').doc(finId).update({[categoria]:stripUndefined(newCat),historico:stripUndefined(novoHistorico)});}
     catch(e){alert('Erro: '+e.message);}
   };
@@ -3211,10 +3280,15 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
                                 <p style={{fontSize:10,fontWeight:600,margin:0,color:'var(--ink)'}}>{p.descricao||'(sem descrição)'}</p>
                                 {p.status==='Solucionado'&&<p style={{fontSize:8,color:'#059669',fontWeight:700,margin:'2px 0 0'}}>✓ Resolvido {p.resolvidoPor?`por ${p.resolvidoPor}`:''} {p.resolvidoEm?'em '+new Date(p.resolvidoEm).toLocaleString('pt-BR'):''}</p>}
                               </div>
-                              {p.status!=='Solucionado'&&editar&&(
+                            {p.status!=='Solucionado'&&editar&&(
                                 <button onClick={()=>resolverPendencia(fin.id,key,p.id)} style={{padding:'5px 12px',background:'var(--ink)',color:'#fff',border:'none',borderRadius:7,fontSize:8,fontWeight:800,textTransform:'uppercase',cursor:'pointer',flexShrink:0,fontFamily:'Plus Jakarta Sans,sans-serif'}}>Resolver Pendência</button>
                               )}
-                              {p.status==='Solucionado'&&<span className="badge badge-done">Solucionado</span>}
+                              {p.status==='Solucionado'&&(
+                                <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0,flexWrap:'wrap'}}>
+                                  <span className="badge badge-done">Solucionado</span>
+                                  {editar&&<button onClick={()=>cancelarSolucao(fin.id,key,p.id)} style={{padding:'4px 10px',background:'#fff',border:'1px solid #FFBDBD',borderRadius:7,fontSize:7,fontWeight:800,textTransform:'uppercase',color:'var(--red)',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>↩ Cancelar Solução</button>}
+                                </div>
+                              )}
                               {isMaster&&(
                                 confirmDelProb?.finId===fin.id&&confirmDelProb?.categoria===key&&confirmDelProb?.itemId===p.id?(
                                   <div style={{display:'flex',gap:4,flexShrink:0}}>
@@ -3232,11 +3306,14 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
                     );
                   })}
 
-                  {pecasItems.length>0&&(
+                 {pecasItems.length>0&&(()=>{
+                    const pecasSolucionado=pecasAtivas.length===0||pecasAtivas.every(it=>it.status==='Concluído');
+                    return(
                     <div>
-                      <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8}}>
+                      <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8,flexWrap:'wrap'}}>
                         <div style={{width:20,height:20,borderRadius:6,background:'#7C3AED',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="package" size={11} style={{color:'#fff'}}/></div>
                         <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',margin:0}}>Peças ({pecasAtivas.length})</p>
+                        <span style={{fontSize:8,fontWeight:800,padding:'2px 8px',borderRadius:999,background:pecasSolucionado?'#EDFAF3':'var(--red-light)',color:pecasSolucionado?'#059669':'var(--red)',border:`1px solid ${pecasSolucionado?'#AAE6C5':'#FFBDBD'}`}}>{pecasSolucionado?'Solucionado':'Pendente'}</span>
                       </div>
                       <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:pecasExc.length?10:0}}>
                         {pecasAtivas.map((it,i)=>(
@@ -3251,7 +3328,7 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
                           </div>
                         ))}
                       </div>
-                      {pecasExc.length>0&&(
+                     {pecasExc.length>0&&(
                         <div style={{background:'var(--red-light)',border:'1px solid #FFBDBD',borderRadius:10,padding:10}}>
                           <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--red)',marginBottom:6}}>Peças Solicitadas para Exclusão</p>
                           <div style={{display:'flex',flexDirection:'column',gap:5}}>
@@ -3262,11 +3339,12 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
                         </div>
                       )}
                     </div>
-                  )}
+                    );
+                  })()}
 
-                  {fin.pecasOpcao&&(
+                 {fin.pecasOpcao&&(
                     <div style={{fontSize:9,color:'var(--muted)',fontWeight:600}}>
-                      Opção escolhida: {fin.pecasOpcao==='suficiente'?'peças confirmadas como suficientes':fin.pecasOpcao==='novas'?'novo pedido gerado':'itens marcados como excedentes'}
+                      Opção escolhida: {fin.pecasOpcao==='suficiente'?'peças confirmadas como suficientes':fin.pecasOpcao==='novas'?'novo pedido gerado':fin.pecasOpcao==='ambos'?'novo pedido gerado + itens marcados como excedentes':'itens marcados como excedentes'}
                     </div>
                   )}
                 </div>
@@ -3301,9 +3379,10 @@ function FinalizacaoHistoricoView(){
           <p style={{fontSize:9,color:'var(--muted)',marginTop:4}}>Inspeções são arquivadas automaticamente 5 dias após o veículo ser marcado como Entregue.</p>
         </div>
       ):(
-        <div className="card" style={{overflow:'hidden'}}>
-          <table className="vtable w-full">
-            <thead><tr><th>OS</th><th>Veículo</th><th>Criado por</th><th>Arquivado em</th><th style={{textAlign:'right'}}>PDF</th></tr></thead>
+       <div className="card" style={{overflow:'hidden'}}>
+     <div className="table-scroll">
+     <table className="vtable w-full" style={{minWidth:650}}>
+          <thead><tr><th>Usuário</th><th>Categoria</th><th>Status</th><th>Finalização</th><th style={{textAlign:'right'}}>Ação</th></tr></thead>
             <tbody>
               {visiveis.map(h=>(
                 <tr key={h.id}>
@@ -3318,13 +3397,15 @@ function FinalizacaoHistoricoView(){
                   </td>
                 </tr>
               ))}
-            </tbody>
+           </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>
   );
 }
+
 
 function FinalizacaoView({vehiclesDB,requests,loggedInUser,isMaster}){
   const[sub,setSub]=useState('nova');
@@ -3418,9 +3499,10 @@ function PedidosExcedentesView({requests}){
   );
 
   return(
-    <div className="card" style={{overflow:'hidden'}}>
-      <table className="vtable w-full">
-        <thead><tr><th>OS</th><th>Veículo</th><th>Peça</th><th>Qtd</th><th>Marcado por</th><th>Data</th><th style={{textAlign:'right'}}>Ação</th></tr></thead>
+   <div className="card" style={{overflow:'hidden'}}>
+          <div className="table-scroll">
+          <table className="vtable w-full" style={{minWidth:500}}>
+            <thead><tr><th>OS</th><th>Veículo</th><th>Criado por</th><th>Arquivado em</th><th style={{textAlign:'right'}}>PDF</th></tr></thead>
         <tbody>
           {excedentes.map((e,i)=>(
             <tr key={i}>
@@ -3438,8 +3520,9 @@ function PedidosExcedentesView({requests}){
               </td>
             </tr>
           ))}
-        </tbody>
+       </tbody>
       </table>
+      </div>
     </div>
   );
 }
