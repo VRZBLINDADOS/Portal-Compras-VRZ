@@ -2837,7 +2837,7 @@ function ProblemCategoryEditor({title,icon,color,items,setItems,disabled}){
   );
 }
 
-function PecasFinalizacaoSection({os, requests, novasPecas, setNovasPecas, excedentes, setExcedentes, pecasOpcao, mostrarNovas, setMostrarNovas, mostrarExcedente, setMostrarExcedente, onSetOpcao, disabled}){
+function PecasFinalizacaoSection({os, requests, novasPecas, setNovasPecas, excedentes, setExcedentes, pecasEscolha, mostrarNovas, mostrarExcedente, onSetOpcao, disabled}){
   const existingItems=useMemo(()=>getPecasParaOS(os,requests),[requests,os]);
   const ativos=useMemo(()=>existingItems.filter(it=>!it.excedente),[existingItems]);
   const jaExcedentes=useMemo(()=>existingItems.filter(it=>it.excedente),[existingItems]);
@@ -2883,7 +2883,7 @@ function PecasFinalizacaoSection({os, requests, novasPecas, setNovasPecas, exced
       <div style={{padding:18}}>
         {ativos.length>0&&(
           <div style={{marginBottom:16}}>
-            <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',marginBottom:8}}>Peças solicitadas{mostrarExcedente?' (marque as que não são mais necessárias)':''}</p>
+            <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',marginBottom:8}}>Peças solicitadas{mostrarExcedente?' — marque as que não são mais necessárias':''}</p>
             <div style={{display:'flex',flexDirection:'column',gap:6}}>
               {ativos.map((it,i)=><ItemRow key={i} it={it} selectable={mostrarExcedente}/>)}
             </div>
@@ -2901,16 +2901,19 @@ function PecasFinalizacaoSection({os, requests, novasPecas, setNovasPecas, exced
         {existingItems.length===0&&<p style={{fontSize:10,color:'var(--muted)',marginBottom:16}}>Nenhuma peça solicitada encontrada para esta OS ainda.</p>}
 
         <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',marginBottom:8}}>O que deseja fazer?</p>
-        <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:16}}>
+        <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:(mostrarNovas||mostrarExcedente)?16:0}}>
           {[
-            {v:'suficiente',l:'As peças que preciso estão aqui',icon:'check-circle'},
-            {v:'novas',l:'Preciso adicionar um pedido',icon:'plus-circle'},
-            {v:'excedente',l:'Existem peças dessa lista que não são mais necessárias',icon:'package-minus'},
+            {v:'suficiente',l:'As peças que preciso estão aqui',icon:'check-circle',desc:'Confirma que nada precisa mudar e libera para salvar direto.'},
+            {v:'novas',l:'Preciso adicionar um pedido',icon:'plus-circle',desc:'Abre o formulário para incluir novas peças a comprar.'},
+            {v:'excedente',l:'Existem peças dessa lista que não são mais necessárias',icon:'package-minus',desc:'Permite marcar peças já solicitadas como excedentes.'},
           ].map(op=>(
-            <label key={op.v} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderRadius:10,border:`1.5px solid ${pecasOpcao===op.v?'var(--red)':'var(--border)'}`,background:pecasOpcao===op.v?'var(--red-light)':'#fff',cursor:disabled?'not-allowed':'pointer'}}>
-              <input type="radio" name="pecasOpcao" checked={pecasOpcao===op.v} disabled={disabled} onChange={()=>onSetOpcao(op.v)} style={{width:16,height:16,accentColor:'var(--red)'}}/>
-              <Icon name={op.icon} size={15}/>
-              <span style={{fontSize:11,fontWeight:700}}>{op.l}</span>
+            <label key={op.v} style={{display:'flex',alignItems:'flex-start',gap:10,padding:'10px 14px',borderRadius:10,border:`1.5px solid ${pecasEscolha===op.v?'var(--red)':'var(--border)'}`,background:pecasEscolha===op.v?'var(--red-light)':'#fff',cursor:disabled?'not-allowed':'pointer'}}>
+              <input type="radio" name="pecasOpcao" checked={pecasEscolha===op.v} disabled={disabled} onChange={()=>onSetOpcao(op.v)} style={{width:16,height:16,accentColor:'var(--red)',marginTop:2,flexShrink:0}}/>
+              <Icon name={op.icon} size={15} style={{marginTop:1,flexShrink:0}}/>
+              <div>
+                <span style={{fontSize:11,fontWeight:700,display:'block'}}>{op.l}</span>
+                <span style={{fontSize:9,color:'var(--muted)',fontWeight:500}}>{op.desc}</span>
+              </div>
             </label>
           ))}
         </div>
@@ -2945,25 +2948,6 @@ function PecasFinalizacaoSection({os, requests, novasPecas, setNovasPecas, exced
                 </div>
               ))}
             </div>
-            {!mostrarExcedente&&(
-              <div style={{marginTop:14,background:'#fff',border:'1px solid var(--border)',borderRadius:10,padding:'12px 14px'}}>
-                <p style={{fontSize:10,fontWeight:700,margin:'0 0 10px'}}>Existem peças dessa lista que não são mais necessárias?</p>
-                <div style={{display:'flex',gap:10}}>
-                  <button type="button" onClick={()=>setMostrarExcedente(true)} disabled={disabled} className="btn-primary" style={{padding:'8px 16px',fontSize:9}}>Sim</button>
-                  <button type="button" onClick={()=>{}} disabled={disabled} className="btn-ghost" style={{padding:'8px 16px',fontSize:9}}>Não</button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {mostrarExcedente&&!mostrarNovas&&(
-          <div style={{background:'#fff',border:'1px solid var(--border)',borderRadius:10,padding:'12px 14px'}}>
-            <p style={{fontSize:10,fontWeight:700,margin:'0 0 10px'}}>Deseja adicionar algum novo pedido?</p>
-            <div style={{display:'flex',gap:10}}>
-              <button type="button" onClick={()=>setMostrarNovas(true)} disabled={disabled} className="btn-primary" style={{padding:'8px 16px',fontSize:9}}>Sim</button>
-              <button type="button" onClick={()=>{}} disabled={disabled} className="btn-ghost" style={{padding:'8px 16px',fontSize:9}}>Não</button>
-            </div>
           </div>
         )}
       </div>
@@ -2977,9 +2961,12 @@ function NovaFinalizacaoForm({vehiclesDB,requests,loggedInUser,isMaster,finaliza
   const[unidade,setUnidade]=useState('Unidade 1');
   const[ajuste,setAjuste]=useState([]);
   const[pintura,setPintura]=useState([]);
-  const[pecasOpcao,setPecasOpcao]=useState('suficiente');
+  const[pecasEscolha,setPecasEscolha]=useState('suficiente');
   const[mostrarNovas,setMostrarNovas]=useState(false);
   const[mostrarExcedente,setMostrarExcedente]=useState(false);
+  const[perguntaExcedenteFeita,setPerguntaExcedenteFeita]=useState(false);
+  const[perguntaNovasFeita,setPerguntaNovasFeita]=useState(false);
+  const[perguntaPendente,setPerguntaPendente]=useState(null);
   const[novasPecas,setNovasPecas]=useState([]);
   const[excedentes,setExcedentes]=useState([]);
   const[saving,setSaving]=useState(false);
@@ -2991,9 +2978,10 @@ function NovaFinalizacaoForm({vehiclesDB,requests,loggedInUser,isMaster,finaliza
   const disabled=!vehicle||readOnly;
 
   const onSetOpcao=(v)=>{
-    setPecasOpcao(v);
-    if(v==='novas')setMostrarNovas(true);
-    if(v==='excedente')setMostrarExcedente(true);
+    setPecasEscolha(v);
+    if(v==='novas'){setMostrarNovas(true);setMostrarExcedente(false);setPerguntaExcedenteFeita(false);}
+    else if(v==='excedente'){setMostrarExcedente(true);setMostrarNovas(false);setPerguntaNovasFeita(false);}
+    else{setMostrarNovas(false);setMostrarExcedente(false);}
   };
 
   const carregarFin=(t)=>{
@@ -3002,14 +2990,22 @@ function NovaFinalizacaoForm({vehiclesDB,requests,loggedInUser,isMaster,finaliza
       setExistingFin(fin);
       setAjuste(fin.ajuste||[]);
       setPintura(fin.pintura||[]);
-      setPecasOpcao(fin.pecasOpcao||'suficiente');
-      setMostrarNovas(fin.pecasOpcao==='novas'||fin.pecasOpcao==='ambos');
-      setMostrarExcedente(fin.pecasOpcao==='excedente'||fin.pecasOpcao==='ambos');
+      const opc=fin.pecasOpcao||'suficiente';
+      const novas=opc==='novas'||opc==='ambos';
+      const exc=opc==='excedente'||opc==='ambos';
+      setPecasEscolha(novas?'novas':exc?'excedente':'suficiente');
+      setMostrarNovas(novas);
+      setMostrarExcedente(exc);
+      setPerguntaExcedenteFeita(true);
+      setPerguntaNovasFeita(true);
       setExcedentes([]);setNovasPecas([]);
       setReadOnly(!(isMaster||fin.criadoPor===loggedInUser.user));
     }else{
       setExistingFin(null);
-      setAjuste([]);setPintura([]);setPecasOpcao('suficiente');setMostrarNovas(false);setMostrarExcedente(false);setNovasPecas([]);setExcedentes([]);
+      setAjuste([]);setPintura([]);
+      setPecasEscolha('suficiente');setMostrarNovas(false);setMostrarExcedente(false);
+      setPerguntaExcedenteFeita(false);setPerguntaNovasFeita(false);
+      setNovasPecas([]);setExcedentes([]);
       setReadOnly(false);
     }
   };
@@ -3027,13 +3023,12 @@ function NovaFinalizacaoForm({vehiclesDB,requests,loggedInUser,isMaster,finaliza
 
   const reset=()=>{
     setOs('');setVehicle(null);setUnidade('Unidade 1');setAjuste([]);setPintura([]);
-    setPecasOpcao('suficiente');setMostrarNovas(false);setMostrarExcedente(false);setNovasPecas([]);setExcedentes([]);setDone(false);setExistingFin(null);setReadOnly(false);
+    setPecasEscolha('suficiente');setMostrarNovas(false);setMostrarExcedente(false);
+    setPerguntaExcedenteFeita(false);setPerguntaNovasFeita(false);setPerguntaPendente(null);
+    setNovasPecas([]);setExcedentes([]);setDone(false);setExistingFin(null);setReadOnly(false);
   };
 
-  const salvar=async()=>{
-    if(readOnly)return;
-    if(!os.trim())return alert('Informe a OS.');
-    if(!vehicle)return alert('OS não cadastrada.');
+  const executarSalvar=async()=>{
     const pecasValidas=novasPecas.filter(p=>p.description.trim());
     if(mostrarNovas&&pecasValidas.some(p=>!p.photo)){setShowFotoAlert(true);return;}
     setSaving(true);
@@ -3081,6 +3076,27 @@ function NovaFinalizacaoForm({vehiclesDB,requests,loggedInUser,isMaster,finaliza
     setSaving(false);
   };
 
+  const handleSalvarClick=()=>{
+    if(readOnly)return;
+    if(!os.trim())return alert('Informe a OS.');
+    if(!vehicle)return alert('OS não cadastrada.');
+    if(pecasEscolha==='novas'&&!perguntaExcedenteFeita){setPerguntaPendente('excedente');return;}
+    if(pecasEscolha==='excedente'&&!perguntaNovasFeita){setPerguntaPendente('novas');return;}
+    executarSalvar();
+  };
+
+  const responderPergunta=(resposta)=>{
+    if(perguntaPendente==='excedente'){
+      setPerguntaExcedenteFeita(true);
+      if(resposta==='sim'){setMostrarExcedente(true);setPerguntaPendente(null);return;}
+    }else if(perguntaPendente==='novas'){
+      setPerguntaNovasFeita(true);
+      if(resposta==='sim'){setMostrarNovas(true);setPerguntaPendente(null);return;}
+    }
+    setPerguntaPendente(null);
+    executarSalvar();
+  };
+
   if(done)return(
     <div style={{maxWidth:420,margin:'0 auto',background:'#fff',borderRadius:20,border:'1.5px solid var(--border)',padding:40,textAlign:'center'}} className="fade-up">
       <div style={{width:64,height:64,background:'#EDFAF3',borderRadius:18,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 20px'}}><Icon name="check-circle" size={32}/></div>
@@ -3100,6 +3116,22 @@ function NovaFinalizacaoForm({vehiclesDB,requests,loggedInUser,isMaster,finaliza
               <h3 style={{margin:0,fontSize:17,fontWeight:800}}>Foto Obrigatória</h3>
             </div>
             <div style={{padding:20}}><p style={{fontSize:12,color:'var(--muted)',textAlign:'center',marginBottom:16}}>Todas as novas peças precisam de uma foto anexada.</p><button onClick={()=>setShowFotoAlert(false)} className="btn-primary" style={{width:'100%'}}>Entendido</button></div>
+          </div>
+        </div>
+      )}
+      {perguntaPendente&&(
+        <div style={{position:'fixed',inset:0,zIndex:600,background:'rgba(0,0,0,.8)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+          <div style={{background:'#fff',borderRadius:20,overflow:'hidden',maxWidth:400,width:'100%'}}>
+            <div style={{background:'var(--ink)',padding:'24px 20px',textAlign:'center',color:'#fff'}}>
+              <div style={{width:52,height:52,background:'rgba(255,255,255,.1)',borderRadius:14,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 12px'}}><Icon name="package" size={26}/></div>
+              <h3 style={{margin:0,fontSize:16,fontWeight:800}}>
+                {perguntaPendente==='excedente'?'Existem peças dessa lista que não são mais necessárias?':'Deseja adicionar algum novo pedido?'}
+              </h3>
+            </div>
+            <div style={{padding:20,display:'flex',gap:10}}>
+              <button onClick={()=>responderPergunta('nao')} className="btn-ghost" style={{flex:1}}>Não, salvar assim</button>
+              <button onClick={()=>responderPergunta('sim')} className="btn-primary" style={{flex:1}}>Sim</button>
+            </div>
           </div>
         </div>
       )}
@@ -3143,11 +3175,11 @@ function NovaFinalizacaoForm({vehiclesDB,requests,loggedInUser,isMaster,finaliza
       <ProblemCategoryEditor title="Pintura" icon="paintbrush" color="#2563EB" items={pintura} setItems={setPintura} disabled={disabled}/>
       <PecasFinalizacaoSection os={os} requests={requests}
         novasPecas={novasPecas} setNovasPecas={setNovasPecas} excedentes={excedentes} setExcedentes={setExcedentes}
-        pecasOpcao={pecasOpcao} mostrarNovas={mostrarNovas} setMostrarNovas={setMostrarNovas}
-        mostrarExcedente={mostrarExcedente} setMostrarExcedente={setMostrarExcedente} onSetOpcao={onSetOpcao} disabled={disabled}/>
+        pecasEscolha={pecasEscolha} mostrarNovas={mostrarNovas} mostrarExcedente={mostrarExcedente}
+        onSetOpcao={onSetOpcao} disabled={disabled}/>
 
       {!readOnly&&(
-        <button onClick={salvar} disabled={saving||!vehicle} className="btn-primary" style={{width:'100%',padding:16,fontSize:12}}>
+        <button onClick={handleSalvarClick} disabled={saving||!vehicle} className="btn-primary" style={{width:'100%',padding:16,fontSize:12}}>
           {saving?<Icon name="refresh-cw" size={18} className="spin"/>:<><Icon name="save" size={16}/> Salvar Inspeção</>}
         </button>
       )}
@@ -3157,10 +3189,11 @@ function NovaFinalizacaoForm({vehiclesDB,requests,loggedInUser,isMaster,finaliza
 
 function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
   const[search,setSearch]=useState('');
+  const[subTab,setSubTab]=useState('pendentes');
   const[confirmDelFin,setConfirmDelFin]=useState(null);
   const[confirmDelProb,setConfirmDelProb]=useState(null);
 
-  const visiveis=useMemo(()=>{
+  const baseVisiveis=useMemo(()=>{
     let list=isMaster?finalizacoes:finalizacoes.filter(f=>f.criadoPor===loggedInUser.user);
     list=list.filter(f=>!f.arquivada);
     if(search){
@@ -3170,9 +3203,23 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
     return list.sort((a,b)=>b.criadoEm-a.criadoEm);
   },[finalizacoes,loggedInUser,isMaster,search]);
 
+  // Calcula se a inspeção está 100% concluída (Ajuste + Pintura + Peças sem pendência)
+  const comStatus=useMemo(()=>baseVisiveis.map(fin=>{
+    const pendAjustePintura=['ajuste','pintura'].reduce((a,c)=>a+(fin[c]||[]).filter(p=>p.status!=='Solucionado').length,0);
+    const pecasItems=getPecasParaOS(fin.os,requests);
+    const pecasAtivas=pecasItems.filter(it=>!it.excedente);
+    const pecasSolucionado=pecasAtivas.length===0||pecasAtivas.every(it=>it.status==='Concluído');
+    const totalPend=pendAjustePintura+(pecasSolucionado?0:1);
+    return{fin,totalPend,concluida:totalPend===0};
+  }),[baseVisiveis,requests]);
+
+  const visiveis=useMemo(()=>comStatus.filter(c=>subTab==='concluidos'?c.concluida:!c.concluida).map(c=>c.fin),[comStatus,subTab]);
+  const countConcluidos=comStatus.filter(c=>c.concluida).length;
+  const countPendentes=comStatus.filter(c=>!c.concluida).length;
+
   const podeEditar=(fin)=>isMaster||fin.criadoPor===loggedInUser.user;
 
- const resolverPendencia=async(finId,categoria,itemId)=>{
+  const resolverPendencia=async(finId,categoria,itemId)=>{
     const fin=finalizacoes.find(f=>f.id===finId);if(!fin)return;
     const now=Date.now();
     const newCat=(fin[categoria]||[]).map(p=>p.id===itemId?{...p,status:'Solucionado',resolvidoPor:loggedInUser.user,resolvidoEm:now}:p);
@@ -3217,16 +3264,47 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
     doc.save(`Finalizacao_OS_${fin.os}.pdf`);
   };
 
+  const exportarExcel=()=>{
+    const csvCell=(v)=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+    const rows=[[csvCell('OS'),csvCell('Chassi'),csvCell('Modelo'),csvCell('Ajustes'),csvCell('Pintura'),csvCell('Peças'),csvCell('Responsável')].join(';')];
+    baseVisiveis.forEach(fin=>{
+      const fmtProblemas=(items)=>(items||[]).map(p=>`${p.status==='Solucionado'?'[Solucionado]':'[Pendente]'} ${p.descricao||'(sem descrição)'}`).join(' | ')||'—';
+      const pecasItems=getPecasParaOS(fin.os,requests).filter(it=>!it.excedente);
+      const fmtPecas=pecasItems.map(it=>`${it.quantity}x ${it.description} — ${it.statusOriginal||it.status||'Pendente'}`).join(' | ')||'—';
+      rows.push([
+        csvCell(fin.os),
+        csvCell(fin.vehicleData?.chassi||'—'),
+        csvCell(fin.vehicleData?.modelo||'—'),
+        csvCell(fmtProblemas(fin.ajuste)),
+        csvCell(fmtProblemas(fin.pintura)),
+        csvCell(fmtPecas),
+        csvCell(fin.criadoPor||'—'),
+      ].join(';'));
+    });
+    const blob=new Blob(['\uFEFF'+rows.join('\r\n')],{type:'text/csv;charset=utf-8;'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`Finalizacoes_VRZ_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.csv`;a.click();
+  };
+
   return(
     <div className="fade-up" style={{paddingBottom:30}}>
-      <div style={{position:'relative',marginBottom:16}}>
-        <input type="text" placeholder="Buscar OS / Modelo / Usuário..." value={search} onChange={e=>setSearch(e.target.value)} className="input" style={{paddingLeft:36}}/>
-        <div style={{position:'absolute',left:11,top:'50%',transform:'translateY(-50%)',color:'var(--muted)'}}><Icon name="search" size={14}/></div>
+      <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center',marginBottom:16}}>
+        <div style={{position:'relative',flex:1,minWidth:200}}>
+          <input type="text" placeholder="Buscar OS / Modelo / Usuário..." value={search} onChange={e=>setSearch(e.target.value)} className="input" style={{paddingLeft:36}}/>
+          <div style={{position:'absolute',left:11,top:'50%',transform:'translateY(-50%)',color:'var(--muted)'}}><Icon name="search" size={14}/></div>
+        </div>
+        <button onClick={exportarExcel} style={{display:'flex',alignItems:'center',gap:6,padding:'10px 16px',background:'#059669',color:'#fff',border:'none',borderRadius:10,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif',whiteSpace:'nowrap'}}>
+          <Icon name="file-spreadsheet" size={14}/> Exportar Excel
+        </button>
+      </div>
+      <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)',width:'fit-content',marginBottom:16,flexWrap:'wrap'}}>
+        {[{k:'pendentes',l:`Pendentes (${countPendentes})`},{k:'concluidos',l:`Concluídos (${countConcluidos})`}].map(t=>(
+          <button key={t.k} onClick={()=>setSubTab(t.k)} style={{padding:'8px 16px',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',border:'none',cursor:'pointer',letterSpacing:'.06em',fontFamily:'Plus Jakarta Sans,sans-serif',background:subTab===t.k?'#fff':'transparent',color:subTab===t.k?'var(--red)':'var(--muted)',boxShadow:subTab===t.k?'0 2px 8px rgba(0,0,0,.08)':'none'}}>{t.l}</button>
+        ))}
       </div>
       {visiveis.length===0?(
         <div style={{padding:'56px 20px',textAlign:'center',background:'#fff',borderRadius:16,border:'1.5px dashed var(--border)'}}>
           <Icon name="clipboard-check" size={30} style={{margin:'0 auto 10px',display:'block',color:'var(--muted)'}}/>
-          <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',margin:0}}>Nenhuma inspeção encontrada</p>
+          <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',margin:0}}>Nenhuma inspeção {subTab==='concluidos'?'concluída':'pendente'} encontrada</p>
         </div>
       ):(
         <div style={{display:'flex',flexDirection:'column',gap:12}}>
@@ -3280,7 +3358,7 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
                                 <p style={{fontSize:10,fontWeight:600,margin:0,color:'var(--ink)'}}>{p.descricao||'(sem descrição)'}</p>
                                 {p.status==='Solucionado'&&<p style={{fontSize:8,color:'#059669',fontWeight:700,margin:'2px 0 0'}}>✓ Resolvido {p.resolvidoPor?`por ${p.resolvidoPor}`:''} {p.resolvidoEm?'em '+new Date(p.resolvidoEm).toLocaleString('pt-BR'):''}</p>}
                               </div>
-                            {p.status!=='Solucionado'&&editar&&(
+                              {p.status!=='Solucionado'&&editar&&(
                                 <button onClick={()=>resolverPendencia(fin.id,key,p.id)} style={{padding:'5px 12px',background:'var(--ink)',color:'#fff',border:'none',borderRadius:7,fontSize:8,fontWeight:800,textTransform:'uppercase',cursor:'pointer',flexShrink:0,fontFamily:'Plus Jakarta Sans,sans-serif'}}>Resolver Pendência</button>
                               )}
                               {p.status==='Solucionado'&&(
@@ -3306,7 +3384,7 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
                     );
                   })}
 
-                 {pecasItems.length>0&&(()=>{
+                  {pecasItems.length>0&&(()=>{
                     const pecasSolucionado=pecasAtivas.length===0||pecasAtivas.every(it=>it.status==='Concluído');
                     return(
                     <div>
@@ -3328,7 +3406,7 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
                           </div>
                         ))}
                       </div>
-                     {pecasExc.length>0&&(
+                      {pecasExc.length>0&&(
                         <div style={{background:'var(--red-light)',border:'1px solid #FFBDBD',borderRadius:10,padding:10}}>
                           <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--red)',marginBottom:6}}>Peças Solicitadas para Exclusão</p>
                           <div style={{display:'flex',flexDirection:'column',gap:5}}>
@@ -3342,7 +3420,7 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
                     );
                   })()}
 
-                 {fin.pecasOpcao&&(
+                  {fin.pecasOpcao&&(
                     <div style={{fontSize:9,color:'var(--muted)',fontWeight:600}}>
                       Opção escolhida: {fin.pecasOpcao==='suficiente'?'peças confirmadas como suficientes':fin.pecasOpcao==='novas'?'novo pedido gerado':fin.pecasOpcao==='ambos'?'novo pedido gerado + itens marcados como excedentes':'itens marcados como excedentes'}
                     </div>
