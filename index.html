@@ -1614,8 +1614,8 @@ function UserManagement({users,onAdd,onDelete,onToggle,onRole,onFinalizacaoAcces
      return(
     <div className="card" style={{overflow:'hidden'}}>
       <div className="table-scroll">
-      <table className="vtable w-full" style={{minWidth:700}}>
-        <thead><tr><th>OS</th><th>Veículo</th><th>Peça</th><th>Qtd</th><th>Marcado por</th><th>Data</th><th style={{textAlign:'right'}}>Ação</th></tr></thead>
+    <table className="vtable w-full" style={{minWidth:700}}>
+        <thead><tr><th>Usuário</th><th>Categoria</th><th>Status</th><th>Finalização</th><th style={{textAlign:'right'}}>Ação</th></tr></thead>
           <tbody>
             {users.map((u,i)=>{
               const isMasterUser=u.user===MASTER_USER;
@@ -3460,7 +3460,7 @@ function FinalizacaoHistoricoView(){
        <div className="card" style={{overflow:'hidden'}}>
      <div className="table-scroll">
      <table className="vtable w-full" style={{minWidth:650}}>
-          <thead><tr><th>Usuário</th><th>Categoria</th><th>Status</th><th>Finalização</th><th style={{textAlign:'right'}}>Ação</th></tr></thead>
+          <thead><tr><th>OS</th><th>Veículo</th><th>Criado por</th><th>Arquivado em</th><th style={{textAlign:'right'}}>PDF</th></tr></thead>
             <tbody>
               {visiveis.map(h=>(
                 <tr key={h.id}>
@@ -3580,7 +3580,7 @@ function PedidosExcedentesView({requests}){
    <div className="card" style={{overflow:'hidden'}}>
           <div className="table-scroll">
           <table className="vtable w-full" style={{minWidth:500}}>
-            <thead><tr><th>OS</th><th>Veículo</th><th>Criado por</th><th>Arquivado em</th><th style={{textAlign:'right'}}>PDF</th></tr></thead>
+            <thead><tr><th>OS</th><th>Veículo</th><th>Peça</th><th>Qtd</th><th>Marcado por</th><th>Data</th><th style={{textAlign:'right'}}>Ação</th></tr></thead>
         <tbody>
           {excedentes.map((e,i)=>(
             <tr key={i}>
