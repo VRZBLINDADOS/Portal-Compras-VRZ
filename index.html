@@ -2785,9 +2785,10 @@ function buildFinalizacaoPDF(fin, pecasItems){
     });
     y+=4;
   };
- secao('Ajuste',fin.ajuste);
+secao('Ajuste',fin.ajuste);
   secao('Martelinho',fin.martelinho);
   secao('Pintura',fin.pintura);
+  secao('Vidro',fin.vidro);
   if(y>250){doc.addPage();y=15;}
   doc.setFont('helvetica','bold');doc.setFontSize(11);doc.text('Peças',10,y);y+=7;
   if(!pecasItems||!pecasItems.length){doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text('Nenhuma peça vinculada.',12,y);y+=8;}
@@ -2980,6 +2981,7 @@ function NovaFinalizacaoForm({vehiclesDB,requests,loggedInUser,isMaster,finaliza
 const[ajuste,setAjuste]=useState([]);
   const[martelinho,setMartelinho]=useState([]);
   const[pintura,setPintura]=useState([]);
+  const[vidro,setVidro]=useState([]);;
   const[pecasEscolha,setPecasEscolha]=useState('suficiente');
   const[mostrarNovas,setMostrarNovas]=useState(false);
   const[mostrarExcedente,setMostrarExcedente]=useState(false);
@@ -3006,10 +3008,11 @@ const[ajuste,setAjuste]=useState([]);
   const carregarFin=(t)=>{
     const fin=finalizacoes.find(f=>String(f.os).trim()===t&&!f.arquivada);
     if(fin){
-      setExistingFin(fin);
+     setExistingFin(fin);
      setAjuste(fin.ajuste||[]);
       setMartelinho(fin.martelinho||[]);
       setPintura(fin.pintura||[]);
+      setVidro(fin.vidro||[]);
       const opc=fin.pecasOpcao||'suficiente';
       const novas=opc==='novas'||opc==='ambos';
       const exc=opc==='excedente'||opc==='ambos';
@@ -3021,8 +3024,8 @@ const[ajuste,setAjuste]=useState([]);
       setExcedentes([]);setNovasPecas([]);
       setReadOnly(!(isMaster||fin.criadoPor===loggedInUser.user));
     }else{
-      setExistingFin(null);
-      setAjuste([]);setMartelinho([]);setPintura([]);
+    setExistingFin(null);
+      setAjuste([]);setMartelinho([]);setPintura([]);setVidro([]);
       setPecasEscolha('suficiente');setMostrarNovas(false);setMostrarExcedente(false);
       setPerguntaExcedenteFeita(false);setPerguntaNovasFeita(false);
       setNovasPecas([]);setExcedentes([]);
@@ -3042,15 +3045,15 @@ const[ajuste,setAjuste]=useState([]);
   };
 
   const reset=()=>{
-    setOs('');setVehicle(null);setUnidade('Unidade 1');setAjuste([]);setMartelinho([]);setPintura([]);
+    setOs('');setVehicle(null);setUnidade('Unidade 1');setAjuste([]);setMartelinho([]);setPintura([]);setVidro([]);
     setPecasEscolha('suficiente');setMostrarNovas(false);setMostrarExcedente(false);
     setPerguntaExcedenteFeita(false);setPerguntaNovasFeita(false);setPerguntaPendente(null);
     setNovasPecas([]);setExcedentes([]);setDone(false);setExistingFin(null);setReadOnly(false);
   };
 
  const executarSalvar=async()=>{
-    const problemasSemDescricao=[...ajuste,...martelinho,...pintura].some(p=>!p.descricao||!p.descricao.trim());
-    if(problemasSemDescricao){alert('Preencha a descrição de todos os problemas em Ajuste, Martelinho e Pintura antes de salvar.');return;}
+    const problemasSemDescricao=[...ajuste,...martelinho,...pintura,...vidro].some(p=>!p.descricao||!p.descricao.trim());
+    if(problemasSemDescricao){alert('Preencha a descrição de todos os problemas em Ajuste, Martelinho, Pintura e Vidro antes de salvar.');return;}
     if(mostrarNovas&&novasPecas.some(p=>!p.description||!p.description.trim())){alert('Preencha a descrição de todas as peças antes de salvar.');return;}
     const pecasValidas=novasPecas.filter(p=>p.description.trim());
     if(mostrarNovas&&pecasValidas.some(p=>!p.photo)){setShowFotoAlert(true);return;}
@@ -3077,11 +3080,12 @@ const[ajuste,setAjuste]=useState([]);
       }
       const opcaoFinal=mostrarNovas&&mostrarExcedente?'ambos':mostrarExcedente?'excedente':mostrarNovas?'novas':'suficiente';
       const historicoEntry={acao:existingFin?'Inspeção atualizada':'Inspeção criada',usuario:loggedInUser.user,timestamp:now};
-   if(existingFin){
+ if(existingFin){
         await col('finalizacoes').doc(existingFin.id).update(stripUndefined({
           ajuste:ajuste.map(p=>({...p})),
           martelinho:martelinho.map(p=>({...p})),
           pintura:pintura.map(p=>({...p})),
+          vidro:vidro.map(p=>({...p})),
           pecasOpcao:opcaoFinal,
           historico:[...(existingFin.historico||[]),historicoEntry],
         }));
@@ -3092,6 +3096,7 @@ const[ajuste,setAjuste]=useState([]);
           ajuste:ajuste.map(p=>({...p})),
           martelinho:martelinho.map(p=>({...p})),
           pintura:pintura.map(p=>({...p})),
+          vidro:vidro.map(p=>({...p})),
           pecasOpcao:opcaoFinal,
           historico:[historicoEntry],
         }));
@@ -3196,9 +3201,10 @@ const[ajuste,setAjuste]=useState([]);
         </div>
       </div>
 
-     <ProblemCategoryEditor title="Ajuste" icon="wrench" color="#F59E0B" items={ajuste} setItems={setAjuste} disabled={disabled}/>
+    <ProblemCategoryEditor title="Ajuste" icon="wrench" color="#F59E0B" items={ajuste} setItems={setAjuste} disabled={disabled}/>
       <ProblemCategoryEditor title="Martelinho" icon="hammer" color="#DC1F1F" items={martelinho} setItems={setMartelinho} disabled={disabled}/>
       <ProblemCategoryEditor title="Pintura" icon="paintbrush" color="#2563EB" items={pintura} setItems={setPintura} disabled={disabled}/>
+      <ProblemCategoryEditor title="Vidro" icon="square" color="#0EA5E9" items={vidro} setItems={setVidro} disabled={disabled}/>
       <PecasFinalizacaoSection os={os} requests={requests}
         novasPecas={novasPecas} setNovasPecas={setNovasPecas} excedentes={excedentes} setExcedentes={setExcedentes}
         pecasEscolha={pecasEscolha} mostrarNovas={mostrarNovas} mostrarExcedente={mostrarExcedente}
@@ -3232,7 +3238,7 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
 
   // Calcula se a inspeção está 100% concluída (Ajuste + Pintura + Peças sem pendência)
   const comStatus=useMemo(()=>baseVisiveis.map(fin=>{
-    const pendAjustePintura=['ajuste','martelinho','pintura'].reduce((a,c)=>a+(fin[c]||[]).filter(p=>p.status!=='Solucionado').length,0);
+    const pendAjustePintura=['ajuste','martelinho','pintura','vidro'].reduce((a,c)=>a+(fin[c]||[]).filter(p=>p.status!=='Solucionado').length,0);
     const pecasItems=getPecasParaOS(fin.os,requests);
     const pecasAtivas=pecasItems.filter(it=>!it.excedente);
     const pecasSolucionado=pecasAtivas.length===0||pecasAtivas.every(it=>it.status==='Concluído');
@@ -3293,7 +3299,7 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
 
   const exportarExcel=()=>{
     const csvCell=(v)=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
-    const rows=[[csvCell('OS'),csvCell('Chassi'),csvCell('Modelo'),csvCell('Ajustes'),csvCell('Martelinho'),csvCell('Pintura'),csvCell('Peças'),csvCell('Responsável')].join(';')];
+const rows=[[csvCell('OS'),csvCell('Chassi'),csvCell('Modelo'),csvCell('Ajustes'),csvCell('Martelinho'),csvCell('Pintura'),csvCell('Vidro'),csvCell('Peças'),csvCell('Responsável')].join(';')];
     baseVisiveis.forEach(fin=>{
       const fmtProblemas=(items)=>(items||[]).map(p=>`${p.status==='Solucionado'?'[Solucionado]':'[Pendente]'} ${p.descricao||'(sem descrição)'}`).join(' | ')||'—';
       const pecasItems=getPecasParaOS(fin.os,requests).filter(it=>!it.excedente);
@@ -3305,6 +3311,7 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
         csvCell(fmtProblemas(fin.ajuste)),
         csvCell(fmtProblemas(fin.martelinho)),
         csvCell(fmtProblemas(fin.pintura)),
+        csvCell(fmtProblemas(fin.vidro)),
         csvCell(fmtPecas),
         csvCell(fin.criadoPor||'—'),
       ].join(';'));
@@ -3337,8 +3344,8 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
       ):(
         <div style={{display:'flex',flexDirection:'column',gap:12}}>
           {visiveis.map(fin=>{
-           const categorias=[['ajuste','Ajuste','#F59E0B','wrench'],['martelinho','Martelinho','#DC1F1F','hammer'],['pintura','Pintura','#2563EB','paintbrush']];
-            const totalPend=['ajuste','martelinho','pintura'].reduce((a,c)=>a+(fin[c]||[]).filter(p=>p.status!=='Solucionado').length,0);
+        const categorias=[['ajuste','Ajuste','#F59E0B','wrench'],['martelinho','Martelinho','#DC1F1F','hammer'],['pintura','Pintura','#2563EB','paintbrush'],['vidro','Vidro','#0EA5E9','square']];
+            const totalPend=['ajuste','martelinho','pintura','vidro'].reduce((a,c)=>a+(fin[c]||[]).filter(p=>p.status!=='Solucionado').length,0);
             const editar=podeEditar(fin);
             const pecasItems=getPecasParaOS(fin.os,requests);
             const pecasAtivas=pecasItems.filter(it=>!it.excedente);
@@ -3538,7 +3545,7 @@ function FinalizacaoView({vehiclesDB,requests,loggedInUser,isMaster}){
           let pdfDataUrl=null;
           try{pdfDataUrl=doc.output('datauristring');}catch(e){}
           await col('finalizacoesHistorico').add(stripUndefined({os:fin.os,unidade:fin.unidade,vehicleData:fin.vehicleData,criadoPor:fin.criadoPor,criadoEm:fin.criadoEm,arquivadoEm:now,pdfDataUrl}));
-         await col('finalizacoes').doc(fin.id).update({arquivada:true,ajuste:[],martelinho:[],pintura:[],historico:[...(fin.historico||[]),{acao:'Inspeção arquivada automaticamente (5 dias após entrega)',usuario:'Sistema',timestamp:now}]});
+        await col('finalizacoes').doc(fin.id).update({arquivada:true,ajuste:[],martelinho:[],pintura:[],vidro:[],historico:[...(fin.historico||[]),{acao:'Inspeção arquivada automaticamente (5 dias após entrega)',usuario:'Sistema',timestamp:now}]});
         }catch(e){console.warn('Arquivamento automático falhou para OS',fin.os,e);}
       }
     };
