@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Portal Compras VRZ</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
@@ -91,9 +91,11 @@ canvas{display:block}
 /* ── MOBILE IMPROVEMENTS ── */
 @media(max-width:767px){
   .card{border-radius:12px}
-  .input{padding:10px 14px;font-size:14px}
+  .input{padding:12px 14px;font-size:14px}
   .btn-primary{padding:12px 18px;font-size:10px}
   .btn-ghost{padding:10px 16px;font-size:10px}
+  /* Impede que o iOS dê zoom automático ao focar campos (causa comum de "tela cortando") */
+  input,select,textarea{font-size:16px!important}
   /* Histórico — itens empilhados em coluna no mobile */
   .hist-meta{grid-template-columns:1fr 1fr!important}
   /* Gestão modal — full screen no mobile */
@@ -105,6 +107,7 @@ canvas{display:block}
   #main-pad h2{font-size:22px!important;line-height:1.2!important}
   #main-pad h3{font-size:16px!important}
   #main-pad h4{font-size:13px!important}
+  #main-pad{padding-top:calc(env(safe-area-inset-top) + 78px)!important;padding-bottom:calc(env(safe-area-inset-bottom) + 90px)!important}
 }
 @media(max-width:480px){
   #main-pad h2{font-size:19px!important}
@@ -134,7 +137,7 @@ canvas{display:block}
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
-<script src="https://unpkg.com/lucide@0.383.0/dist/umd/lucide.min.js"></script>
+<script src="https://unpkg.com/lucide@0.383.0/dist/umd/lucide.min.js" onerror="var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/lucide@0.383.0/dist/umd/lucide.min.js';document.head.appendChild(s);"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 </head>
 <body>
@@ -292,13 +295,24 @@ function mergeByOS(requests){
 function Icon({name,size=18,className=''}){
   const ref=useRef(null);
   useEffect(()=>{
-    if(ref.current&&window.lucide){
-      const d=window.lucide.icons[name];
-      if(d){const[,at,ch]=d;const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
-        Object.entries({...at,width:size,height:size,class:`lucide ${className}`,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.8,'stroke-linecap':'round','stroke-linejoin':'round'}).forEach(([k,v])=>svg.setAttribute(k,v));
-        ch.forEach(([t,a])=>{const el=document.createElementNS('http://www.w3.org/2000/svg',t);Object.entries(a).forEach(([k,v])=>el.setAttribute(k,v));svg.appendChild(el);});
-        ref.current.innerHTML='';ref.current.appendChild(svg);}
-    }
+    let cancelled=false;let tentativas=0;
+    const tentar=()=>{
+      if(cancelled||!ref.current)return;
+      if(window.lucide&&window.lucide.icons){
+        const d=window.lucide.icons[name];
+        if(d){
+          const[,at,ch]=d;const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+          Object.entries({...at,width:size,height:size,class:`lucide ${className}`,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':1.8,'stroke-linecap':'round','stroke-linejoin':'round'}).forEach(([k,v])=>svg.setAttribute(k,v));
+          ch.forEach(([t,a])=>{const el=document.createElementNS('http://www.w3.org/2000/svg',t);Object.entries(a).forEach(([k,v])=>el.setAttribute(k,v));svg.appendChild(el);});
+          ref.current.innerHTML='';ref.current.appendChild(svg);
+          return;
+        }
+      }
+      tentativas++;
+      if(tentativas<40)setTimeout(tentar,150);
+    };
+    tentar();
+    return()=>{cancelled=true;};
   },[name,size,className]);
   return <span ref={ref} className="inline-flex shrink-0 items-center justify-center" role="img" aria-label={name}/>;
 }
@@ -2295,17 +2309,20 @@ function ChegadasView({requests,loggedInUser,vehicles}){
 }
 
 // ── Login ─────────────────────────────────────────────────────────────────
-function LoginView({onLogin,usersList}){
+function LoginView({onLogin,usersList,loadingUsers}){
   const[u,setU]=useState('');const[p,setP]=useState('');const[showP,setShowP]=useState(false);const[err,setErr]=useState('');
   const submit=e=>{
     e.preventDefault();
+    if(loadingUsers){setErr('Ainda carregando dados de acesso... aguarde 2 segundos e tente novamente.');return;}
     const uT=u.trim();const pT=p.trim();
-    const found=usersList.find(x=>x.user.toLowerCase()===uT.toLowerCase()&&x.pass===pT);
+    const candidatos=usersList.filter(x=>x.user.trim().toLowerCase()===uT.toLowerCase());
+    const found=candidatos.find(x=>x.pass===pT)||candidatos.find(x=>x.pass?.trim()===pT);
     if(found){if(found.active===false){setErr('Conta desativada. Contate o Admin.');}else{onLogin(found);}}
-    else{setErr('Usuário ou senha incorretos.');}
+    else if(candidatos.length===0){setErr('Usuário não encontrado.');}
+    else{setErr('Senha incorreta.');}
   };
   return(
-    <div className="login-bg" style={{height:'100vh',width:'100%',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+    <div className="login-bg" style={{height:'100vh',minHeight:'100dvh',width:'100%',display:'flex',alignItems:'center',justifyContent:'center',padding:16,overflowY:'auto'}}>
       <div style={{background:'#fff',width:'100%',maxWidth:380,borderRadius:24,overflow:'hidden',boxShadow:'0 40px 80px rgba(0,0,0,.4)',borderBottom:'6px solid var(--red)'}} className="fade-in">
         <div style={{background:'var(--ink)',padding:'40px 32px',textAlign:'center',color:'#fff'}}>
           <div style={{width:56,height:56,background:'var(--red)',borderRadius:16,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 16px',boxShadow:'0 8px 24px rgba(220,31,31,.4)'}}><Icon name="shopping-cart" size={28}/></div>
@@ -2337,7 +2354,10 @@ function LoginView({onLogin,usersList}){
               </div>
             </div>
           </div>
-          <button type="submit" className="btn-primary" style={{width:'100%',padding:15,fontSize:11,letterSpacing:'.1em'}}>Entrar no Portal</button>
+          <button type="submit" className="btn-primary" style={{width:'100%',padding:15,fontSize:11,letterSpacing:'.1em'}}>
+            {loadingUsers?<><Icon name="refresh-cw" size={14} className="spin"/> Carregando...</>:'Entrar no Portal'}
+          </button>
+          {loadingUsers&&<p style={{fontSize:9,color:'var(--muted)',textAlign:'center',margin:'8px 0 0',fontWeight:600}}>Conectando ao servidor, aguarde...</p>}
         </form>
       </div>
     </div>
@@ -4401,10 +4421,10 @@ const navItems=[
   const loading=reqLoad||vehLoad||usrLoad;
 
   // ── Return condicional APÓS todos os hooks ────────────────────────────────
-  if(!loggedIn)return <LoginView onLogin={login} usersList={users}/>;
+  if(!loggedIn)return <LoginView onLogin={login} usersList={users} loadingUsers={usrLoad}/>;
 
   return(
-    <div style={{height:'100vh',display:'flex',flexDirection:'row',background:'#FAFAF9',overflow:'hidden'}}>
+    <div style={{height:'100vh',minHeight:'100dvh',display:'flex',flexDirection:'row',background:'#FAFAF9',overflow:'hidden'}}>
       <NetworkStatus/>
 
       {/* MELHORIA 2: Modal de alterar senha */}
@@ -4450,7 +4470,7 @@ const navItems=[
 
       {/* Mobile Header */}
       <div id="mobile-header"><style>{`@media(min-width:768px){#mobile-header{display:none!important}}`}</style>
-      <div style={{position:'fixed',top:0,left:0,right:0,zIndex:100,background:'#fff',borderBottom:'1px solid var(--border)',padding:'calc(env(safe-area-inset-top) + 10px) 16px 10px',display:'flex',alignItems:'center',justifyContent:'space-between',boxShadow:'0 2px 16px rgba(0,0,0,.06)'}}>
+      <div style={{position:'fixed',top:0,left:0,right:0,zIndex:100,background:'#fff',borderBottom:'1px solid var(--border)',padding:'calc(env(safe-area-inset-top) + 12px) 16px 12px',display:'flex',alignItems:'center',justifyContent:'space-between',boxShadow:'0 2px 16px rgba(0,0,0,.06)',flexWrap:'nowrap',minHeight:56}}>
           <div style={{display:'flex',alignItems:'center',gap:10}}>
             <div style={{width:32,height:32,background:'var(--red)',borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="shopping-cart" size={15}/></div>
             <h1 style={{fontSize:20,fontWeight:800,margin:0}}>VRZ</h1>
