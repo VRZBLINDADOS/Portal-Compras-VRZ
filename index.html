@@ -2830,7 +2830,7 @@ function buildFinalizacaoPDF(fin, pecasItems, comFoto=true){
   doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(15);
   doc.text('VRZ — INSPEÇÃO DE FINALIZAÇÃO',10,15);
   doc.setFont('helvetica','normal');doc.setFontSize(8);
-  doc.text(`OS #${fin.os}  ·  ${fin.unidade||'Unidade 1'}  ·  Gerado em ${new Date().toLocaleString('pt-BR')}`,10,24);
+  doc.text(`OS #${fin.os}  ·  Gerado em ${new Date().toLocaleString('pt-BR')}`,10,24);
   doc.setTextColor(0,0,0);
   let y=44;
   doc.setFont('helvetica','bold');doc.setFontSize(11);doc.text('Dados do Veículo',10,y);y+=7;
@@ -3388,6 +3388,7 @@ const rows=[[csvCell('OS'),csvCell('Chassi'),csvCell('Modelo'),csvCell('Ajustes'
   };
 
   return(
+    <>
     <div className="fade-up" style={{paddingBottom:30}}>
       <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center',marginBottom:16}}>
         <div style={{position:'relative',flex:1,minWidth:200}}>
@@ -3534,6 +3535,7 @@ const rows=[[csvCell('OS'),csvCell('Chassi'),csvCell('Modelo'),csvCell('Ajustes'
          })}
         </div>
       )}
+    </div>
 
       {pdfConfirmFin&&(
         <div style={{position:'fixed',inset:0,zIndex:550,background:'rgba(0,0,0,.8)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
@@ -3554,7 +3556,7 @@ const rows=[[csvCell('OS'),csvCell('Chassi'),csvCell('Modelo'),csvCell('Ajustes'
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -4415,7 +4417,7 @@ const navItems=[
     canDo(role,'donor')&&{key:'donor',icon:'git-merge',label:'Doações'},
     canDo(role,'manage')&&{key:'admin',icon:'settings',label:'Gestão'},
     (isMaster||isAdmin)&&{key:'dashboard',icon:'bar-chart-2',label:'Análises'},
-    loggedIn?.user===MASTER_USER&&{key:'resumo',icon:'presentation',label:'Reunião'},
+    (loggedIn?.user===MASTER_USER||loggedIn?.user==='Matheus.Ransi')&&{key:'resumo',icon:'presentation',label:'Resumo Reunião'},
   ].filter(Boolean);
 
   const loading=reqLoad||vehLoad||usrLoad;
@@ -4492,7 +4494,7 @@ const navItems=[
             {loading?<Skeleton/>:(
               <>
                 {view==='dashboard'&&(isMaster||isAdmin)&&<DashboardView requests={requests}/>}
-{view==='resumo'&&loggedIn?.user===MASTER_USER&&<ResumoReuniaoView requests={requests}/>}
+{view==='resumo'&&(loggedIn?.user===MASTER_USER||loggedIn?.user==='Matheus.Ransi')&&<ResumoReuniaoView requests={requests}/>}
                 {view==='request'&&isSol&&<RequestForm user={user} loggedInUser={loggedIn} vehiclesDB={vehicles} requests={requests}/>}
                 {view==='status'&&<StatusView requests={requests} loggedInUser={loggedIn} vehicles={vehicles}/>}
                 {view==='chegadas'&&<ChegadasView requests={requests} loggedInUser={loggedIn} vehicles={vehicles}/>}
