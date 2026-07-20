@@ -3765,8 +3765,8 @@ function ResumoReuniaoView({requests}){
       } else {
         fim = new Date(year, month, 15);
       }
-      fim.setHours(23, 59, 59, 999);
-      n = Math.round((fim.getTime() - ini.getTime()) / 86400000) + 1;
+    fim.setHours(23, 59, 59, 999);
+      n = fim.getDate() - ini.getDate() + 1;
     } else {
       const totalMonths = (agora.getFullYear() * 12 + agora.getMonth()) + offset;
       const year = Math.floor(totalMonths / 12);
@@ -3802,6 +3802,9 @@ function ResumoReuniaoView({requests}){
     diasDoPeriodo.forEach(d => { map[d.date] = { ...d, pedidos: [], osSet: new Set() }; });
     requests.forEach(r => {
       if (!r.timestamp) return;
+      // Pedidos grandes (>13 itens) são divididos em várias partes no Firestore;
+      // conta como 1 único pedido para refletir fielmente o que o usuário enviou.
+      if (r.parte && r.parte > 1) return;
       const dt = new Date(r.timestamp);
       const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
       if (map[key]) {
@@ -3825,7 +3828,8 @@ function ResumoReuniaoView({requests}){
     const osComCompra = new Set();
     requests.forEach(r => {
       (r.items || []).forEach(it => {
-        if (it.status !== 'Comprado' && it.status !== 'Concluído') return;
+        // Conta como comprado sempre que houver data de compra registrada,
+        // independente do status atual (doações não devem apagar o histórico de compras já realizadas)
         if (!it.boughtAt) return;
         const dateKey = String(it.boughtAt).trim().slice(0, 10);
         if (map[dateKey]) {
@@ -3848,8 +3852,8 @@ function ResumoReuniaoView({requests}){
   // Helper para renderizar gráfico estilo "Diretoria"
   const renderChart = (canvas, data, maxValue, type) => {
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const dpr = window.devicePixelRatio || 1;
+   const ctx = canvas.getContext('2d');
+    const dpr = Math.max(window.devicePixelRatio || 1, 2);
     const rect = canvas.getBoundingClientRect();
     
     // Ajuste de DPI para evitar embaçamento
@@ -3989,9 +3993,15 @@ function ResumoReuniaoView({requests}){
   const refBar1 = useRef(null);
   const refBar2 = useRef(null);
 
-  useEffect(() => renderChart(refBar1.current, dadosDia, maxPedDia, 'pedidos'), [dadosDia, maxPedDia, periodo]);
-  useEffect(() => renderChart(refBar2.current, dadosCompra.dias, maxValDia, 'valor'), [dadosCompra, maxValDia, periodo]);
-
+  useEffect(() => {
+    const desenhar = () => {
+      renderChart(refBar1.current, dadosDia, maxPedDia, 'pedidos');
+      renderChart(refBar2.current, dadosCompra.dias, maxValDia, 'valor');
+    };
+    desenhar();
+    window.addEventListener('resize', desenhar);
+    return () => window.removeEventListener('resize', desenhar);
+  }, [dadosDia, maxPedDia, dadosCompra, maxValDia, periodo, diaSelecionado]);
   const fmtPeriodo = `${inicioPeriodo.toLocaleDateString('pt-BR')} – ${fimPeriodo.toLocaleDateString('pt-BR')}`;
 
   return (
@@ -4133,14 +4143,25 @@ function ResumoReuniaoView({requests}){
                     <div style={{ width: 24, height: 24, borderRadius: 6, background: 'var(--red-light)', color: 'var(--red)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="clipboard-list" size={14} /></div>
                     <h4 style={{ margin: 0, fontSize: 12, fontWeight: 800, textTransform: 'uppercase', color: 'var(--ink)' }}>Pedidos Realizados ({diaSelecionado.pedidos.length})</h4>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {diaSelecionado.pedidos.map((r, i) => (
-                      <div key={i} style={{ padding: 12, background: 'var(--smoke)', borderRadius: 12, border: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div>
-                          <p style={{ fontSize: 11, fontWeight: 800, margin: 0 }}>OS #{r.os}</p>
-                          <p style={{ fontSize: 9, color: 'var(--muted)', margin: 0 }}>{r.vehicleData?.modelo || '—'} • {r.responsavel}</p>
+                      <div key={i} style={{ padding: 12, background: 'var(--smoke)', borderRadius: 12, border: '1px solid var(--border)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: (r.items && r.items.length > 0) ? 8 : 0 }}>
+                          <div>
+                            <p style={{ fontSize: 11, fontWeight: 800, margin: 0 }}>OS #{r.os}</p>
+                            <p style={{ fontSize: 9, color: 'var(--muted)', margin: 0 }}>{r.vehicleData?.modelo || '—'} • {r.responsavel}</p>
+                          </div>
+                          <span className="pill" style={{ fontSize: 8 }}>{r.items?.length || 0} itens</span>
                         </div>
-                        <span className="pill" style={{ fontSize: 8 }}>{r.items?.length || 0} itens</span>
+                        {r.items && r.items.length > 0 && (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                            {r.items.map((it, ii) => (
+                              <span key={ii} style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', background: '#fff', border: '1px solid var(--border)', borderRadius: 6, padding: '3px 8px', color: 'var(--ink)' }}>
+                                {it.quantity}× {it.description || '(sem descrição)'}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
