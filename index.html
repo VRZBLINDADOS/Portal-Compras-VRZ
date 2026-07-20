@@ -1264,6 +1264,7 @@ function StatusView({requests,loggedInUser,vehicles}){
   const[unidadeFilter,setUnidadeFilter]=useState('todas');
   const[statusTab,setStatusTab]=useState('geral');
   const[toDelete,setToDelete]=useState(null);
+  const[pdfConfirm,setPdfConfirm]=useState(null);
   const role=loggedInUser?.role||'solicitante';
   const canDelete=canDo(role,'delete');
 
@@ -1357,7 +1358,7 @@ const exportCSV=()=>{
     const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`Status_Semaforo_VRZ_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.csv`;a.click();
   };
 
-  const exportPDF=async req=>{
+ const exportPDF=async (req,comFoto=true)=>{
     const{jsPDF}=window.jspdf;const doc=new jsPDF();
     doc.setFontSize(16);doc.text('Solicitacao de Pecas - VRZ',10,15);doc.setFontSize(9);
     doc.text('OS: #'+req.os,10,24);doc.text('Unidade: '+(req.unidade||'Unidade 1'),10,30);
@@ -1370,7 +1371,7 @@ const exportCSV=()=>{
       doc.setFontSize(9);
       const st=it.status==='Doado'?`[DOADO → OS ${it.donatedTo||'?'}]`:`[${it.status||'Pendente'}]`;
       doc.text(`${i+1}. Qtd:${it.quantity} - ${it.description} ${st}`,14,y);y+=7;
-      if(it.photo){try{doc.addImage(it.photo,'JPEG',14,y,45,28);y+=32;}catch{}}
+      if(comFoto&&it.photo){try{doc.addImage(it.photo,'JPEG',14,y,45,28);y+=32;}catch{}}
     });
     doc.save('OS_'+req.os+'_VRZ.pdf');
   };
@@ -1388,7 +1389,7 @@ const exportCSV=()=>{
               <p style={{fontSize:11,color:'var(--muted)',textAlign:'center',marginBottom:16}}>Confirmar exclusão permanente?</p>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
                 <button onClick={()=>setToDelete(null)} className="btn-ghost">Cancelar</button>
-                <button onClick={async()=>{
+              <button onClick={async()=>{
   try{
     const req=requests.find(r=>r.id===toDelete);
     if(req){
@@ -1404,6 +1405,26 @@ const exportCSV=()=>{
     setToDelete(null);
   }catch{alert('Erro.');}
 }} className="btn-primary">Confirmar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pdfConfirm&&(
+        <div style={{position:'fixed',inset:0,zIndex:550,background:'rgba(0,0,0,.8)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+          <div style={{background:'#fff',borderRadius:20,overflow:'hidden',maxWidth:380,width:'100%'}}>
+            <div style={{background:'#2563EB',padding:'24px 20px',textAlign:'center',color:'#fff'}}>
+              <div style={{width:48,height:48,background:'rgba(255,255,255,.2)',borderRadius:14,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 12px'}}><Icon name="file-down" size={22}/></div>
+              <h3 style={{margin:0,fontSize:16,fontWeight:800}}>Exportar PDF</h3>
+              <p style={{margin:0,fontSize:9,color:'rgba(255,255,255,.75)',marginTop:4}}>OS #{pdfConfirm.os}</p>
+            </div>
+            <div style={{padding:20}}>
+              <p style={{fontSize:11,color:'var(--muted)',textAlign:'center',marginBottom:16}}>Deseja incluir as fotos das peças no PDF?</p>
+              <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                <button onClick={()=>{exportPDF(pdfConfirm,true);setPdfConfirm(null);}} className="btn-primary" style={{background:'#2563EB'}}><Icon name="image" size={14}/> Com Fotos</button>
+                <button onClick={()=>{exportPDF(pdfConfirm,false);setPdfConfirm(null);}} className="btn-ghost">Sem Fotos</button>
+                <button onClick={()=>setPdfConfirm(null)} style={{background:'none',border:'none',color:'var(--muted)',fontSize:10,fontWeight:700,textTransform:'uppercase',cursor:'pointer',padding:6}}>Cancelar</button>
               </div>
             </div>
           </div>
@@ -1481,7 +1502,7 @@ const exportCSV=()=>{
 {r.parte&&r.totalPartes>1&&<span style={{fontSize:7,fontWeight:800,padding:'2px 7px',borderRadius:999,background:'#F3E8FF',color:'#6B21A8',border:'1px solid #D8B4FE'}}>Parte {r.parte}/{r.totalPartes}</span>}
                 </div>
                 <div style={{display:'flex',gap:8}}>
-                  <button onClick={()=>exportPDF(r)} style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',background:'#2563EB',color:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}>
+                 <button onClick={()=>setPdfConfirm(r)} style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',background:'#2563EB',color:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}>
                     <Icon name="file-down" size={12}/> PDF
                   </button>
                   {canDelete&&<button onClick={()=>setToDelete(r.id)} style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',background:'var(--red)',color:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}>
@@ -2758,7 +2779,7 @@ function PhotoDropzone({photo,onChange,disabled}){
   );
 }
 
-function buildFinalizacaoPDF(fin, pecasItems){
+function buildFinalizacaoPDF(fin, pecasItems, comFoto=true){
   const{jsPDF}=window.jspdf;const doc=new jsPDF();
   doc.setFillColor(13,13,13);doc.rect(0,0,210,34,'F');
   doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(15);
@@ -2780,8 +2801,8 @@ function buildFinalizacaoPDF(fin, pecasItems){
       if(y>255){doc.addPage();y=15;}
       doc.setFont('helvetica','bold');doc.setFontSize(9);
       doc.text(`${i+1}. ${p.status==='Solucionado'?'[SOLUCIONADO] ':'[PENDENTE] '}${p.descricao||'(sem descrição)'}`,12,y);y+=6;
-      if(p.status==='Solucionado'&&p.resolvidoPor){doc.setFont('helvetica','normal');doc.setFontSize(8);doc.text(`Resolvido por ${p.resolvidoPor} em ${p.resolvidoEm?new Date(p.resolvidoEm).toLocaleString('pt-BR'):''}`,14,y);y+=6;}
-      if(p.foto){try{doc.addImage(p.foto,'JPEG',12,y,40,26);y+=30;}catch(e){}}
+    if(p.status==='Solucionado'&&p.resolvidoPor){doc.setFont('helvetica','normal');doc.setFontSize(8);doc.text(`Resolvido por ${p.resolvidoPor} em ${p.resolvidoEm?new Date(p.resolvidoEm).toLocaleString('pt-BR'):''}`,14,y);y+=6;}
+      if(comFoto&&p.foto){try{doc.addImage(p.foto,'JPEG',12,y,40,26);y+=30;}catch(e){}}
     });
     y+=4;
   };
@@ -3224,6 +3245,7 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
   const[subTab,setSubTab]=useState('pendentes');
   const[confirmDelFin,setConfirmDelFin]=useState(null);
   const[confirmDelProb,setConfirmDelProb]=useState(null);
+  const[pdfConfirmFin,setPdfConfirmFin]=useState(null);
 
   const podeVerTodos=isMaster||loggedInUser?.user==='Cleber.Zonta';
   const baseVisiveis=useMemo(()=>{
@@ -3291,9 +3313,9 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
     setConfirmDelFin(null);
   };
 
-  const exportarPDF=(fin)=>{
+ const exportarPDF=(fin,comFoto=true)=>{
     const pecasItems=getPecasParaOS(fin.os,requests);
-    const doc=buildFinalizacaoPDF(fin,pecasItems);
+    const doc=buildFinalizacaoPDF(fin,pecasItems,comFoto);
     doc.save(`Finalizacao_OS_${fin.os}.pdf`);
   };
 
@@ -3362,7 +3384,7 @@ const rows=[[csvCell('OS'),csvCell('Chassi'),csvCell('Modelo'),csvCell('Ajustes'
                   </div>
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
                     <span style={{fontSize:9,fontWeight:800,padding:'3px 10px',borderRadius:999,background:totalPend>0?'var(--red-light)':'#EDFAF3',color:totalPend>0?'var(--red)':'#059669',border:`1px solid ${totalPend>0?'#FFBDBD':'#AAE6C5'}`}}>{totalPend>0?`${totalPend} pendente(s)`:'Tudo solucionado'}</span>
-                    <button onClick={()=>exportarPDF(fin)} style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',background:'#2563EB',color:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}><Icon name="file-down" size={12}/> PDF</button>
+                   <button onClick={()=>setPdfConfirmFin(fin)} style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',background:'#2563EB',color:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}><Icon name="file-down" size={12}/> PDF</button>
                     {isMaster&&(
                       confirmDelFin===fin.id?(
                         <div style={{display:'flex',gap:5}}>
@@ -3464,7 +3486,27 @@ const rows=[[csvCell('OS'),csvCell('Chassi'),csvCell('Modelo'),csvCell('Ajustes'
                 </div>
               </div>
             );
-          })}
+         })}
+        </div>
+      )}
+
+      {pdfConfirmFin&&(
+        <div style={{position:'fixed',inset:0,zIndex:550,background:'rgba(0,0,0,.8)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+          <div style={{background:'#fff',borderRadius:20,overflow:'hidden',maxWidth:380,width:'100%'}}>
+            <div style={{background:'#2563EB',padding:'24px 20px',textAlign:'center',color:'#fff'}}>
+              <div style={{width:48,height:48,background:'rgba(255,255,255,.2)',borderRadius:14,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 12px'}}><Icon name="file-down" size={22}/></div>
+              <h3 style={{margin:0,fontSize:16,fontWeight:800}}>Exportar PDF</h3>
+              <p style={{margin:0,fontSize:9,color:'rgba(255,255,255,.75)',marginTop:4}}>OS #{pdfConfirmFin.os}</p>
+            </div>
+            <div style={{padding:20}}>
+              <p style={{fontSize:11,color:'var(--muted)',textAlign:'center',marginBottom:16}}>Deseja incluir as fotos dos problemas no PDF?</p>
+              <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                <button onClick={()=>{exportarPDF(pdfConfirmFin,true);setPdfConfirmFin(null);}} className="btn-primary" style={{background:'#2563EB'}}><Icon name="image" size={14}/> Com Fotos</button>
+                <button onClick={()=>{exportarPDF(pdfConfirmFin,false);setPdfConfirmFin(null);}} className="btn-ghost">Sem Fotos</button>
+                <button onClick={()=>setPdfConfirmFin(null)} style={{background:'none',border:'none',color:'var(--muted)',fontSize:10,fontWeight:700,textTransform:'uppercase',cursor:'pointer',padding:6}}>Cancelar</button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
