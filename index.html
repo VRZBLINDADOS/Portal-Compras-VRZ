@@ -3818,32 +3818,32 @@ function ResumoReuniaoView({requests}){
     return Object.values(map);
   }, [requests, diasDoPeriodo]);
 
- const totalPedidos = dadosDia.reduce((a, d) => a + d.pedidos.length, 0);
-  const osUnicas = new Set(dadosDia.flatMap(d => [...d.osSet])).size;
-  const mediaPorCarro = osUnicas > 0 ? (totalPedidos / osUnicas).toFixed(1) : '0';
-  // A barra do gráfico representa o total de PEÇAS solicitadas no dia (não o nº de pedidos/formulários enviados)
-  const totalPecasPorDia = (d) => d.pedidos.reduce((a, p) => a + (p.items?.length || 0), 0);
-  const maxPedDia = Math.max(...dadosDia.map(d => totalPecasPorDia(d)), 1);
+// Estas duas métricas usam a MESMA fórmula das barras/rótulos abaixo — garante 100% de
+  // fidelidade entre os cartões do topo e o que está desenhado no gráfico, sempre.
+  const totalPecasPeriodo = dadosDia.reduce((a, d) => a + d.pedidos.reduce((s, p) => s + (p.items?.length || 0), 0), 0);
+  const totalDocumentosPeriodo = dadosDia.reduce((a, d) => a + d.pedidos.length, 0);
+  const mediaPorCarro = totalDocumentosPeriodo > 0 ? (totalPecasPeriodo / totalDocumentosPeriodo).toFixed(1) : '0';
+  const maxPedDia = Math.max(...dadosDia.map(d => d.pedidos.reduce((s, p) => s + (p.items?.length || 0), 0)), 1);
 
 
 
-  const dadosCompra = useMemo(() => {
+ const dadosCompra = useMemo(() => {
     const map = {};
-    diasDoPeriodo.forEach(d => { map[d.date] = { ...d, itens: [], valor: 0 }; });
+    diasDoPeriodo.forEach(d => { map[d.date] = { ...d, itens: [], valor: 0, osSet: new Set() }; });
     const osComCompra = new Set();
-   requests.forEach(r => {
+    requests.forEach(r => {
       (r.items || []).forEach(it => {
-        // Conta como comprado sempre que houver data de compra registrada,
-        // exceto itens 'Doado': quando uma peça já comprada é transferida entre OS,
-        // o sistema cria uma cópia do valor na OS doadora — contar o item 'Doado'
-        // também duplicaria esse valor no relatório.
-        if (!it.boughtAt || it.status === 'Doado') return;
+        // Conta como comprado sempre que houver data de compra registrada, exceto:
+        // - itens 'Doado' (a compra já foi contada na OS original antes da transferência)
+        // - itens com 'donatedTo' (cópia gerada automaticamente na OS doadora durante a
+        //   transferência — é a MESMA compra já registrada; contá-la de novo duplica o valor)
+        if (!it.boughtAt || it.status === 'Doado' || it.donatedTo) return;
         const dateKey = String(it.boughtAt).trim().slice(0, 10);
         if (map[dateKey]) {
           const preco = parsePrice(it.price);
           map[dateKey].itens.push({ ...it, os: r.os, _preco: preco });
           map[dateKey].valor += preco;
-          if (r.os) osComCompra.add(String(r.os).trim());
+          if (r.os) { map[dateKey].osSet.add(String(r.os).trim()); osComCompra.add(String(r.os).trim()); }
         }
       });
     });
@@ -3939,9 +3939,10 @@ function ResumoReuniaoView({requests}){
         ctx.fillStyle = '#000';
         ctx.font = 'bold 10px Plus Jakarta Sans';
         ctx.textAlign = 'center';
-        let vStr;
+      let vStr;
         if (type === 'valor') {
-          vStr = val >= 1000 ? 'R$ ' + (val / 1000).toFixed(1).replace('.', ',') + 'k' : 'R$ ' + Math.round(val);
+          // Valor exato — sem abreviação em "k" — para fidelidade financeira total
+          vStr = 'R$ ' + val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         } else {
           vStr = val;
         }
@@ -3970,11 +3971,17 @@ function ResumoReuniaoView({requests}){
         ctx.fillText(`${dtParts[2]}/${dtParts[1]}`, x + bw / 2, displayH - 42);
       }
 
-    // Rótulo abaixo da barra: quantos pedidos/OS geraram o total de peças mostrado na barra
+   // Rótulo abaixo da barra: itens + OS's que geraram o valor (gráfico de compras) ou peças + OS's (gráfico de pedidos)
       if ((n <= 15 || diaSelecionado?.date === d.date) && (count > 0 || val > 0)) {
         ctx.fillStyle = '#DC1F1F';
         ctx.font = 'bold 9px Plus Jakarta Sans';
-        const label = type === 'valor' ? `${count} item${count !== 1 ? 's' : ''}` : `${count} OS${count !== 1 ? "'s" : ''}`;
+        let label;
+        if (type === 'valor') {
+          const osQtd = d.osSet ? d.osSet.size : 0;
+          label = `${count} item${count !== 1 ? 's' : ''} · ${osQtd} OS${osQtd !== 1 ? "'s" : ''}`;
+        } else {
+          label = `${count} OS${count !== 1 ? "'s" : ''}`;
+        }
         ctx.fillText(`⌊ ${label} ⌋`, x + bw / 2, displayH - 15);
       }
     });
@@ -4084,7 +4091,7 @@ function ResumoReuniaoView({requests}){
       {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10, marginBottom: 24 }}>
         {[
-          { label: 'Pedidos no período', v: totalPedidos, sub: `${osUnicas} OS únicas`, icon: 'clipboard-list', dark: true },
+          { label: 'Pedidos no período', v: totalPecasPeriodo, sub: `${totalDocumentosPeriodo} OS's no período`, icon: 'clipboard-list', dark: true },
           { label: 'Média por veículo', v: mediaPorCarro, sub: 'pedidos / carro', icon: 'car', red: true },
           { label: 'Itens comprados', v: dadosCompra.totalItens, sub: `${dadosCompra.osUnicas} OS com compra`, icon: 'shopping-bag' },
           { label: 'Valor médio / OS', v: dadosCompra.mediaValorOS > 0 ? fmtBRL(dadosCompra.mediaValorOS) : '—', sub: 'no período', icon: 'trending-up' },
