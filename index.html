@@ -3797,17 +3797,24 @@ function ResumoReuniaoView({requests}){
     });
   }, [inicioPeriodo, numDias]);
 
-  const dadosDia = useMemo(() => {
+const dadosDia = useMemo(() => {
     const map = {};
     diasDoPeriodo.forEach(d => { map[d.date] = { ...d, pedidos: [], osSet: new Set() }; });
+
+    // Junta as "partes" do mesmo envio (mesma OS, timestamps muito próximos, diferença
+    // de até 10ms por parte) num único pedido — assim nenhuma peça das partes 2,3... se perde.
+    const grupos = {};
     requests.forEach(r => {
       if (!r.timestamp) return;
-      // Pedidos grandes (>13 itens) são divididos em várias partes no Firestore;
-      // conta como 1 único pedido para refletir fielmente o que o usuário enviou.
-    if (r.parte && r.parte > 1) return;
-      // Documentos criados automaticamente por transferência de doação (100% dos itens
-      // com donatedTo) não são solicitações reais do usuário — não contam como "pedido".
-      if (r.items && r.items.length > 0 && r.items.every(it => it.donatedTo)) return;
+      if (r.items && r.items.length > 0 && r.items.every(it => it.donatedTo)) return; // cópia automática de doação, não é pedido do usuário
+      const baseTs = r.parte ? r.timestamp - ((r.parte - 1) * 10) : r.timestamp;
+      const key = `${r.os}_${baseTs}`;
+      if (!grupos[key]) grupos[key] = { ...r, items: [] };
+      grupos[key].items = [...grupos[key].items, ...(r.items || [])];
+      if (!r.parte || r.parte === 1) grupos[key].timestamp = r.timestamp;
+    });
+
+    Object.values(grupos).forEach(r => {
       const dt = new Date(r.timestamp);
       const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
       if (map[key]) {
@@ -3820,24 +3827,25 @@ function ResumoReuniaoView({requests}){
 
 // Estas duas métricas usam a MESMA fórmula das barras/rótulos abaixo — garante 100% de
   // fidelidade entre os cartões do topo e o que está desenhado no gráfico, sempre.
-  const totalPecasPeriodo = dadosDia.reduce((a, d) => a + d.pedidos.reduce((s, p) => s + (p.items?.length || 0), 0), 0);
-  const totalDocumentosPeriodo = dadosDia.reduce((a, d) => a + d.pedidos.length, 0);
-  const mediaPorCarro = totalDocumentosPeriodo > 0 ? (totalPecasPeriodo / totalDocumentosPeriodo).toFixed(1) : '0';
+ const totalPecasPeriodo = dadosDia.reduce((a, d) => a + d.pedidos.reduce((s, p) => s + (p.items?.length || 0), 0), 0);
+const totalDocumentosPeriodo = dadosDia.reduce((a, d) => a + d.osSet.size, 0);
+const osUnicasPeriodo = new Set(dadosDia.flatMap(d => Array.from(d.osSet))).size;
+const mediaPorCarro = osUnicasPeriodo > 0 ? (totalPecasPeriodo / osUnicasPeriodo).toFixed(1) : '0';
   const maxPedDia = Math.max(...dadosDia.map(d => d.pedidos.reduce((s, p) => s + (p.items?.length || 0), 0)), 1);
 
 
 
- const dadosCompra = useMemo(() => {
+const dadosCompra = useMemo(() => {
     const map = {};
     diasDoPeriodo.forEach(d => { map[d.date] = { ...d, itens: [], valor: 0, osSet: new Set() }; });
     const osComCompra = new Set();
+    const vistos = new Set(); // evita contar a mesma compra 2x quando ela foi duplicada por uma doação
     requests.forEach(r => {
       (r.items || []).forEach(it => {
-        // Conta como comprado sempre que houver data de compra registrada, exceto:
-        // - itens 'Doado' (a compra já foi contada na OS original antes da transferência)
-        // - itens com 'donatedTo' (cópia gerada automaticamente na OS doadora durante a
-        //   transferência — é a MESMA compra já registrada; contá-la de novo duplica o valor)
-        if (!it.boughtAt || it.status === 'Doado' || it.donatedTo) return;
+        if (!it.boughtAt) return;
+        const chave = `${it.description}|${it.price}|${it.supplier}|${it.boughtAt}`;
+        if (vistos.has(chave)) return;
+        vistos.add(chave);
         const dateKey = String(it.boughtAt).trim().slice(0, 10);
         if (map[dateKey]) {
           const preco = parsePrice(it.price);
@@ -3875,7 +3883,7 @@ function ResumoReuniaoView({requests}){
     ctx.scale(dpr, dpr);
     
     const displayW = rect.width, displayH = rect.height;
-    const padL = 72, padR = 40, bot = 80, top = 40;
+   const padL = 72, padR = 40, bot = 96, top = 40;
     const chartH = displayH - bot - top, chartW = displayW - padL - padR;
     const n = data.length;
     const bw = chartW / n;
@@ -3915,7 +3923,7 @@ function ResumoReuniaoView({requests}){
       // Para 'pedidos', a barra mostra o total de PEÇAS solicitadas no dia;
       // 'count' mostra quantos pedidos/OS geraram essas peças (rótulo abaixo da barra)
       const val = type === 'valor' ? d.valor : d.pedidos.reduce((a, p) => a + (p.items?.length || 0), 0);
-      const count = type === 'valor' ? d.itens.length : d.pedidos.length;
+      const count = type === 'valor' ? d.itens.length : d.osSet.size;
       const x = padL + i * bw;
       const bh = maxValue > 0 ? (val / maxValue) * chartH : 0;
       const bx = x + bw * barGap, bwidth = bw * (1 - barGap * 2);
@@ -3959,30 +3967,30 @@ function ResumoReuniaoView({requests}){
       }
 
       // X-axis Labels - Mostrar apenas alguns no mensal para não poluir
-      if (n <= 15 || i % Math.ceil(n/10) === 0 || i === n - 1) {
+   if (n <= 15 || i % Math.ceil(n/10) === 0 || i === n - 1) {
         ctx.fillStyle = '#000';
         ctx.font = 'bold 10px Plus Jakarta Sans';
         ctx.textAlign = 'center';
-        ctx.fillText(d.label, x + bw / 2, displayH - 55);
+        ctx.fillText(d.label, x + bw / 2, displayH - 70);
         
         const dtParts = d.date.split('-');
         ctx.fillStyle = '#6B7280';
         ctx.font = '500 9px Plus Jakarta Sans';
-        ctx.fillText(`${dtParts[2]}/${dtParts[1]}`, x + bw / 2, displayH - 42);
+        ctx.fillText(`${dtParts[2]}/${dtParts[1]}`, x + bw / 2, displayH - 57);
       }
 
    // Rótulo abaixo da barra: itens + OS's que geraram o valor (gráfico de compras) ou peças + OS's (gráfico de pedidos)
-      if ((n <= 15 || diaSelecionado?.date === d.date) && (count > 0 || val > 0)) {
+    if ((n <= 15 || diaSelecionado?.date === d.date) && (count > 0 || val > 0)) {
         ctx.fillStyle = '#DC1F1F';
         ctx.font = 'bold 9px Plus Jakarta Sans';
-        let label;
+        ctx.textAlign = 'center';
         if (type === 'valor') {
           const osQtd = d.osSet ? d.osSet.size : 0;
-          label = `${count} item${count !== 1 ? 's' : ''} · ${osQtd} OS${osQtd !== 1 ? "'s" : ''}`;
+          ctx.fillText(`${count} item${count !== 1 ? 's' : ''}`, x + bw / 2, displayH - 30);
+          ctx.fillText(`${osQtd} OS${osQtd !== 1 ? "'s" : ''}`, x + bw / 2, displayH - 15);
         } else {
-          label = `${count} OS${count !== 1 ? "'s" : ''}`;
+          ctx.fillText(`${count} OS${count !== 1 ? "'s" : ''}`, x + bw / 2, displayH - 15);
         }
-        ctx.fillText(`⌊ ${label} ⌋`, x + bw / 2, displayH - 15);
       }
     });
     ctx.restore();
