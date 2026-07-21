@@ -3632,9 +3632,9 @@ function FinalizacaoHistoricoView(){
                   <td style={{textTransform:'uppercase',fontSize:10}}>{h.vehicleData?.modelo||'—'}</td>
                   <td style={{fontSize:10,color:'var(--muted)'}}>{h.criadoPor||'—'}</td>
                   <td style={{fontSize:10,color:'var(--muted)'}}>{h.arquivadoEm?new Date(h.arquivadoEm).toLocaleDateString('pt-BR'):'—'}</td>
-                  <td style={{textAlign:'right'}}>
-                    {h.pdfDataUrl?(
-                      <a href={h.pdfDataUrl} download={`Finalizacao_OS_${h.os}.pdf`} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'5px 12px',background:'#2563EB',color:'#fff',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',textDecoration:'none'}}><Icon name="file-down" size={12}/> Baixar</a>
+                 <td style={{textAlign:'right'}}>
+                    {(h.pdfUrl||h.pdfDataUrl)?(
+                      <a href={h.pdfUrl||h.pdfDataUrl} target="_blank" rel="noopener noreferrer" download={h.pdfDataUrl?`Finalizacao_OS_${h.os}.pdf`:undefined} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'5px 12px',background:'#2563EB',color:'#fff',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',textDecoration:'none'}}><Icon name="file-down" size={12}/> Baixar</a>
                     ):<span style={{fontSize:9,color:'var(--muted)'}}>Indisponível</span>}
                   </td>
                 </tr>
@@ -3670,9 +3670,15 @@ function FinalizacaoView({vehiclesDB,requests,loggedInUser,isMaster}){
        try{
           const pecasItems=getPecasParaOS(fin.os,requests);
           const doc=await buildFinalizacaoPDF(fin,pecasItems);
-          let pdfDataUrl=null;
-          try{pdfDataUrl=doc.output('datauristring');}catch(e){}
-          await col('finalizacoesHistorico').add(stripUndefined({os:fin.os,unidade:fin.unidade,vehicleData:fin.vehicleData,criadoPor:fin.criadoPor,criadoEm:fin.criadoEm,arquivadoEm:now,pdfDataUrl}));
+          const blob=doc.output('blob');
+          let pdfUrl=null;
+          try{
+            const path=`finalizacoesHistorico/${fin.os}_${now}.pdf`;
+            const ref=storage.ref().child(path);
+            await ref.put(blob);
+            pdfUrl=await ref.getDownloadURL();
+          }catch(e){console.warn('Upload PDF histórico falhou:',e);}
+          await col('finalizacoesHistorico').add(stripUndefined({os:fin.os,unidade:fin.unidade,vehicleData:fin.vehicleData,criadoPor:fin.criadoPor,criadoEm:fin.criadoEm,arquivadoEm:now,pdfUrl}));
         await col('finalizacoes').doc(fin.id).update({arquivada:true,ajuste:[],martelinho:[],pintura:[],vidro:[],historico:[...(fin.historico||[]),{acao:'Inspeção arquivada automaticamente (5 dias após entrega)',usuario:'Sistema',timestamp:now}]});
         }catch(e){console.warn('Arquivamento automático falhou para OS',fin.os,e);}
       }
