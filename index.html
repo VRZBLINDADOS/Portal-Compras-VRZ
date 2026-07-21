@@ -3818,10 +3818,12 @@ function ResumoReuniaoView({requests}){
     return Object.values(map);
   }, [requests, diasDoPeriodo]);
 
-  const totalPedidos = dadosDia.reduce((a, d) => a + d.pedidos.length, 0);
+ const totalPedidos = dadosDia.reduce((a, d) => a + d.pedidos.length, 0);
   const osUnicas = new Set(dadosDia.flatMap(d => [...d.osSet])).size;
   const mediaPorCarro = osUnicas > 0 ? (totalPedidos / osUnicas).toFixed(1) : '0';
-  const maxPedDia = Math.max(...dadosDia.map(d => d.pedidos.length), 1);
+  // A barra do gráfico representa o total de PEÇAS solicitadas no dia (não o nº de pedidos/formulários enviados)
+  const totalPecasPorDia = (d) => d.pedidos.reduce((a, p) => a + (p.items?.length || 0), 0);
+  const maxPedDia = Math.max(...dadosDia.map(d => totalPecasPorDia(d)), 1);
 
 
 
@@ -3909,9 +3911,11 @@ function ResumoReuniaoView({requests}){
     // Coordenadas das barras para detecção de clique
     const barRects = [];
 
-    data.forEach((d, i) => {
-      const val = type === 'valor' ? d.valor : d.pedidos.length;
-      const count = type === 'valor' ? d.itens.length : d.osSet.size;
+   data.forEach((d, i) => {
+      // Para 'pedidos', a barra mostra o total de PEÇAS solicitadas no dia;
+      // 'count' mostra quantos pedidos/OS geraram essas peças (rótulo abaixo da barra)
+      const val = type === 'valor' ? d.valor : d.pedidos.reduce((a, p) => a + (p.items?.length || 0), 0);
+      const count = type === 'valor' ? d.itens.length : d.pedidos.length;
       const x = padL + i * bw;
       const bh = maxValue > 0 ? (val / maxValue) * chartH : 0;
       const bx = x + bw * barGap, bwidth = bw * (1 - barGap * 2);
@@ -3966,11 +3970,11 @@ function ResumoReuniaoView({requests}){
         ctx.fillText(`${dtParts[2]}/${dtParts[1]}`, x + bw / 2, displayH - 42);
       }
 
-      // Item count - Evitar sobreposição
-      if ((n <= 15 || diaSelecionado?.date === d.date) && count > 0) {
+    // Rótulo abaixo da barra: quantos pedidos/OS geraram o total de peças mostrado na barra
+      if ((n <= 15 || diaSelecionado?.date === d.date) && (count > 0 || val > 0)) {
         ctx.fillStyle = '#DC1F1F';
         ctx.font = 'bold 9px Plus Jakarta Sans';
-        const label = type === 'valor' ? `${count} item${count !== 1 ? 's' : ''}` : `${count} OS`;
+        const label = type === 'valor' ? `${count} item${count !== 1 ? 's' : ''}` : `${count} OS${count !== 1 ? "'s" : ''}`;
         ctx.fillText(`⌊ ${label} ⌋`, x + bw / 2, displayH - 15);
       }
     });
@@ -4146,7 +4150,9 @@ function ResumoReuniaoView({requests}){
                 <div style={{ marginBottom: 24 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                     <div style={{ width: 24, height: 24, borderRadius: 6, background: 'var(--red-light)', color: 'var(--red)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="clipboard-list" size={14} /></div>
-                    <h4 style={{ margin: 0, fontSize: 12, fontWeight: 800, textTransform: 'uppercase', color: 'var(--ink)' }}>Pedidos Realizados ({diaSelecionado.pedidos.length})</h4>
+                    <h4 style={{ margin: 0, fontSize: 12, fontWeight: 800, textTransform: 'uppercase', color: 'var(--ink)' }}>
+                      Pedidos Realizados ({diaSelecionado.pedidos.length}) · {diaSelecionado.pedidos.reduce((a, p) => a + (p.items?.length || 0), 0)} peça(s) solicitada(s)
+                    </h4>
                   </div>
                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {diaSelecionado.pedidos.map((r, i) => (
