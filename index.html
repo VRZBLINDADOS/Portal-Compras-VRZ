@@ -3804,7 +3804,10 @@ function ResumoReuniaoView({requests}){
       if (!r.timestamp) return;
       // Pedidos grandes (>13 itens) são divididos em várias partes no Firestore;
       // conta como 1 único pedido para refletir fielmente o que o usuário enviou.
-      if (r.parte && r.parte > 1) return;
+    if (r.parte && r.parte > 1) return;
+      // Documentos criados automaticamente por transferência de doação (100% dos itens
+      // com donatedTo) não são solicitações reais do usuário — não contam como "pedido".
+      if (r.items && r.items.length > 0 && r.items.every(it => it.donatedTo)) return;
       const dt = new Date(r.timestamp);
       const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
       if (map[key]) {
@@ -3826,11 +3829,13 @@ function ResumoReuniaoView({requests}){
     const map = {};
     diasDoPeriodo.forEach(d => { map[d.date] = { ...d, itens: [], valor: 0 }; });
     const osComCompra = new Set();
-    requests.forEach(r => {
+   requests.forEach(r => {
       (r.items || []).forEach(it => {
         // Conta como comprado sempre que houver data de compra registrada,
-        // independente do status atual (doações não devem apagar o histórico de compras já realizadas)
-        if (!it.boughtAt) return;
+        // exceto itens 'Doado': quando uma peça já comprada é transferida entre OS,
+        // o sistema cria uma cópia do valor na OS doadora — contar o item 'Doado'
+        // também duplicaria esse valor no relatório.
+        if (!it.boughtAt || it.status === 'Doado') return;
         const dateKey = String(it.boughtAt).trim().slice(0, 10);
         if (map[dateKey]) {
           const preco = parsePrice(it.price);
