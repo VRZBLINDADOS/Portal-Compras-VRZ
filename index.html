@@ -3897,7 +3897,6 @@ const dadosDia = useMemo(() => {
 // Estas duas métricas usam a MESMA fórmula das barras/rótulos abaixo — garante 100% de
   // fidelidade entre os cartões do topo e o que está desenhado no gráfico, sempre.
  const totalPecasPeriodo = dadosDia.reduce((a, d) => a + d.pedidos.reduce((s, p) => s + (p.items?.length || 0), 0), 0);
-const totalDocumentosPeriodo = dadosDia.reduce((a, d) => a + d.osSet.size, 0);
 const osUnicasPeriodo = new Set(dadosDia.flatMap(d => Array.from(d.osSet))).size;
 const mediaPorCarro = osUnicasPeriodo > 0 ? (totalPecasPeriodo / osUnicasPeriodo).toFixed(1) : '0';
   const maxPedDia = Math.max(...dadosDia.map(d => d.pedidos.reduce((s, p) => s + (p.items?.length || 0), 0)), 1);
@@ -4168,7 +4167,7 @@ const dadosCompra = useMemo(() => {
       {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10, marginBottom: 24 }}>
         {[
-          { label: 'Pedidos no período', v: totalPecasPeriodo, sub: `${totalDocumentosPeriodo} OS's no período`, icon: 'clipboard-list', dark: true },
+         { label: 'Pedidos no período', v: totalPecasPeriodo, sub: `${osUnicasPeriodo} OS's no período`, icon: 'clipboard-list', dark: true },
           { label: 'Média por veículo', v: mediaPorCarro, sub: 'pedidos / carro', icon: 'car', red: true },
           { label: 'Itens comprados', v: dadosCompra.totalItens, sub: `${dadosCompra.osUnicas} OS com compra`, icon: 'shopping-bag' },
           { label: 'Valor médio / OS', v: dadosCompra.mediaValorOS > 0 ? fmtBRL(dadosCompra.mediaValorOS) : '—', sub: 'no período', icon: 'trending-up' },
