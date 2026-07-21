@@ -74,6 +74,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;margin:0;background:#fff;overflo
 .badge-admin{background:var(--red);color:#fff}
 .badge-sol{background:#1A4EC2;color:#fff}
 .badge-reader{background:var(--muted);color:#fff}
+.badge-comercial{background:#0EA5E9;color:#fff}
 
 .pill{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:999px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;border:1px solid var(--border)}
 
@@ -210,6 +211,7 @@ const INIT_USERS=[
   {user:"Josmar.Valentini",pass:"Josa123",active:true,role:"solicitante"},
   {user:"Luciano.Souza",pass:"Luciano123",active:true,role:"solicitante"},
   {user:"Daniel.Svanci",pass:"Dani123",active:true,role:"solicitante"},
+  {user:"Anderson.Takechi",pass:"2506",active:true,role:"comercial",acessoFinalizacao:true},
 ];
 const UNIDADES=['Unidade 1','Unidade 2','Unidade 3'];
 
@@ -240,6 +242,7 @@ function canDo(role, action){
     admin:   {newReq:true, history:true, donor:true, delete:false, manage:false, users:false},
     solicitante:{newReq:true, history:true, donor:false, delete:false, manage:false, users:false},
     leitor:  {newReq:false, history:true, donor:false, delete:false, manage:false, users:false},
+    comercial:{newReq:false, history:true, donor:false, delete:false, manage:false, users:false},
   };
   return !!(perms[role||'solicitante']?.[action]);
 }
@@ -324,8 +327,8 @@ const StatusBadge=({status,orig})=>{
 };
 const RoleBadge=({role})=>{
   const r=role||'solicitante';
-  const map={master:'badge-master',admin:'badge-admin',solicitante:'badge-sol',leitor:'badge-reader'};
-  const labels={master:'★ Master',admin:'Admin',solicitante:'Solicitante',leitor:'Leitor'};
+  const map={master:'badge-master',admin:'badge-admin',solicitante:'badge-sol',leitor:'badge-reader',comercial:'badge-comercial'};
+  const labels={master:'★ Master',admin:'Admin',solicitante:'Solicitante',leitor:'Leitor',comercial:'Comercial'};
   return <span className={`badge ${map[r]||'badge-sol'}`}>{labels[r]||r}</span>;
 };
 
@@ -1620,21 +1623,27 @@ function UserManagement({users,onAdd,onDelete,onToggle,onRole,onFinalizacaoAcces
   return(
     <div className="fade-in" style={{display:'flex',flexDirection:'column',gap:20}}>
       {/* Tabela de permissões — 4 colunas */}
-      <div className="grid-4col" style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10}}>
+   <div className="grid-4col" style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:10}}>
         {[
           {role:'master',items:['✓ Nova Req.','✓ Histórico','✓ Doações','✓ Excluir','✓ Gestão','✓ Usuários'],note:'Único: Lucas.Sabino'},
           {role:'admin',items:['✓ Nova Req.','✓ Histórico','✓ Doações','✗ Excluir','✗ Gestão','✗ Usuários']},
           {role:'solicitante',items:['✓ Nova Req.','✓ Histórico','✗ Doações','✗ Excluir','✗ Gestão','✗ Usuários']},
-          {role:'leitor',items:['✗ Nova Req.','✓ Histórico','✗ Doações','✗ Excluir','✗ Gestão','✗ Usuários']}
-        ].map(({role,items,note})=>(
-          <div key={role} style={{borderRadius:12,padding:12,background:role==='master'?'#0D0D0D':role==='admin'?'var(--red-light)':role==='solicitante'?'#EAF0FF':'var(--smoke)',border:`1px solid ${role==='master'?'#8B6914':role==='admin'?'#FFBDBD':role==='solicitante'?'#C0D0F5':'var(--border)'}`}}>
+          {role:'leitor',items:['✗ Nova Req.','✓ Histórico','✗ Doações','✗ Excluir','✗ Gestão','✗ Usuários']},
+          {role:'comercial',items:['✗ Nova Req.','✓ Histórico','✗ Doações','✗ Excluir','✗ Gestão','⚙ Finalização (por usuário)'],note:'Vê todos os carros em Meus Carros'},
+        ].map(({role,items,note})=>{
+          const bg={master:'#0D0D0D',admin:'var(--red-light)',solicitante:'#EAF0FF',leitor:'var(--smoke)',comercial:'#E6F7FC'}[role];
+          const border={master:'#8B6914',admin:'#FFBDBD',solicitante:'#C0D0F5',leitor:'var(--border)',comercial:'#A5E4F5'}[role];
+          const txt={master:'rgba(255,255,255,.7)',admin:'#A81515',solicitante:'#1A4EC2',leitor:'var(--muted)',comercial:'#0369A1'}[role];
+          return(
+          <div key={role} style={{borderRadius:12,padding:12,background:bg,border:`1px solid ${border}`}}>
             <RoleBadge role={role}/>
             {note&&<p style={{fontSize:8,color:role==='master'?'#FFD700':'var(--muted)',fontWeight:700,margin:'4px 0 0',fontStyle:'italic'}}>{note}</p>}
-            <ul style={{fontSize:9,fontWeight:700,listStyle:'none',margin:'8px 0 0',padding:0,color:role==='master'?'rgba(255,255,255,.7)':role==='admin'?'#A81515':role==='solicitante'?'#1A4EC2':'var(--muted)'}}>
+            <ul style={{fontSize:9,fontWeight:700,listStyle:'none',margin:'8px 0 0',padding:0,color:txt}}>
               {items.map((p,i)=><li key={i} style={{marginBottom:2,opacity:p.startsWith('✗')?.4:1}}>{p}</li>)}
             </ul>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {hasDuplicates&&isMaster&&(
@@ -1654,10 +1663,11 @@ function UserManagement({users,onAdd,onDelete,onToggle,onRole,onFinalizacaoAcces
             <div><label style={{fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',display:'block',marginBottom:6}}>Senha</label>
               <div style={{position:'relative'}}><input type={showP?'text':'password'} value={np} onChange={e=>setNp(e.target.value)} className="input" placeholder="Senha" style={{fontSize:12,paddingRight:36}}/><button type="button" onClick={()=>setShowP(!showP)} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',fontSize:12}}>{showP?'👁':'👁‍🗨'}</button></div></div>
             <div><label style={{fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',display:'block',marginBottom:6}}>Categoria</label>
-              <select value={nr} onChange={e=>setNr(e.target.value)} className="input" style={{fontSize:12,appearance:'auto'}}>
+           <select value={nr} onChange={e=>setNr(e.target.value)} className="input" style={{fontSize:12,appearance:'auto'}}>
                 <option value="solicitante">Solicitante</option>
                 <option value="leitor">Leitor</option>
                 <option value="admin">Admin</option>
+                <option value="comercial">Comercial</option>
                 {loggedInUser?.user===MASTER_USER&&<option value="master">★ Master</option>}
               </select></div>
           </div>
@@ -1680,13 +1690,14 @@ function UserManagement({users,onAdd,onDelete,onToggle,onRole,onFinalizacaoAcces
                   {isMasterUser?(
                     <RoleBadge role={u.role||'master'}/>
                   ):isMaster?(
-                    <select value={u.role||'solicitante'} onChange={e=>onRole(u,e.target.value)}
+                  <select value={u.role||'solicitante'} onChange={e=>onRole(u,e.target.value)}
                       className="badge"
-                      style={{cursor:'pointer',border:'none',outline:'none',fontFamily:'Plus Jakarta Sans,sans-serif',background:u.role==='master'?'#0D0D0D':u.role==='admin'?'var(--red)':u.role==='leitor'?'var(--muted)':'#1A4EC2',color:u.role==='master'?'#FFD700':'#fff'}}>
+                      style={{cursor:'pointer',border:'none',outline:'none',fontFamily:'Plus Jakarta Sans,sans-serif',background:u.role==='master'?'#0D0D0D':u.role==='admin'?'var(--red)':u.role==='leitor'?'var(--muted)':u.role==='comercial'?'#0EA5E9':'#1A4EC2',color:u.role==='master'?'#FFD700':'#fff'}}>
                       {loggedInUser?.user===MASTER_USER&&<option value="master">★ Master</option>}
                       <option value="admin">Admin</option>
                       <option value="solicitante">Solicitante</option>
                       <option value="leitor">Leitor</option>
+                      <option value="comercial">Comercial</option>
                     </select>
                   ):(
                     <RoleBadge role={u.role||'solicitante'}/>
@@ -1730,11 +1741,22 @@ function UserManagement({users,onAdd,onDelete,onToggle,onRole,onFinalizacaoAcces
 // ── Storage View ──────────────────────────────────────────────────────────
 function StorageView({requests,loggedInUser}){
   const LIM=1000;
+  const{data:finalizacoes}=useFirestore('finalizacoes');
+  const{data:finalizacoesHistorico}=useFirestore('finalizacoesHistorico');
   const[sel,setSel]=useState({});const[exportando,setExportando]=useState(false);const[excluindo,setExcluindo]=useState(false);const[confirmar,setConfirmar]=useState(false);
   const[prog,setProg]=useState({atual:0,total:0,msg:''});
   const concluidos=useMemo(()=>requests.filter(r=>r.items?.length>0&&r.items.every(it=>it.status==='Concluído'||it.status==='Doado')).sort((a,b)=>a.timestamp-b.timestamp),[requests]);
   const total=requests.length,totalConc=concluidos.length,ativos=total-totalConc;
-  const pctPed=Math.min(total/LIM*100,100);const bytesU=estimarBytes(requests);const pctSt=Math.min(bytesU/1073741824*100,100);
+  const totalFinalizacoes=finalizacoes.length+finalizacoesHistorico.length;
+  const bytesFinalizacoes=useMemo(()=>{
+    let b=0;
+    finalizacoes.forEach(f=>{
+      ['ajuste','martelinho','pintura','vidro'].forEach(cat=>(f[cat]||[]).forEach(p=>{if(p.foto)b+=150000;}));
+    });
+    finalizacoesHistorico.forEach(h=>{if(h.pdfUrl||h.pdfDataUrl)b+=800000;});
+    return b;
+  },[finalizacoes,finalizacoesHistorico]);
+  const pctPed=Math.min(total/LIM*100,100);const bytesU=estimarBytes(requests)+bytesFinalizacoes;const pctSt=Math.min(bytesU/1073741824*100,100);
   const restam=Math.max(LIM-total,0);const corB=pctPed>=85?'var(--red)':pctPed>=60?'#F59E0B':'#059669';
   const alerta=pctPed>=85?'⚠ Próximo do limite!':pctPed>=60?'Uso moderado':'Uso saudável';
   const todosSel=concluidos.length>0&&concluidos.every(r=>sel[r.id]);
@@ -1831,8 +1853,8 @@ function StorageView({requests,loggedInUser}){
           </div>
           <div className="progress-track" style={{background:'rgba(255,255,255,.08)',marginBottom:6}}><div className="progress-fill" style={{width:`${pctPed}%`,background:corB}}/></div>
           <div style={{display:'flex',justifyContent:'space-between',marginBottom:16}}><span style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:corB}}>{alerta}</span><span style={{fontSize:9,fontWeight:700,color:'rgba(255,255,255,.35)'}}>{pctPed.toFixed(1)}%</span></div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,borderTop:'1px solid rgba(255,255,255,.08)',paddingTop:14}}>
-            {[{l:'Ativos',v:ativos,c:'#2563EB'},{l:'Concluídos',v:totalConc,c:'#059669'},{l:'Restam',v:restam,c:'#7C3AED'}].map((m,i)=>(
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:8,borderTop:'1px solid rgba(255,255,255,.08)',paddingTop:14}}>
+            {[{l:'Ativos',v:ativos,c:'#2563EB'},{l:'Concluídos',v:totalConc,c:'#059669'},{l:'Restam',v:restam,c:'#7C3AED'},{l:'Finalizações',v:totalFinalizacoes,c:'#F59E0B'}].map((m,i)=>(
               <div key={i} style={{textAlign:'center',background:'rgba(255,255,255,.05)',borderRadius:10,padding:'10px 8px'}}>
                 <p style={{fontSize:26,fontWeight:800,lineHeight:1,margin:0,color:m.c}}>{m.v}</p>
                 <p style={{fontSize:7,fontWeight:800,textTransform:'uppercase',color:'rgba(255,255,255,.3)',margin:'4px 0 0'}}>{m.l}</p>
@@ -1843,7 +1865,7 @@ function StorageView({requests,loggedInUser}){
         <div className="card" style={{padding:20}}>
           <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:16}}>
             <div style={{width:40,height:40,background:'var(--ink)',borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="hard-drive" size={18} style={{color:'#fff'}}/></div>
-            <div><p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',margin:0}}>Storage Estimado</p><p style={{fontSize:9,color:'var(--muted)',margin:0}}>Foto ~800KB · Sem foto ~30KB</p></div>
+            <div><p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',margin:0}}>Storage Estimado</p><p style={{fontSize:9,color:'var(--muted)',margin:0}}>Peças + Finalização (fotos e PDFs)</p></div>
           </div>
           <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',marginBottom:8}}><span style={{fontSize:36,fontWeight:800,lineHeight:1}}>{fmtBytes(bytesU)}</span><span style={{fontSize:10,color:'var(--muted)',fontWeight:600}}>de 1 GB</span></div>
           <div className="progress-track" style={{marginBottom:6}}><div className="progress-fill" style={{width:`${pctSt}%`,background:pctSt>=85?'var(--red)':pctSt>=60?'#F59E0B':'#7C3AED'}}/></div>
@@ -3331,7 +3353,7 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
   const[confirmDelProb,setConfirmDelProb]=useState(null);
   const[pdfConfirmFin,setPdfConfirmFin]=useState(null);
 
-  const podeVerTodos=isMaster||loggedInUser?.user==='Cleber.Zonta';
+  const podeVerTodos=isMaster||loggedInUser?.role==='comercial'||loggedInUser?.user==='Cleber.Zonta';
   const baseVisiveis=useMemo(()=>{
     let list=podeVerTodos?finalizacoes:finalizacoes.filter(f=>f.criadoPor===loggedInUser.user);
     list=list.filter(f=>!f.arquivada);
@@ -3576,7 +3598,7 @@ const rows=[[csvCell('OS'),csvCell('Chassi'),csvCell('Modelo'),csvCell('Ajustes'
       )}
     </div>
 
-      {pdfConfirmFin&&(
+     {pdfConfirmFin&&ReactDOM.createPortal(
         <div style={{position:'fixed',inset:0,zIndex:550,background:'rgba(0,0,0,.8)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
           <div style={{background:'#fff',borderRadius:20,overflow:'hidden',maxWidth:380,width:'100%'}}>
             <div style={{background:'#2563EB',padding:'24px 20px',textAlign:'center',color:'#fff'}}>
@@ -3593,7 +3615,8 @@ const rows=[[csvCell('OS'),csvCell('Chassi'),csvCell('Modelo'),csvCell('Ajustes'
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
@@ -3650,7 +3673,8 @@ function FinalizacaoHistoricoView(){
 
 
 function FinalizacaoView({vehiclesDB,requests,loggedInUser,isMaster}){
-  const[sub,setSub]=useState('nova');
+  const isComercial=loggedInUser?.role==='comercial';
+  const[sub,setSub]=useState(isComercial?'meus':'nova');
   const{data:finalizacoes,loading}=useFirestore('finalizacoes');
 
   useEffect(()=>{
@@ -3693,7 +3717,7 @@ function FinalizacaoView({vehiclesDB,requests,loggedInUser,isMaster}){
         <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.15em',color:'var(--red)',marginBottom:4}}>Inspeção Final</p>
         <h2 style={{fontSize:30,fontWeight:800,margin:'0 0 14px',letterSpacing:'-.02em'}}>Finalização</h2>
         <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)',width:'fit-content',flexWrap:'wrap'}}>
-          {[{k:'nova',l:'Nova Inspeção'},{k:'meus',l:'Meus Carros'},isMaster&&{k:'historico',l:'Histórico'}].filter(Boolean).map(t=>(
+          {[!isComercial&&{k:'nova',l:'Nova Inspeção'},{k:'meus',l:'Meus Carros'},isMaster&&{k:'historico',l:'Histórico'}].filter(Boolean).map(t=>(
             <button key={t.k} onClick={()=>setSub(t.k)} style={{padding:'8px 16px',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',border:'none',cursor:'pointer',letterSpacing:'.06em',fontFamily:'Plus Jakarta Sans,sans-serif',background:sub===t.k?'#fff':'transparent',color:sub===t.k?'var(--red)':'var(--muted)',boxShadow:sub===t.k?'0 2px 8px rgba(0,0,0,.08)':'none'}}>{t.l}</button>
           ))}
         </div>
