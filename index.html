@@ -2757,7 +2757,28 @@ function compressPhotoDataURL(file, maxPx=700, quality=0.55){
     r.readAsDataURL(file);
   });
 }
+async function uploadFotoStorage(base64, path){
+  if(!base64) return null;
+  if(!base64.startsWith('data:image')) return base64;
+  const ref = storage.ref().child(path);
+  await ref.putString(base64, 'data_url');
+  return await ref.getDownloadURL();
+}
 
+async function fotoParaDataURL(foto){
+  if(!foto) return null;
+  if(foto.startsWith('data:image')) return foto;
+  try{
+    const res = await fetch(foto);
+    const blob = await res.blob();
+    return await new Promise(resolve=>{
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  }catch(e){ return null; }
+}
 function PhotoDropzone({photo,onChange,disabled}){
   const[isDragging,setIsDragging]=useState(false);
   const[compressing,setCompressing]=useState(false);
@@ -2824,7 +2845,7 @@ function PhotoDropzone({photo,onChange,disabled}){
   );
 }
 
-function buildFinalizacaoPDF(fin, pecasItems, comFoto=true){
+async function buildFinalizacaoPDF(fin, pecasItems, comFoto=true){
   const{jsPDF}=window.jspdf;const doc=new jsPDF();
   doc.setFillColor(13,13,13);doc.rect(0,0,210,34,'F');
   doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(15);
@@ -2838,23 +2859,26 @@ function buildFinalizacaoPDF(fin, pecasItems, comFoto=true){
   const vd=fin.vehicleData||{};
   [['Modelo',vd.modelo],['Chassi',vd.chassi],['Cor',vd.cor],['Etapa',vd.etapa],['Criado por',fin.criadoPor],['Criado em',fin.criadoEm?new Date(fin.criadoEm).toLocaleString('pt-BR'):'—']].forEach(([l,v])=>{doc.text(`${l}: ${v||'—'}`,10,y);y+=6;});
   y+=4;
-  const secao=(titulo,items)=>{
+  const secao=async(titulo,items)=>{
     if(y>260){doc.addPage();y=15;}
     doc.setFont('helvetica','bold');doc.setFontSize(11);doc.text(titulo,10,y);y+=7;
     if(!items||!items.length){doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text('Nenhum problema registrado.',12,y);y+=8;return;}
-    items.forEach((p,i)=>{
+    for(const[i,p] of items.entries()){
       if(y>255){doc.addPage();y=15;}
       doc.setFont('helvetica','bold');doc.setFontSize(9);
       doc.text(`${i+1}. ${p.status==='Solucionado'?'[SOLUCIONADO] ':'[PENDENTE] '}${p.descricao||'(sem descrição)'}`,12,y);y+=6;
-    if(p.status==='Solucionado'&&p.resolvidoPor){doc.setFont('helvetica','normal');doc.setFontSize(8);doc.text(`Resolvido por ${p.resolvidoPor} em ${p.resolvidoEm?new Date(p.resolvidoEm).toLocaleString('pt-BR'):''}`,14,y);y+=6;}
-      if(comFoto&&p.foto){try{doc.addImage(p.foto,'JPEG',12,y,40,26);y+=30;}catch(e){}}
-    });
+      if(p.status==='Solucionado'&&p.resolvidoPor){doc.setFont('helvetica','normal');doc.setFontSize(8);doc.text(`Resolvido por ${p.resolvidoPor} em ${p.resolvidoEm?new Date(p.resolvidoEm).toLocaleString('pt-BR'):''}`,14,y);y+=6;}
+      if(comFoto&&p.foto){
+        const dataUrl=await fotoParaDataURL(p.foto);
+        if(dataUrl){try{doc.addImage(dataUrl,'JPEG',12,y,40,26);y+=30;}catch(e){}}
+      }
+    }
     y+=4;
   };
-secao('Ajuste',fin.ajuste);
-  secao('Martelinho',fin.martelinho);
-  secao('Pintura',fin.pintura);
-  secao('Vidro',fin.vidro);
+  await secao('Ajuste',fin.ajuste);
+  await secao('Martelinho',fin.martelinho);
+  await secao('Pintura',fin.pintura);
+  await secao('Vidro',fin.vidro);
   if(y>250){doc.addPage();y=15;}
   doc.setFont('helvetica','bold');doc.setFontSize(11);doc.text('Peças',10,y);y+=7;
   if(!pecasItems||!pecasItems.length){doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text('Nenhuma peça vinculada.',12,y);y+=8;}
@@ -3126,6 +3150,21 @@ const[ajuste,setAjuste]=useState([]);
     setSaving(true);
     try{
       const now=Date.now();
+
+      const uploadCategoria=async(items,nomeCategoria)=>Promise.all(items.map(async p=>{
+        if(!p.foto||!p.foto.startsWith('data:image'))return p;
+        const path=`finalizacoes/${os}/${nomeCategoria}_${p.id}.jpg`;
+        const url=await uploadFotoStorage(p.foto,path);
+        return{...p,foto:url};
+      }));
+      const[ajusteUp,martelinhoUp,pinturaUp,vidroUp]=await Promise.all([
+        uploadCategoria(ajuste,'ajuste'),
+        uploadCategoria(martelinho,'martelinho'),
+        uploadCategoria(pintura,'pintura'),
+        uploadCategoria(vidro,'vidro'),
+      ]);
+      setAjuste(ajusteUp);setMartelinho(martelinhoUp);setPintura(pinturaUp);setVidro(vidroUp);
+
       if(mostrarNovas&&pecasValidas.length){
         await col('requests').add(stripUndefined({
           os,responsavel:loggedInUser.user,vehicleData:vehicle,unidade,
@@ -3146,12 +3185,12 @@ const[ajuste,setAjuste]=useState([]);
       }
       const opcaoFinal=mostrarNovas&&mostrarExcedente?'ambos':mostrarExcedente?'excedente':mostrarNovas?'novas':'suficiente';
       const historicoEntry={acao:existingFin?'Inspeção atualizada':'Inspeção criada',usuario:loggedInUser.user,timestamp:now};
- if(existingFin){
+      if(existingFin){
         await col('finalizacoes').doc(existingFin.id).update(stripUndefined({
-          ajuste:ajuste.map(p=>({...p})),
-          martelinho:martelinho.map(p=>({...p})),
-          pintura:pintura.map(p=>({...p})),
-          vidro:vidro.map(p=>({...p})),
+          ajuste:ajusteUp.map(p=>({...p})),
+          martelinho:martelinhoUp.map(p=>({...p})),
+          pintura:pinturaUp.map(p=>({...p})),
+          vidro:vidroUp.map(p=>({...p})),
           pecasOpcao:opcaoFinal,
           historico:[...(existingFin.historico||[]),historicoEntry],
         }));
@@ -3159,10 +3198,10 @@ const[ajuste,setAjuste]=useState([]);
         await col('finalizacoes').add(stripUndefined({
           os,unidade,vehicleData:vehicle,
           criadoPor:loggedInUser.user,criadoEm:now,
-          ajuste:ajuste.map(p=>({...p})),
-          martelinho:martelinho.map(p=>({...p})),
-          pintura:pintura.map(p=>({...p})),
-          vidro:vidro.map(p=>({...p})),
+          ajuste:ajusteUp.map(p=>({...p})),
+          martelinho:martelinhoUp.map(p=>({...p})),
+          pintura:pinturaUp.map(p=>({...p})),
+          vidro:vidroUp.map(p=>({...p})),
           pecasOpcao:opcaoFinal,
           historico:[historicoEntry],
         }));
@@ -3358,9 +3397,9 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
     setConfirmDelFin(null);
   };
 
- const exportarPDF=(fin,comFoto=true)=>{
+const exportarPDF=async(fin,comFoto=true)=>{
     const pecasItems=getPecasParaOS(fin.os,requests);
-    const doc=buildFinalizacaoPDF(fin,pecasItems,comFoto);
+    const doc=await buildFinalizacaoPDF(fin,pecasItems,comFoto);
     doc.save(`Finalizacao_OS_${fin.os}.pdf`);
   };
 
@@ -3628,9 +3667,9 @@ function FinalizacaoView({vehiclesDB,requests,loggedInUser,isMaster}){
           continue;
         }
         if(now-fin.entregueDetectadoEm<5*86400000)continue;
-        try{
+       try{
           const pecasItems=getPecasParaOS(fin.os,requests);
-          const doc=buildFinalizacaoPDF(fin,pecasItems);
+          const doc=await buildFinalizacaoPDF(fin,pecasItems);
           let pdfDataUrl=null;
           try{pdfDataUrl=doc.output('datauristring');}catch(e){}
           await col('finalizacoesHistorico').add(stripUndefined({os:fin.os,unidade:fin.unidade,vehicleData:fin.vehicleData,criadoPor:fin.criadoPor,criadoEm:fin.criadoEm,arquivadoEm:now,pdfDataUrl}));
