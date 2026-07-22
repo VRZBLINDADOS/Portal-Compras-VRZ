@@ -3154,6 +3154,13 @@ const[ajuste,setAjuste]=useState([]);
       if(req)setUnidade(req.unidade||'Unidade 1');
       carregarFin(t);
     }else{setVehicle(null);setExistingFin(null);setReadOnly(false);alert('OS não cadastrada.');}
+
+    const temAlteracoes=()=>ajuste.length>0||martelinho.length>0||pintura.length>0||vidro.length>0||novasPecas.length>0||excedentes.length>0;
+
+const handleTrocarOS=()=>{
+  if(temAlteracoes()&&!window.confirm('Você tem informações preenchidas nesta inspeção que ainda não foram salvas. Se trocar a OS agora, tudo será perdido. Deseja continuar?')) return;
+  reset();
+};
   };
 
   const reset=()=>{
@@ -3164,15 +3171,17 @@ const[ajuste,setAjuste]=useState([]);
   };
 
  const executarSalvar=async()=>{
-    const problemasSemDescricao=[...ajuste,...martelinho,...pintura,...vidro].some(p=>!p.descricao||!p.descricao.trim());
-    if(problemasSemDescricao){alert('Preencha a descrição de todos os problemas em Ajuste, Martelinho, Pintura e Vidro antes de salvar.');return;}
-    if(mostrarNovas&&novasPecas.some(p=>!p.description||!p.description.trim())){alert('Preencha a descrição de todas as peças antes de salvar.');return;}
-    const pecasValidas=novasPecas.filter(p=>p.description.trim());
-    if(mostrarNovas&&pecasValidas.some(p=>!p.photo)){setShowFotoAlert(true);return;}
-    setSaving(true);
-    try{
-      const now=Date.now();
+  const problemasSemDescricao=[...ajuste,...martelinho,...pintura,...vidro].some(p=>!p.descricao||!p.descricao.trim());
+  if(problemasSemDescricao){alert('Preencha a descrição de todos os problemas em Ajuste, Martelinho, Pintura e Vidro antes de salvar.');return;}
+  if(mostrarNovas&&novasPecas.some(p=>!p.description||!p.description.trim())){alert('Preencha a descrição de todas as peças antes de salvar.');return;}
+  const pecasValidas=novasPecas.filter(p=>p.description.trim());
+  if(mostrarNovas&&pecasValidas.some(p=>!p.photo)){setShowFotoAlert(true);return;}
 
+  setSaving(true);
+  try{
+    const now=Date.now();
+
+    const doSave=async()=>{
       const uploadCategoria=async(items,nomeCategoria)=>Promise.all(items.map(async p=>{
         if(!p.foto||!p.foto.startsWith('data:image'))return p;
         const path=`finalizacoes/${os}/${nomeCategoria}_${p.id}.jpg`;
@@ -3228,10 +3237,16 @@ const[ajuste,setAjuste]=useState([]);
           historico:[historicoEntry],
         }));
       }
-      setDone(true);
-    }catch(e){alert('Erro ao salvar: '+e.message);}
-    setSaving(false);
-  };
+    };
+
+    const timeout=new Promise((_,rej)=>setTimeout(()=>rej(new Error('Tempo esgotado. Verifique sua conexão com a internet — suas informações NÃO foram perdidas, você pode tentar salvar novamente.')),45000));
+    await Promise.race([doSave(),timeout]);
+    setDone(true);
+  }catch(e){
+    alert('Erro ao salvar: '+e.message);
+  }
+  setSaving(false);
+};
 
   const handleSalvarClick=()=>{
     if(readOnly)return;
@@ -3296,7 +3311,14 @@ const[ajuste,setAjuste]=useState([]);
         <div style={{padding:20,display:'flex',flexDirection:'column',gap:16}}>
           <div>
             <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',display:'block',marginBottom:6}}>Número da OS</label>
-            <input type="text" inputMode="numeric" value={os} onChange={e=>setOs(sanitize(e.target.value))} onBlur={onOSBlur} placeholder="Nº da OS" className="input" style={{fontSize:22,fontWeight:800}}/>
+           <div style={{display:'flex',gap:10,alignItems:'center'}}>
+  <input type="text" inputMode="numeric" value={os} onChange={e=>setOs(sanitize(e.target.value))} onBlur={onOSBlur} placeholder="Nº da OS" className="input" style={{fontSize:22,fontWeight:800,flex:1}} disabled={!!vehicle}/>
+  {vehicle&&(
+    <button type="button" onClick={handleTrocarOS} className="btn-ghost" style={{padding:'12px 16px',flexShrink:0}}>
+      <Icon name="rotate-ccw" size={14}/> Trocar OS
+    </button>
+  )}
+</div>
           </div>
           {existingFin&&(
             <div style={{background:readOnly?'#FFFBE6':'#EAF0FF',border:`1px solid ${readOnly?'#FFE680':'#C0D0F5'}`,borderRadius:10,padding:'10px 14px',display:'flex',alignItems:'center',gap:10}}>
