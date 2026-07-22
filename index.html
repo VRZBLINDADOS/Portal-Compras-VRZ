@@ -2759,7 +2759,7 @@ function DeletedItemsView({loggedInUser}){
 }
 
 // ── Finalização — Inspeção Final de Veículos ──────────────────────────────
-function compressPhotoDataURL(file, maxPx=700, quality=0.55){
+function compressPhotoDataURL(file, maxPx=600, quality=0.4){
   return new Promise(resolve=>{
     const r=new FileReader();
     r.onload=e=>{
@@ -3163,12 +3163,14 @@ const[ajuste,setAjuste]=useState([]);
     setNovasPecas([]);setExcedentes([]);setDone(false);setExistingFin(null);setReadOnly(false);
   };
 
- const executarSalvar=async()=>{
+ 
+  const executarSalvar=async()=>{
     const problemasSemDescricao=[...ajuste,...martelinho,...pintura,...vidro].some(p=>!p.descricao||!p.descricao.trim());
     if(problemasSemDescricao){alert('Preencha a descrição de todos os problemas em Ajuste, Martelinho, Pintura e Vidro antes de salvar.');return;}
     if(mostrarNovas&&novasPecas.some(p=>!p.description||!p.description.trim())){alert('Preencha a descrição de todas as peças antes de salvar.');return;}
     const pecasValidas=novasPecas.filter(p=>p.description.trim());
     if(mostrarNovas&&pecasValidas.some(p=>!p.photo)){setShowFotoAlert(true);return;}
+    
     setSaving(true);
     try{
       const now=Date.now();
@@ -3179,21 +3181,30 @@ const[ajuste,setAjuste]=useState([]);
         const url=await uploadFotoStorage(p.foto,path);
         return{...p,foto:url};
       }));
-      const[ajusteUp,martelinhoUp,pinturaUp,vidroUp]=await Promise.all([
+
+      // Faz upload de tudo em paralelo para ser mais rápido
+      const [ajusteUp, martelinhoUp, pinturaUp, vidroUp, pecasUp] = await Promise.all([
         uploadCategoria(ajuste,'ajuste'),
         uploadCategoria(martelinho,'martelinho'),
         uploadCategoria(pintura,'pintura'),
         uploadCategoria(vidro,'vidro'),
+        uploadCategoria(pecasValidas,'pecas_novas')
       ]);
-      setAjuste(ajusteUp);setMartelinho(martelinhoUp);setPintura(pinturaUp);setVidro(vidroUp);
 
-      if(mostrarNovas&&pecasValidas.length){
+      if(mostrarNovas && pecasUp.length){
         await col('requests').add(stripUndefined({
           os,responsavel:loggedInUser.user,vehicleData:vehicle,unidade,
-          items:pecasValidas.map(p=>({id:String(Date.now())+Math.floor(Math.random()*999),description:p.description,quantity:p.quantity||1,photo:p.photo||null,status:'Pendente'})),
+          items:pecasUp.map(p=>({
+            id:String(Date.now())+Math.floor(Math.random()*999),
+            description:p.description,
+            quantity:p.quantity||1,
+            photo:p.foto||null, // Agora é a URL do Storage, não Base64
+            status:'Pendente'
+          })),
           timestamp:now,status:'Pendente',origemFinalizacao:true,
         }));
       }
+
       if(mostrarExcedente&&excedentes.length){
         const matching=requests.filter(r=>String(r.os).trim()===String(os).trim());
         for(const req of matching){
@@ -3205,33 +3216,36 @@ const[ajuste,setAjuste]=useState([]);
           if(changed)await col('requests').doc(req.id).update({items:stripUndefined(newItems)});
         }
       }
+
       const opcaoFinal=mostrarNovas&&mostrarExcedente?'ambos':mostrarExcedente?'excedente':mostrarNovas?'novas':'suficiente';
       const historicoEntry={acao:existingFin?'Inspeção atualizada':'Inspeção criada',usuario:loggedInUser.user,timestamp:now};
-      if(existingFin){
-        await col('finalizacoes').doc(existingFin.id).update(stripUndefined({
-          ajuste:ajusteUp.map(p=>({...p})),
-          martelinho:martelinhoUp.map(p=>({...p})),
-          pintura:pinturaUp.map(p=>({...p})),
-          vidro:vidroUp.map(p=>({...p})),
-          pecasOpcao:opcaoFinal,
-          historico:[...(existingFin.historico||[]),historicoEntry],
-        }));
-      }else{
-        await col('finalizacoes').add(stripUndefined({
-          os,unidade,vehicleData:vehicle,
-          criadoPor:loggedInUser.user,criadoEm:now,
-          ajuste:ajusteUp.map(p=>({...p})),
-          martelinho:martelinhoUp.map(p=>({...p})),
-          pintura:pinturaUp.map(p=>({...p})),
-          vidro:vidroUp.map(p=>({...p})),
-          pecasOpcao:opcaoFinal,
-          historico:[historicoEntry],
-        }));
+      
+      const payload = stripUndefined({
+        os,unidade,vehicleData:vehicle,
+        ajuste:ajusteUp,
+        martelinho:martelinhoUp,
+        pintura:pinturaUp,
+        vidro:vidroUp,
+        pecasOpcao:opcaoFinal,
+        historico: existingFin ? [...(existingFin.historico||[]), historicoEntry] : [historicoEntry]
+      });
+
+      if(!existingFin){
+        payload.criadoPor = loggedInUser.user;
+        payload.criadoEm = now;
+        await col('finalizacoes').add(payload);
+      } else {
+        await col('finalizacoes').doc(existingFin.id).update(payload);
       }
+
       setDone(true);
-    }catch(e){alert('Erro ao salvar: '+e.message);}
+    }catch(e){
+      console.error(e);
+      alert('Erro ao salvar: ' + (e.message.includes('too large') ? 'Dados muito grandes. Tente reduzir as fotos.' : e.message));
+    }
     setSaving(false);
   };
+
 
   const handleSalvarClick=()=>{
     if(readOnly)return;
@@ -3242,17 +3256,28 @@ const[ajuste,setAjuste]=useState([]);
     executarSalvar();
   };
 
+  
   const responderPergunta=(resposta)=>{
+    setPerguntaPendente(null); // Fecha o modal primeiro
     if(perguntaPendente==='excedente'){
       setPerguntaExcedenteFeita(true);
-      if(resposta==='sim'){setMostrarExcedente(true);setPerguntaPendente(null);return;}
+      if(resposta==='sim'){
+        setMostrarExcedente(true);
+        // Não salva ainda, deixa o usuário marcar os excedentes
+        return;
+      }
     }else if(perguntaPendente==='novas'){
       setPerguntaNovasFeita(true);
-      if(resposta==='sim'){setMostrarNovas(true);setPerguntaPendente(null);return;}
+      if(resposta==='sim'){
+        setMostrarNovas(true);
+        // Não salva ainda, deixa o usuário adicionar as peças
+        return;
+      }
     }
-    setPerguntaPendente(null);
-    executarSalvar();
+    // Se respondeu "não", prossegue com o salvamento imediatamente
+    setTimeout(() => executarSalvar(), 100);
   };
+
 
   if(done)return(
     <div style={{maxWidth:420,margin:'0 auto',background:'#fff',borderRadius:20,border:'1.5px solid var(--border)',padding:40,textAlign:'center'}} className="fade-up">
@@ -3338,7 +3363,7 @@ const[ajuste,setAjuste]=useState([]);
         onSetOpcao={onSetOpcao} disabled={disabled}/>
 
       {!readOnly&&(
-        <button onClick={handleSalvarClick} disabled={saving||!vehicle} className="btn-primary" style={{width:'100%',padding:16,fontSize:12}}>
+        <button onClick={handleSalvarClick} disabled={saving||!vehicle} style={{width:'100%',padding:16,fontSize:12,opacity:(saving||!vehicle)?0.7:1,cursor:(saving||!vehicle)?'not-allowed':'pointer'}} className="btn-primary" style={{width:'100%',padding:16,fontSize:12}}>
           {saving?<Icon name="refresh-cw" size={18} className="spin"/>:<><Icon name="save" size={16}/> Salvar Inspeção</>}
         </button>
       )}
