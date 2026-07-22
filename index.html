@@ -1,4 +1,4 @@
-!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-br">
 <head>
 <meta charset="UTF-8">
@@ -2759,7 +2759,7 @@ function DeletedItemsView({loggedInUser}){
 }
 
 // ── Finalização — Inspeção Final de Veículos ──────────────────────────────
-function compressPhotoDataURL(file, maxPx=700, quality=0.55){
+function compressPhotoDataURL(file, maxPx=600, quality=0.4){
   return new Promise(resolve=>{
     const r=new FileReader();
     r.onload=e=>{
@@ -2916,7 +2916,7 @@ async function buildFinalizacaoPDF(fin, pecasItems, comFoto=true){
   });
   return doc;
 }
-function ProblemCategoryEditor({title,icon,color,items,setItems,disabled}){
+function ProblemCategoryEditor({title,icon,color,items,setItems,disabled,atingiuLimite}){
   const addProblem=()=>{if(disabled)return;setItems([...items,{id:String(Date.now())+Math.floor(Math.random()*999),descricao:'',foto:null,status:'Pendente',criadoEm:Date.now()}]);};
   const updateProblem=(id,key,val)=>setItems(items.map(p=>p.id===id?{...p,[key]:val}:p));
   const[confirmDel,setConfirmDel]=useState(null);
@@ -2931,7 +2931,7 @@ function ProblemCategoryEditor({title,icon,color,items,setItems,disabled}){
             <p style={{margin:0,fontSize:9,color:'var(--muted)',fontWeight:600}}>{items.length} problema(s) registrado(s)</p>
           </div>
         </div>
-        <button type="button" onClick={addProblem} disabled={disabled} className="btn-primary" style={{padding:'8px 14px',fontSize:9}}>+ Adicionar</button>
+        <button type="button" onClick={() => atingiuLimite ? alert("Limite de fotos atingido!") : addProblem()} disabled={disabled || (atingiuLimite && items.length === 0)} className="btn-primary" style={{padding:'8px 14px',fontSize:9}}>+ Adicionar</button>
       </div>
       <div style={{padding:18,display:'flex',flexDirection:'column',gap:12}}>
         {items.length===0&&(
@@ -2943,7 +2943,7 @@ function ProblemCategoryEditor({title,icon,color,items,setItems,disabled}){
         {items.map((p,idx)=>(
           <div key={p.id} className="finaliz-problem-row" style={{display:'grid',gridTemplateColumns:'150px 1fr',gap:12,background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:12,padding:12}}>
             <style>{`@media(max-width:600px){.finaliz-problem-row{grid-template-columns:1fr!important}}`}</style>
-            <PhotoDropzone photo={p.foto} onChange={v=>updateProblem(p.id,'foto',v)} disabled={disabled}/>
+            <PhotoDropzone photo={p.foto} onChange={v=>updateProblem(p.id,'foto',v)} disabled={disabled || (atingiuLimite && !p.foto)}/>
             <div style={{display:'flex',flexDirection:'column',gap:8}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                 <span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)'}}>Problema {idx+1}</span>
@@ -2968,7 +2968,7 @@ function ProblemCategoryEditor({title,icon,color,items,setItems,disabled}){
   );
 }
 
-function PecasFinalizacaoSection({os, requests, novasPecas, setNovasPecas, excedentes, setExcedentes, pecasEscolha, mostrarNovas, mostrarExcedente, onSetOpcao, disabled}){
+function PecasFinalizacaoSection({os, requests, novasPecas, setNovasPecas, excedentes, setExcedentes, pecasEscolha, mostrarNovas, mostrarExcedente, onSetOpcao, disabled, atingiuLimite}){
   const existingItems=useMemo(()=>getPecasParaOS(os,requests),[requests,os]);
   const ativos=useMemo(()=>existingItems.filter(it=>!it.excedente),[existingItems]);
   const jaExcedentes=useMemo(()=>existingItems.filter(it=>it.excedente),[existingItems]);
@@ -3053,7 +3053,7 @@ function PecasFinalizacaoSection({os, requests, novasPecas, setNovasPecas, exced
           <div style={{background:'var(--smoke)',borderRadius:12,padding:14,marginBottom:mostrarExcedente?16:0}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
               <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--red)',margin:0}}>Novas peças a solicitar</p>
-              <button type="button" onClick={addNovaPeca} disabled={disabled} className="btn-primary" style={{padding:'7px 14px',fontSize:9}}>+ Item</button>
+              <button type="button" onClick={() => atingiuLimite ? alert("Limite de fotos atingido!") : addNovaPeca()} disabled={disabled || atingiuLimite} className="btn-primary" style={{padding:'7px 14px',fontSize:9}}>+ Item</button>
             </div>
             {novasPecas.length===0&&<p style={{fontSize:10,color:'var(--muted)'}}>Nenhuma peça adicionada ainda.</p>}
             <div style={{display:'flex',flexDirection:'column',gap:10}}>
@@ -3072,21 +3072,7 @@ function PecasFinalizacaoSection({os, requests, novasPecas, setNovasPecas, exced
                       </div>
                       <div style={{flex:1}}>
                         <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--red)',display:'block',marginBottom:6}}>📷 Foto (Obrigatória)</label>
-                        <PhotoDropzone photo={it.photo} onChange={v=>updateNovaPeca(it.id,'photo',v)} disabled={disabled}/>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function NovaFinalizacaoForm({vehiclesDB,requests,loggedInUser,isMaster,finalizacoes}){
+                        <PhotoDropzone photo={it.photo} onChange={v=>updateNovaPeca(itfunction NovaFinalizacaoForm({vehiclesDB,requests,loggedInUser,isMaster,finalizacoes}){
   const[os,setOs]=useState('');
   const[vehicle,setVehicle]=useState(null);
   const[unidade,setUnidade]=useState('Unidade 1');
@@ -3107,6 +3093,28 @@ const[ajuste,setAjuste]=useState([]);
   const[existingFin,setExistingFin]=useState(null);
   const[readOnly,setReadOnly]=useState(false);
   const[showFotoAlert,setShowFotoAlert]=useState(false);
+
+  const MAX_FOTOS = 15;
+  const totalFotos = useMemo(() => {
+    return [...ajuste, ...martelinho, ...pintura, ...vidro].filter(p => p.foto).length + novasPecas.filter(p => p.photo).length;
+  }, [ajuste, martelinho, pintura, vidro, novasPecas]);
+  const atingiuLimite = totalFotos >= MAX_FOTOS;
+
+  useEffect(() => {
+    const t = String(os).trim();
+    if (t.length >= 2) {
+      const f = vehiclesDB.find(v => String(v.os).trim() === t);
+      if (f) {
+        setVehicle(f);
+        const req = requests.find(r => String(r.os).trim() === t);
+        if (req) setUnidade(req.unidade || 'Unidade 1');
+        carregarFin(t);
+      }
+    } else {
+      setVehicle(null); setExistingFin(null);
+    }
+  }, [os, vehiclesDB, requests]);
+
 
   const disabled=!vehicle||readOnly;
 
@@ -3163,37 +3171,54 @@ const[ajuste,setAjuste]=useState([]);
     setNovasPecas([]);setExcedentes([]);setDone(false);setExistingFin(null);setReadOnly(false);
   };
 
- const executarSalvar=async()=>{
+ 
+  const executarSalvar=async()=>{
     const problemasSemDescricao=[...ajuste,...martelinho,...pintura,...vidro].some(p=>!p.descricao||!p.descricao.trim());
     if(problemasSemDescricao){alert('Preencha a descrição de todos os problemas em Ajuste, Martelinho, Pintura e Vidro antes de salvar.');return;}
     if(mostrarNovas&&novasPecas.some(p=>!p.description||!p.description.trim())){alert('Preencha a descrição de todas as peças antes de salvar.');return;}
     const pecasValidas=novasPecas.filter(p=>p.description.trim());
     if(mostrarNovas&&pecasValidas.some(p=>!p.photo)){setShowFotoAlert(true);return;}
+    
     setSaving(true);
     try{
       const now=Date.now();
-
       const uploadCategoria=async(items,nomeCategoria)=>Promise.all(items.map(async p=>{
-        if(!p.foto||!p.foto.startsWith('data:image'))return p;
+        if(!p.foto||!p.foto.startsWith('data:image')) {
+            // Verifica se é uma peça nova que usa o campo 'photo'
+            if (p.photo && p.photo.startsWith('data:image')) {
+                const path=`finalizacoes/${os}/${nomeCategoria}_${p.id}.jpg`;
+                const url=await uploadFotoStorage(p.photo,path);
+                return {...p, photo: url};
+            }
+            return p;
+        }
         const path=`finalizacoes/${os}/${nomeCategoria}_${p.id}.jpg`;
         const url=await uploadFotoStorage(p.foto,path);
         return{...p,foto:url};
       }));
-      const[ajusteUp,martelinhoUp,pinturaUp,vidroUp]=await Promise.all([
+
+      const [ajusteUp, martelinhoUp, pinturaUp, vidroUp, pecasUp] = await Promise.all([
         uploadCategoria(ajuste,'ajuste'),
         uploadCategoria(martelinho,'martelinho'),
         uploadCategoria(pintura,'pintura'),
         uploadCategoria(vidro,'vidro'),
+        uploadCategoria(pecasValidas.map(p=>({...p, foto: p.photo})),'pecas_novas')
       ]);
-      setAjuste(ajusteUp);setMartelinho(martelinhoUp);setPintura(pinturaUp);setVidro(vidroUp);
 
-      if(mostrarNovas&&pecasValidas.length){
+      if(mostrarNovas && pecasUp.length){
         await col('requests').add(stripUndefined({
           os,responsavel:loggedInUser.user,vehicleData:vehicle,unidade,
-          items:pecasValidas.map(p=>({id:String(Date.now())+Math.floor(Math.random()*999),description:p.description,quantity:p.quantity||1,photo:p.photo||null,status:'Pendente'})),
+          items:pecasUp.map(p=>({
+            id:String(Date.now())+Math.floor(Math.random()*999),
+            description:p.description,
+            quantity:p.quantity||1,
+            photo:p.foto||p.photo||null,
+            status:'Pendente'
+          })),
           timestamp:now,status:'Pendente',origemFinalizacao:true,
         }));
       }
+
       if(mostrarExcedente&&excedentes.length){
         const matching=requests.filter(r=>String(r.os).trim()===String(os).trim());
         for(const req of matching){
@@ -3205,31 +3230,28 @@ const[ajuste,setAjuste]=useState([]);
           if(changed)await col('requests').doc(req.id).update({items:stripUndefined(newItems)});
         }
       }
+
       const opcaoFinal=mostrarNovas&&mostrarExcedente?'ambos':mostrarExcedente?'excedente':mostrarNovas?'novas':'suficiente';
       const historicoEntry={acao:existingFin?'Inspeção atualizada':'Inspeção criada',usuario:loggedInUser.user,timestamp:now};
-      if(existingFin){
-        await col('finalizacoes').doc(existingFin.id).update(stripUndefined({
-          ajuste:ajusteUp.map(p=>({...p})),
-          martelinho:martelinhoUp.map(p=>({...p})),
-          pintura:pinturaUp.map(p=>({...p})),
-          vidro:vidroUp.map(p=>({...p})),
-          pecasOpcao:opcaoFinal,
-          historico:[...(existingFin.historico||[]),historicoEntry],
-        }));
-      }else{
-        await col('finalizacoes').add(stripUndefined({
-          os,unidade,vehicleData:vehicle,
-          criadoPor:loggedInUser.user,criadoEm:now,
-          ajuste:ajusteUp.map(p=>({...p})),
-          martelinho:martelinhoUp.map(p=>({...p})),
-          pintura:pinturaUp.map(p=>({...p})),
-          vidro:vidroUp.map(p=>({...p})),
-          pecasOpcao:opcaoFinal,
-          historico:[historicoEntry],
-        }));
+      
+      const payload = stripUndefined({
+        os,unidade,vehicleData:vehicle,
+        ajuste:ajusteUp, martelinho:martelinhoUp, pintura:pinturaUp, vidro:vidroUp,
+        pecasOpcao:opcaoFinal,
+        historico: existingFin ? [...(existingFin.historico||[]), historicoEntry] : [historicoEntry]
+      });
+
+      if(!existingFin) {
+        payload.criadoPor = loggedInUser.user; payload.criadoEm = now;
+        await col('finalizacoes').add(payload);
+      } else {
+        await col('finalizacoes').doc(existingFin.id).update(payload);
       }
       setDone(true);
-    }catch(e){alert('Erro ao salvar: '+e.message);}
+    }catch(e){
+      console.error(e);
+      alert('Erro ao salvar: ' + (e.message.includes('too large') ? 'Dados muito grandes.' : e.message));
+    }
     setSaving(false);
   };
 
@@ -3242,16 +3264,17 @@ const[ajuste,setAjuste]=useState([]);
     executarSalvar();
   };
 
+  
   const responderPergunta=(resposta)=>{
+    setPerguntaPendente(null);
     if(perguntaPendente==='excedente'){
       setPerguntaExcedenteFeita(true);
-      if(resposta==='sim'){setMostrarExcedente(true);setPerguntaPendente(null);return;}
+      if(resposta==='sim'){ setMostrarExcedente(true); return; }
     }else if(perguntaPendente==='novas'){
       setPerguntaNovasFeita(true);
-      if(resposta==='sim'){setMostrarNovas(true);setPerguntaPendente(null);return;}
+      if(resposta==='sim'){ setMostrarNovas(true); return; }
     }
-    setPerguntaPendente(null);
-    executarSalvar();
+    setTimeout(() => executarSalvar(), 100);
   };
 
   if(done)return(
@@ -3296,8 +3319,22 @@ const[ajuste,setAjuste]=useState([]);
         <div style={{padding:20,display:'flex',flexDirection:'column',gap:16}}>
           <div>
             <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',display:'block',marginBottom:6}}>Número da OS</label>
-            <input type="text" inputMode="numeric" value={os} onChange={e=>setOs(sanitize(e.target.value))} onBlur={onOSBlur} placeholder="Nº da OS" className="input" style={{fontSize:22,fontWeight:800}}/>
+            <input type="text" inputMode="numeric" value={os} onChange={e=>setOs(sanitize(e.target.value))} placeholder="DIGITE O Nº DA OS AQUI" className="input" style={{fontSize:22,fontWeight:800}}/>
           </div>
+
+          {vehicle && (
+            <div style={{background: atingiuLimite ? '#FFF0F0' : '#F7F5F3', border: `1.5px solid ${atingiuLimite ? '#DC1F1F' : '#E8E3E0'}`, borderRadius: 12, padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10}}>
+              <div style={{display:'flex', alignItems:'center', gap:8}}>
+                <Icon name="camera" size={14} style={{color: atingiuLimite ? '#DC1F1F' : '#9A9189'}}/>
+                <span style={{fontSize:10, fontWeight:800, textTransform:'uppercase', color: atingiuLimite ? '#DC1F1F' : '#0D0D0D'}}>Fotos na Inspeção</span>
+              </div>
+              <span style={{fontSize: 12, fontWeight: 900, color: atingiuLimite ? '#DC1F1F' : '#0D0D0D', background: atingiuLimite ? '#fff' : 'rgba(0,0,0,0.05)', padding: '2px 8px', borderRadius: 6}}>{totalFotos} / {MAX_FOTOS}</span>
+            </div>
+          )}
+          {atingiuLimite && (
+            <div style={{background: '#DC1F1F', color: '#fff', padding: '8px 12px', borderRadius: 8, fontSize: 9, fontWeight: 800, textAlign: 'center', marginBottom: 16, textTransform: 'uppercase'}}>⚠️ Limite de fotos atingido!</div>
+          )}
+
           {existingFin&&(
             <div style={{background:readOnly?'#FFFBE6':'#EAF0FF',border:`1px solid ${readOnly?'#FFE680':'#C0D0F5'}`,borderRadius:10,padding:'10px 14px',display:'flex',alignItems:'center',gap:10}}>
               <Icon name={readOnly?'lock':'info'} size={16} style={{color:readOnly?'#856A00':'#1A4EC2',flexShrink:0}}/>
@@ -3328,17 +3365,25 @@ const[ajuste,setAjuste]=useState([]);
         </div>
       </div>
 
-    <ProblemCategoryEditor title="Ajuste" icon="wrench" color="#F59E0B" items={ajuste} setItems={setAjuste} disabled={disabled}/>
-      <ProblemCategoryEditor title="Martelinho" icon="hammer" color="#DC1F1F" items={martelinho} setItems={setMartelinho} disabled={disabled}/>
-      <ProblemCategoryEditor title="Pintura" icon="paintbrush" color="#2563EB" items={pintura} setItems={setPintura} disabled={disabled}/>
-      <ProblemCategoryEditor title="Vidro" icon="square" color="#0EA5E9" items={vidro} setItems={setVidro} disabled={disabled}/>
+    <ProblemCategoryEditor title="Ajuste" icon="wrench" color="#F59E0B" items={ajuste} setItems={setAjuste} disabled={disabled} atingiuLimite={atingiuLimite}/>
+      <ProblemCategoryEditor title="Martelinho" icon="hammer" color="#DC1F1F" items={martelinho} setItems={setMartelinho} disabled={disabled} atingiuLimite={atingiuLimite}/>
+      <ProblemCategoryEditor title="Pintura" icon="paintbrush" color="#2563EB" items={pintura} setItems={setPintura} disabled={disabled} atingiuLimite={atingiuLimite}/>
+      <ProblemCategoryEditor title="Vidro" icon="square" color="#0EA5E9" items={vidro} setItems={setVidro} disabled={disabled} atingiuLimite={atingiuLimite}/>
       <PecasFinalizacaoSection os={os} requests={requests}
         novasPecas={novasPecas} setNovasPecas={setNovasPecas} excedentes={excedentes} setExcedentes={setExcedentes}
         pecasEscolha={pecasEscolha} mostrarNovas={mostrarNovas} mostrarExcedente={mostrarExcedente}
-        onSetOpcao={onSetOpcao} disabled={disabled}/>
+        onSetOpcao={onSetOpcao} disabled={disabled} atingiuLimite={atingiuLimite}/>
 
       {!readOnly&&(
         <button onClick={handleSalvarClick} disabled={saving||!vehicle} className="btn-primary" style={{width:'100%',padding:16,fontSize:12}}>
+          {saving?<Icon name="refresh-cw" size={18} className="spin"/>:<><Icon name="save" size={16}/> Salvar Inspeção</>}
+        </button>
+      )}
+    </div>
+  );
+}
+
+k} disabled={saving||!vehicle} className="btn-primary" style={{width:'100%',padding:16,fontSize:12}}>
           {saving?<Icon name="refresh-cw" size={18} className="spin"/>:<><Icon name="save" size={16}/> Salvar Inspeção</>}
         </button>
       )}
@@ -3875,11 +3920,12 @@ const dadosDia = useMemo(() => {
     const grupos = {};
     requests.forEach(r => {
       if (!r.timestamp) return;
-      if (r.items && r.items.length > 0 && r.items.every(it => it.donatedTo)) return; // cópia automática de doação, não é pedido do usuário
+      const itensReais = (r.items || []).filter(it => !it.donatedTo);
+if (itensReais.length === 0) return;
       const baseTs = r.parte ? r.timestamp - ((r.parte - 1) * 10) : r.timestamp;
       const key = `${r.os}_${baseTs}`;
       if (!grupos[key]) grupos[key] = { ...r, items: [] };
-      grupos[key].items = [...grupos[key].items, ...(r.items || [])];
+      grupos[key].items = [...grupos[key].items, ...itensReais];
       if (!r.parte || r.parte === 1) grupos[key].timestamp = r.timestamp;
     });
 
@@ -3907,13 +3953,12 @@ const dadosCompra = useMemo(() => {
     const map = {};
     diasDoPeriodo.forEach(d => { map[d.date] = { ...d, itens: [], valor: 0, osSet: new Set() }; });
     const osComCompra = new Set();
-    const vistos = new Set(); // evita contar a mesma compra 2x quando ela foi duplicada por uma doação
+ 
     requests.forEach(r => {
       (r.items || []).forEach(it => {
         if (!it.boughtAt) return;
-        const chave = `${it.description}|${it.price}|${it.supplier}|${it.boughtAt}`;
-        if (vistos.has(chave)) return;
-        vistos.add(chave);
+        if (it.donatedTo) return; // cópia de doação — a compra já é contada na OS receptora
+     
         const dateKey = String(it.boughtAt).trim().slice(0, 10);
         if (map[dateKey]) {
           const preco = parsePrice(it.price);
