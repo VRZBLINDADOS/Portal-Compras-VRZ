@@ -2937,6 +2937,7 @@ function ProblemCategoryEditor({title,icon,color,items,setItems,disabled,limiteA
           </div>
         </div>
       <button type="button" onClick={addProblem} disabled={disabled||limiteAtingido} className="btn-primary" style={{padding:'8px 14px',fontSize:9,opacity:limiteAtingido?.5:1}}>+ Adicionar</button>
+      </div>
       <div style={{padding:18,display:'flex',flexDirection:'column',gap:12}}>
         {items.length===0&&(
           <div style={{textAlign:'center',padding:'20px 0'}}>
