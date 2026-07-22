@@ -3875,11 +3875,12 @@ const dadosDia = useMemo(() => {
     const grupos = {};
     requests.forEach(r => {
       if (!r.timestamp) return;
-      if (r.items && r.items.length > 0 && r.items.every(it => it.donatedTo)) return; // cópia automática de doação, não é pedido do usuário
+      const itensReais = (r.items || []).filter(it => !it.donatedTo);
+if (itensReais.length === 0) return;
       const baseTs = r.parte ? r.timestamp - ((r.parte - 1) * 10) : r.timestamp;
       const key = `${r.os}_${baseTs}`;
       if (!grupos[key]) grupos[key] = { ...r, items: [] };
-      grupos[key].items = [...grupos[key].items, ...(r.items || [])];
+      grupos[key].items = [...grupos[key].items, ...itensReais];
       if (!r.parte || r.parte === 1) grupos[key].timestamp = r.timestamp;
     });
 
@@ -3907,13 +3908,12 @@ const dadosCompra = useMemo(() => {
     const map = {};
     diasDoPeriodo.forEach(d => { map[d.date] = { ...d, itens: [], valor: 0, osSet: new Set() }; });
     const osComCompra = new Set();
-    const vistos = new Set(); // evita contar a mesma compra 2x quando ela foi duplicada por uma doação
+ 
     requests.forEach(r => {
       (r.items || []).forEach(it => {
         if (!it.boughtAt) return;
-        const chave = `${it.description}|${it.price}|${it.supplier}|${it.boughtAt}`;
-        if (vistos.has(chave)) return;
-        vistos.add(chave);
+        if (it.donatedTo) return; // cópia de doação — a compra já é contada na OS receptora
+     
         const dateKey = String(it.boughtAt).trim().slice(0, 10);
         if (map[dateKey]) {
           const preco = parsePrice(it.price);
