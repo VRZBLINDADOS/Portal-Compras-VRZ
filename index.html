@@ -2923,7 +2923,16 @@ function ProblemCategoryEditor({title,icon,color,items,setItems,disabled,limiteA
     if(limiteAtingido){alert('Limite de '+MAX_FOTOS_INSPECAO+' fotos por inspeção atingido. Remova uma foto para adicionar outra.');return;}
     setItems([...items,{id:String(Date.now())+Math.floor(Math.random()*999),descricao:'',foto:null,status:'Pendente',criadoEm:Date.now()}]);
   };
-  const updateProblem=(id,key,val)=>setItems(items.map(p=>p.id===id?{...p,[key]:val}:p));
+  const updateProblem=(id,key,val)=>{
+    if(key==='foto'&&val){
+      const item=items.find(p=>p.id===id);
+      if(!item?.foto&&limiteAtingido){
+        alert('Limite de '+MAX_FOTOS_INSPECAO+' fotos por inspeção atingido. Remova uma foto para adicionar outra.');
+        return;
+      }
+    }
+    setItems(items.map(p=>p.id===id?{...p,[key]:val}:p));
+  };
   const[confirmDel,setConfirmDel]=useState(null);
   const removeProblem=(id)=>{setItems(items.filter(p=>p.id!==id));setConfirmDel(null);};
   return(
@@ -2948,7 +2957,7 @@ function ProblemCategoryEditor({title,icon,color,items,setItems,disabled,limiteA
         {items.map((p,idx)=>(
           <div key={p.id} className="finaliz-problem-row" style={{display:'grid',gridTemplateColumns:'150px 1fr',gap:12,background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:12,padding:12}}>
             <style>{`@media(max-width:600px){.finaliz-problem-row{grid-template-columns:1fr!important}}`}</style>
-            <PhotoDropzone photo={p.foto} onChange={v=>updateProblem(p.id,'foto',v)} disabled={disabled}/>
+            <PhotoDropzone photo={p.foto} onChange={v=>updateProblem(p.id,'foto',v)} disabled={disabled||(!p.foto&&limiteAtingido)}/>
             <div style={{display:'flex',flexDirection:'column',gap:8}}>
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                 <span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)'}}>Problema {idx+1}</span>
@@ -3299,6 +3308,17 @@ const reset=()=>{
     setPerguntaPendente(null);
     executarSalvar();
   };
+
+ if(saving)return(
+    <div style={{maxWidth:440,margin:'0 auto',background:'#fff',borderRadius:20,border:'1.5px solid var(--border)',padding:48,textAlign:'center'}} className="fade-in">
+      <div style={{width:72,height:72,borderRadius:999,background:'var(--red-light)',border:'2px solid #FFBDBD',display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 20px'}}>
+        <Icon name="refresh-cw" size={32} className="spin"/>
+      </div>
+      <h3 style={{fontSize:18,fontWeight:800,margin:'0 0 8px'}}>Salvando Inspeção...</h3>
+      <p style={{fontSize:11,color:'var(--muted)',margin:0}}>Não feche esta tela. Isso pode levar alguns segundos.</p>
+      <p style={{fontSize:9,color:'var(--muted)',marginTop:8,opacity:.7}}>Se demorar mais de 20 segundos, o sistema libera automaticamente com um aviso.</p>
+    </div>
+  );
 
   if(done)return(
     <div style={{maxWidth:420,margin:'0 auto',background:'#fff',borderRadius:20,border:'1.5px solid var(--border)',padding:40,textAlign:'center'}} className="fade-up">
