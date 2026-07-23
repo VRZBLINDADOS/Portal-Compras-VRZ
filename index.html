@@ -3208,7 +3208,12 @@ const reset=()=>{
     if(mostrarNovas&&novasPecas.some(p=>!p.description||!p.description.trim())){alert('Preencha a descrição de todas as peças antes de salvar.');return;}
     const pecasValidas=novasPecas.filter(p=>p.description.trim());
     if(mostrarNovas&&pecasValidas.some(p=>!p.photo)){setShowFotoAlert(true);return;}
-    setSaving(true);
+   setSaving(true);
+    // Trava de segurança: nunca deixa o botão preso em "Salvando..." para sempre
+    const timeoutId=setTimeout(()=>{
+      setSaving(false);
+      alert('Tempo esgotado ao salvar. Verifique sua conexão e tente novamente. Seu rascunho não foi perdido.');
+    },20000);
     try{
       const now=Date.now();
 
@@ -3263,9 +3268,14 @@ const reset=()=>{
           historico:[historicoEntry],
         }));
       }
-      try{localStorage.removeItem('rascunho_finalizacao_'+os.trim());}catch(e){}
+     try{localStorage.removeItem('rascunho_finalizacao_'+os.trim());}catch(e){}
+      clearTimeout(timeoutId);
       setDone(true);
-    }catch(e){alert('Erro ao salvar: '+e.message);}
+    }catch(e){
+      clearTimeout(timeoutId);
+      alert('Erro ao salvar: '+e.message);
+    }
+    clearTimeout(timeoutId);
     setSaving(false);
   };
 
