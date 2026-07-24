@@ -387,8 +387,142 @@ function MiniBar({data,color='#DC1F1F'}){
   return <canvas ref={ref} width={280} height={115} className="w-full"/>;
 }
 
+// ── Finalização Analytics ─────────────────────────────────────────────────
+function FinalizacaoAnalyticsView({finalizacoes}){
+  const CATS=[['ajuste','Ajuste','#F59E0B','wrench'],['martelinho','Martelinho','#DC1F1F','hammer'],['pintura','Pintura','#2563EB','paintbrush'],['vidro','Vidro','#0EA5E9','square']];
+  const stats=useMemo(()=>{
+    const ativas=(finalizacoes||[]).filter(f=>!f.arquivada);
+    if(!ativas.length)return null;
+    let totalProblemas=0,totalSolucionados=0;
+    const porCategoria={ajuste:{total:0,solucionado:0},martelinho:{total:0,solucionado:0},pintura:{total:0,solucionado:0},vidro:{total:0,solucionado:0}};
+    const reclamacoesMap={};
+    const porModelo={};
+    const temposResolucao=[];
+    ativas.forEach(fin=>{
+      const modelo=fin.vehicleData?.modelo||'N/D';
+      if(!porModelo[modelo])porModelo[modelo]={ajuste:0,martelinho:0,pintura:0,vidro:0,total:0,inspecoes:0};
+      porModelo[modelo].inspecoes++;
+      CATS.forEach(([key])=>{
+        const items=fin[key]||[];
+        totalProblemas+=items.length;
+        porCategoria[key].total+=items.length;
+        porModelo[modelo][key]+=items.length;
+        porModelo[modelo].total+=items.length;
+        items.forEach(p=>{
+          if(p.status==='Solucionado'){
+            totalSolucionados++;
+            porCategoria[key].solucionado++;
+            if(p.resolvidoEm&&p.criadoEm)temposResolucao.push((p.resolvidoEm-p.criadoEm)/86400000);
+          }
+          const desc=(p.descricao||'').trim().toUpperCase();
+          if(desc){
+            if(!reclamacoesMap[desc])reclamacoesMap[desc]={count:0,cat:key};
+            reclamacoesMap[desc].count++;
+          }
+        });
+      });
+    });
+    const rankReclamacoes=Object.entries(reclamacoesMap).sort((a,b)=>b[1].count-a[1].count).slice(0,8);
+    const rankModelos=Object.entries(porModelo).sort((a,b)=>b[1].total-a[1].total).slice(0,8);
+    const taxaResolucao=totalProblemas>0?Math.round(totalSolucionados/totalProblemas*100):0;
+    const mediaProblemasPorInspecao=(totalProblemas/ativas.length).toFixed(1);
+    const tempoMedioResolucao=temposResolucao.length?(temposResolucao.reduce((a,b)=>a+b,0)/temposResolucao.length).toFixed(1):0;
+    return{totalInspecoes:ativas.length,totalProblemas,totalSolucionados,porCategoria,rankReclamacoes,rankModelos,taxaResolucao,mediaProblemasPorInspecao,tempoMedioResolucao};
+  },[finalizacoes]);
+
+  if(!stats)return(
+    <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'80px 20px',textAlign:'center'}}>
+      <div style={{width:64,height:64,background:'var(--smoke)',borderRadius:16,display:'flex',alignItems:'center',justifyContent:'center',marginBottom:16}}><Icon name="clipboard-check" size={26}/></div>
+      <p style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)'}}>Nenhuma inspeção registrada ainda</p>
+    </div>
+  );
+
+  const maxCat=Math.max(...CATS.map(([key])=>stats.porCategoria[key].total),1);
+  const maxRecl=stats.rankReclamacoes[0]?.[1]?.count||1;
+  const maxMod=stats.rankModelos[0]?.[1]?.total||1;
+
+  return(
+    <div className="fade-in">
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:12,marginBottom:16}}>
+        {[
+          {label:'Inspeções Ativas',v:stats.totalInspecoes,sub:'não arquivadas',icon:'clipboard-check',dark:true},
+          {label:'Total de Problemas',v:stats.totalProblemas,sub:`${stats.totalSolucionados} solucionados`,icon:'alert-triangle',red:true},
+          {label:'Taxa de Resolução',v:stats.taxaResolucao+'%',sub:`${stats.totalSolucionados}/${stats.totalProblemas}`,icon:'check-circle'},
+          {label:'Média por Veículo',v:stats.mediaProblemasPorInspecao,sub:'problemas / inspeção',icon:'car'},
+          {label:'Tempo Médio de Solução',v:stats.tempoMedioResolucao+'d',sub:'dias até resolver',icon:'clock'},
+        ].map((k,i)=>(
+          <div key={i} style={{background:k.dark?'var(--ink)':k.red?'var(--red)':'var(--smoke)',color:k.dark||k.red?'#fff':'var(--ink)',borderRadius:14,padding:20,border:(!k.dark&&!k.red)?'1.5px solid var(--border)':'none'}}>
+            <div style={{width:32,height:32,borderRadius:8,background:k.dark||k.red?'rgba(255,255,255,.12)':'var(--border)',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:14}}><Icon name={k.icon} size={16}/></div>
+            <p style={{fontSize:32,fontWeight:800,lineHeight:1,margin:0,letterSpacing:'-.02em'}}>{k.v}</p>
+            <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.08em',marginTop:6,opacity:.7}}>{k.label}</p>
+            <p style={{fontSize:8,fontWeight:500,marginTop:2,opacity:.4}}>{k.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="card" style={{padding:20,marginBottom:16}}>
+        <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:16}}>Reclamações por Categoria</p>
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          {CATS.map(([key,label,color,icon])=>{
+            const c=stats.porCategoria[key];
+            return(
+              <div key={key}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <div style={{width:22,height:22,borderRadius:6,background:color,display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name={icon} size={12} style={{color:'#fff'}}/></div>
+                    <span style={{fontSize:11,fontWeight:700,textTransform:'uppercase'}}>{label}</span>
+                  </div>
+                  <span style={{fontSize:11,fontWeight:800}}>{c.total} <span style={{fontSize:9,fontWeight:600,color:'var(--muted)'}}>({c.solucionado} solucionado{c.solucionado!==1?'s':''})</span></span>
+                </div>
+                <div className="progress-track"><div className="progress-fill" style={{width:`${c.total/maxCat*100}%`,background:color}}/></div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="grid-2col" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
+        <div className="card" style={{padding:20}}>
+          <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:16}}>Reclamações Mais Comuns</p>
+          {stats.rankReclamacoes.length===0?<p style={{fontSize:10,color:'var(--muted)'}}>Nenhuma reclamação registrada</p>:stats.rankReclamacoes.map(([desc,info],i)=>(
+            <div key={i} style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
+              <div style={{width:22,height:22,borderRadius:7,background:i===0?'var(--red)':i===1?'var(--ink)':'var(--smoke)',color:i<2?'#fff':'var(--muted)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:800,flexShrink:0}}>{i+1}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:3,gap:8}}>
+                  <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{desc}</span>
+                  <span style={{fontSize:10,fontWeight:800,color:'var(--muted)',flexShrink:0}}>{info.count}×</span>
+                </div>
+                <div className="progress-track"><div className="progress-fill" style={{width:`${info.count/maxRecl*100}%`,background:i===0?'var(--red)':'var(--ink)'}}/></div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="card" style={{padding:20,overflow:'hidden'}}>
+          <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:16}}>Veículos com Mais Problemas</p>
+          {stats.rankModelos.map(([mod,d],i)=>(
+            <div key={i} style={{marginBottom:12}}>
+              <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+                <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase'}}>{mod}</span>
+                <span style={{fontSize:10,fontWeight:800,color:'var(--muted)'}}>{d.total} ({d.inspecoes} insp.)</span>
+              </div>
+              <div className="progress-track" style={{marginBottom:5}}><div className="progress-fill" style={{width:`${d.total/maxMod*100}%`,background:i===0?'var(--red)':'var(--ink)'}}/></div>
+              <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                {CATS.map(([key,label,color])=>d[key]>0&&(
+                  <span key={key} style={{fontSize:8,fontWeight:700,padding:'2px 7px',borderRadius:5,background:color+'18',color,border:`1px solid ${color}55`}}>{label}: {d[key]}</span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Dashboard ─────────────────────────────────────────────────────────────
 function DashboardView({requests}){
+  const[tab,setTab]=useState('pecas');
+  const{data:finalizacoes}=useFirestore('finalizacoes');
   const stats=useMemo(()=>{
     if(!requests?.length)return null;
     const byOS={};
@@ -432,16 +566,11 @@ function DashboardView({requests}){
     return{total:requests.length,osU:Object.keys(byOS).length,totalAdd,mediaAdd:parseFloat(mediaAdd),maxAdd,totalIt,pend,cotac,comprado,conc,doado,rankSol,pedDia,semanas,rankMod,taxa,porUnidade};
   },[requests]);
 
-  if(!stats)return(
-    <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'80px 20px',textAlign:'center'}}>
-      <div style={{width:64,height:64,background:'var(--smoke)',borderRadius:16,display:'flex',alignItems:'center',justifyContent:'center',marginBottom:16}}><Icon name="bar-chart-2" size={26}/></div>
-      <p style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)'}}>Nenhum dado disponível</p>
-    </div>
-  );
-  const maxSol=stats.rankSol[0]?.[1]||1,maxMod=stats.rankMod[0]?.[1]||1;
+  const maxSol=stats?.rankSol[0]?.[1]||1,maxMod=stats?.rankMod[0]?.[1]||1;
+
   return(
     <div style={{paddingBottom:40}} className="fade-up">
-      <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',marginBottom:20}}>
+      <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:12}}>
         <div>
           <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.15em',color:'var(--red)',marginBottom:4}}>Inteligência Operacional</p>
           <h2 style={{fontSize:36,fontWeight:800,lineHeight:1,color:'var(--ink)',margin:0,letterSpacing:'-.02em'}}>Análises VRZ</h2>
@@ -451,83 +580,101 @@ function DashboardView({requests}){
           <span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em'}}>Tempo real</span>
         </div>
       </div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:12,marginBottom:16}}>
-        {[
-          {label:'Total de Pedidos',v:stats.total,sub:`${stats.osU} OS únicas`,icon:'clipboard-list',dark:true},
-          {label:'Inclusões Adicionais',v:stats.totalAdd,sub:'mesma OS',icon:'plus-circle',red:true},
-          {label:'Taxa de Conclusão',v:stats.taxa+'%',sub:`${stats.conc}/${stats.totalIt}`,icon:'check-circle'},
-          {label:'Itens Comprados',v:stats.comprado,sub:'aguardando entrega',icon:'shopping-bag'},
-          {label:'Itens Doados',v:stats.doado,sub:'transferidos entre OS',icon:'git-merge'},
-        ].map((k,i)=>(
-          <div key={i} style={{background:k.dark?'var(--ink)':k.red?'var(--red)':'var(--smoke)',color:k.dark||k.red?'#fff':'var(--ink)',borderRadius:14,padding:20,border:(!k.dark&&!k.red)?'1.5px solid var(--border)':'none'}}>
-            <div style={{width:32,height:32,borderRadius:8,background:k.dark||k.red?'rgba(255,255,255,.12)':'var(--border)',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:14}}><Icon name={k.icon} size={16}/></div>
-            <p style={{fontSize:36,fontWeight:800,lineHeight:1,margin:0,letterSpacing:'-.02em'}}>{k.v}</p>
-            <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.08em',marginTop:6,opacity:.7}}>{k.label}</p>
-            <p style={{fontSize:8,fontWeight:500,marginTop:2,opacity:.4}}>{k.sub}</p>
-          </div>
+
+      <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)',width:'fit-content',marginBottom:20}}>
+        {[{k:'pecas',l:'Peças'},{k:'finalizacao',l:'Finalização'}].map(t=>(
+          <button key={t.k} onClick={()=>setTab(t.k)} style={{padding:'8px 18px',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',border:'none',cursor:'pointer',letterSpacing:'.06em',transition:'all .15s',fontFamily:'Plus Jakarta Sans,sans-serif',background:tab===t.k?'#fff':'transparent',color:tab===t.k?'var(--red)':'var(--muted)',boxShadow:tab===t.k?'0 2px 8px rgba(0,0,0,.08)':'none'}}>{t.l}</button>
         ))}
       </div>
-      <div className="dash-grid-3" style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:16}}>
-        <div className="card" style={{padding:20}}>
-          <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:16}}>Pipeline</p>
-          <div style={{display:'flex',alignItems:'center',gap:16}}>
-            <Donut size={90} slices={[{v:stats.pend,c:'#F59E0B'},{v:stats.cotac,c:'#2563EB'},{v:stats.comprado,c:'#7C3AED'},{v:stats.conc,c:'#059669'},{v:stats.doado,c:'#DC1F1F'}]}/>
-            <div style={{flex:1}}>
-              {[{l:'Pendente',v:stats.pend,c:'#F59E0B'},{l:'Em Cotação',v:stats.cotac,c:'#2563EB'},{l:'Comprado',v:stats.comprado,c:'#7C3AED'},{l:'Concluído',v:stats.conc,c:'#059669'},{l:'Doado',v:stats.doado,c:'#DC1F1F'}].map((s,i)=>(
-                <div key={i} style={{marginBottom:6}}>
-                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:2}}>
-                    <div style={{display:'flex',alignItems:'center',gap:5}}><div style={{width:6,height:6,borderRadius:'50%',background:s.c}}/><span style={{fontSize:8,fontWeight:700,color:'var(--muted)',textTransform:'uppercase'}}>{s.l}</span></div>
-                    <span style={{fontSize:9,fontWeight:800,color:'var(--ink)'}}>{s.v}</span>
+
+      {tab==='pecas'&&(!stats?(
+        <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'80px 20px',textAlign:'center'}}>
+          <div style={{width:64,height:64,background:'var(--smoke)',borderRadius:16,display:'flex',alignItems:'center',justifyContent:'center',marginBottom:16}}><Icon name="bar-chart-2" size={26}/></div>
+          <p style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)'}}>Nenhum dado disponível</p>
+        </div>
+      ):(
+        <>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:12,marginBottom:16}}>
+            {[
+              {label:'Total de Pedidos',v:stats.total,sub:`${stats.osU} OS únicas`,icon:'clipboard-list',dark:true},
+              {label:'Inclusões Adicionais',v:stats.totalAdd,sub:'mesma OS',icon:'plus-circle',red:true},
+              {label:'Taxa de Conclusão',v:stats.taxa+'%',sub:`${stats.conc}/${stats.totalIt}`,icon:'check-circle'},
+              {label:'Itens Comprados',v:stats.comprado,sub:'aguardando entrega',icon:'shopping-bag'},
+              {label:'Itens Doados',v:stats.doado,sub:'transferidos entre OS',icon:'git-merge'},
+            ].map((k,i)=>(
+              <div key={i} style={{background:k.dark?'var(--ink)':k.red?'var(--red)':'var(--smoke)',color:k.dark||k.red?'#fff':'var(--ink)',borderRadius:14,padding:20,border:(!k.dark&&!k.red)?'1.5px solid var(--border)':'none'}}>
+                <div style={{width:32,height:32,borderRadius:8,background:k.dark||k.red?'rgba(255,255,255,.12)':'var(--border)',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:14}}><Icon name={k.icon} size={16}/></div>
+                <p style={{fontSize:36,fontWeight:800,lineHeight:1,margin:0,letterSpacing:'-.02em'}}>{k.v}</p>
+                <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.08em',marginTop:6,opacity:.7}}>{k.label}</p>
+                <p style={{fontSize:8,fontWeight:500,marginTop:2,opacity:.4}}>{k.sub}</p>
+              </div>
+            ))}
+          </div>
+          <div className="dash-grid-3" style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12,marginBottom:16}}>
+            <div className="card" style={{padding:20}}>
+              <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:16}}>Pipeline</p>
+              <div style={{display:'flex',alignItems:'center',gap:16}}>
+                <Donut size={90} slices={[{v:stats.pend,c:'#F59E0B'},{v:stats.cotac,c:'#2563EB'},{v:stats.comprado,c:'#7C3AED'},{v:stats.conc,c:'#059669'},{v:stats.doado,c:'#DC1F1F'}]}/>
+                <div style={{flex:1}}>
+                  {[{l:'Pendente',v:stats.pend,c:'#F59E0B'},{l:'Em Cotação',v:stats.cotac,c:'#2563EB'},{l:'Comprado',v:stats.comprado,c:'#7C3AED'},{l:'Concluído',v:stats.conc,c:'#059669'},{l:'Doado',v:stats.doado,c:'#DC1F1F'}].map((s,i)=>(
+                    <div key={i} style={{marginBottom:6}}>
+                      <div style={{display:'flex',justifyContent:'space-between',marginBottom:2}}>
+                        <div style={{display:'flex',alignItems:'center',gap:5}}><div style={{width:6,height:6,borderRadius:'50%',background:s.c}}/><span style={{fontSize:8,fontWeight:700,color:'var(--muted)',textTransform:'uppercase'}}>{s.l}</span></div>
+                        <span style={{fontSize:9,fontWeight:800,color:'var(--ink)'}}>{s.v}</span>
+                      </div>
+                      <div className="progress-track"><div className="progress-fill" style={{width:stats.totalIt>0?`${s.v/stats.totalIt*100}%`:'0%',background:s.c}}/></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="card" style={{padding:20}}>
+              <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:2}}>Pedidos por Semana</p>
+              <p style={{fontSize:8,color:'var(--muted)',marginBottom:14,fontWeight:500}}>Últimas 8 semanas</p>
+              <MiniBar data={stats.semanas} color="#DC1F1F"/>
+            </div>
+            <div className="card" style={{padding:20}}>
+              <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:2}}>Distribuição Semanal</p>
+              <p style={{fontSize:8,color:'var(--muted)',marginBottom:14,fontWeight:500}}>Pico de solicitações</p>
+              <MiniBar data={stats.pedDia} color="#1A4EC2"/>
+            </div>
+          </div>
+          <div className="grid-2col" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+            <div className="card" style={{padding:20}}>
+              <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:16}}>Top Solicitantes</p>
+              {stats.rankSol.map(([nome,qtd],i)=>(
+                <div key={i} style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
+                  <div style={{width:22,height:22,borderRadius:7,background:i===0?'var(--red)':i===1?'var(--ink)':'var(--smoke)',color:i<2?'#fff':'var(--muted)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:800,flexShrink:0}}>{i+1}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
+                      <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase'}}>{nome}</span>
+                      <span style={{fontSize:10,fontWeight:800,color:'var(--muted)'}}>{qtd}</span>
+                    </div>
+                    <div className="progress-track"><div className="progress-fill" style={{width:`${qtd/maxSol*100}%`,background:i===0?'var(--red)':'var(--ink)'}}/></div>
                   </div>
-                  <div className="progress-track"><div className="progress-fill" style={{width:stats.totalIt>0?`${s.v/stats.totalIt*100}%`:'0%',background:s.c}}/></div>
+                </div>
+              ))}
+            </div>
+            <div className="card" style={{padding:20}}>
+              <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:16}}>Modelos Mais Solicitados</p>
+              {stats.rankMod.map(([mod,qtd],i)=>(
+                <div key={i} style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
+                  <div style={{width:22,height:22,borderRadius:7,background:i===0?'var(--ink)':'var(--smoke)',color:i===0?'#fff':'var(--muted)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:800,flexShrink:0}}>{i+1}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
+                      <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase'}}>{mod}</span>
+                      <span style={{fontSize:10,fontWeight:800,color:'var(--muted)'}}>{qtd}×</span>
+                    </div>
+                    <div className="progress-track"><div className="progress-fill" style={{width:`${qtd/maxMod*100}%`,background:'var(--ink)'}}/></div>
+                  </div>
                 </div>
               ))}
             </div>
           </div>
-        </div>
-        <div className="card" style={{padding:20}}>
-          <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:2}}>Pedidos por Semana</p>
-          <p style={{fontSize:8,color:'var(--muted)',marginBottom:14,fontWeight:500}}>Últimas 8 semanas</p>
-          <MiniBar data={stats.semanas} color="#DC1F1F"/>
-        </div>
-        <div className="card" style={{padding:20}}>
-          <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:2}}>Distribuição Semanal</p>
-          <p style={{fontSize:8,color:'var(--muted)',marginBottom:14,fontWeight:500}}>Pico de solicitações</p>
-          <MiniBar data={stats.pedDia} color="#1A4EC2"/>
-        </div>
-      </div>
-      <div className="grid-2col" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-        <div className="card" style={{padding:20}}>
-          <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:16}}>Top Solicitantes</p>
-          {stats.rankSol.map(([nome,qtd],i)=>(
-            <div key={i} style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
-              <div style={{width:22,height:22,borderRadius:7,background:i===0?'var(--red)':i===1?'var(--ink)':'var(--smoke)',color:i<2?'#fff':'var(--muted)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:800,flexShrink:0}}>{i+1}</div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
-                  <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase'}}>{nome}</span>
-                  <span style={{fontSize:10,fontWeight:800,color:'var(--muted)'}}>{qtd}</span>
-                </div>
-                <div className="progress-track"><div className="progress-fill" style={{width:`${qtd/maxSol*100}%`,background:i===0?'var(--red)':'var(--ink)'}}/></div>
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="card" style={{padding:20}}>
-          <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:16}}>Modelos Mais Solicitados</p>
-          {stats.rankMod.map(([mod,qtd],i)=>(
-            <div key={i} style={{display:'flex',alignItems:'center',gap:10,marginBottom:10}}>
-              <div style={{width:22,height:22,borderRadius:7,background:i===0?'var(--ink)':'var(--smoke)',color:i===0?'#fff':'var(--muted)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:800,flexShrink:0}}>{i+1}</div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}>
-                  <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase'}}>{mod}</span>
-                  <span style={{fontSize:10,fontWeight:800,color:'var(--muted)'}}>{qtd}×</span>
-                </div>
-                <div className="progress-track"><div className="progress-fill" style={{width:`${qtd/maxMod*100}%`,background:'var(--ink)'}}/></div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+        </>
+      ))}
+
+      {tab==='finalizacao'&&<FinalizacaoAnalyticsView finalizacoes={finalizacoes}/>}
     </div>
   );
 }
@@ -4562,7 +4709,7 @@ const changeRole=async(u,r)=>{
     }catch(e){alert('Erro ao limpar duplicados: '+e.message);}
   };
 
-  const defaultViewForRole=(r)=>{if(r==='leitor')return 'status';return 'request';};
+  const defaultViewForRole=(r)=>{if(r==='leitor'||r==='comercial')return 'status';return 'request';};
   const login=u=>{
     const found=users.find(x=>x.user.toLowerCase()===u.user.toLowerCase()&&x.pass===u.pass);
     if(found){setLoggedIn(found);setView(defaultViewForRole(found.role));}
