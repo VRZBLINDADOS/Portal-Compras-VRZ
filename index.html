@@ -3163,7 +3163,7 @@ const[showFotoAlert,setShowFotoAlert]=useState(false);
       setPerguntaExcedenteFeita(true);
       setPerguntaNovasFeita(true);
       setExcedentes([]);setNovasPecas([]);
-      setReadOnly(!(isMaster||fin.criadoPor===loggedInUser.user));
+      setReadOnly(!(isMaster||fin.criadoPor===loggedInUser.user||loggedInUser?.user==='Cleber.Zonta'));
     }else{
     setExistingFin(null);
       setAjuste([]);setMartelinho([]);setPintura([]);setVidro([]);
@@ -3419,12 +3419,80 @@ const reset=()=>{
   );
 }
 
+function EditarInspecaoModal({fin,loggedInUser,onClose}){
+  const[ajuste,setAjuste]=useState(()=>JSON.parse(JSON.stringify(fin.ajuste||[])));
+  const[martelinho,setMartelinho]=useState(()=>JSON.parse(JSON.stringify(fin.martelinho||[])));
+  const[pintura,setPintura]=useState(()=>JSON.parse(JSON.stringify(fin.pintura||[])));
+  const[vidro,setVidro]=useState(()=>JSON.parse(JSON.stringify(fin.vidro||[])));
+  const[saving,setSaving]=useState(false);
+  const totalFotos=useMemo(()=>{
+    const conta=(arr)=>arr.filter(p=>p.foto).length;
+    return conta(ajuste)+conta(martelinho)+conta(pintura)+conta(vidro);
+  },[ajuste,martelinho,pintura,vidro]);
+  const limiteAtingido=totalFotos>=MAX_FOTOS_INSPECAO;
+
+  const salvar=async()=>{
+    const problemasSemDescricao=[...ajuste,...martelinho,...pintura,...vidro].some(p=>!p.descricao||!p.descricao.trim());
+    if(problemasSemDescricao){alert('Preencha a descrição de todos os problemas antes de salvar.');return;}
+    setSaving(true);
+    try{
+      const now=Date.now();
+      const payload=stripUndefined({ajuste,martelinho,pintura,vidro});
+      const estimado=JSON.stringify(payload).length;
+      if(estimado>900000){
+        alert(`As fotos desta inspeção estão grandes demais (~${Math.round(estimado/1024)}KB). Remova algumas fotos e tente novamente.`);
+        setSaving(false);return;
+      }
+      await col('finalizacoes').doc(fin.id).update({
+        ajuste:payload.ajuste,martelinho:payload.martelinho,pintura:payload.pintura,vidro:payload.vidro,
+        historico:[...(fin.historico||[]),{acao:'Inspeção editada',usuario:loggedInUser.user,timestamp:now}],
+      });
+      onClose();
+    }catch(e){alert('Erro ao salvar: '+e.message);}
+    setSaving(false);
+  };
+
+  return(
+    <div style={{position:'fixed',inset:0,zIndex:650,background:'rgba(0,0,0,.9)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center',padding:16,overflowY:'auto'}}>
+      <div style={{background:'#fff',width:'100%',maxWidth:900,borderRadius:24,boxShadow:'0 40px 80px rgba(0,0,0,.5)',display:'flex',flexDirection:'column',margin:'auto',maxHeight:'92vh'}}>
+        <div style={{padding:'20px 28px',background:'var(--ink)',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
+          <div>
+            <h3 style={{margin:0,fontSize:18,fontWeight:800,color:'#fff'}}>Editar Inspeção — OS #{fin.os}</h3>
+            <p style={{margin:0,fontSize:9,color:'var(--red)',fontWeight:700,textTransform:'uppercase',marginTop:4}}>{fin.vehicleData?.modelo||''}</p>
+          </div>
+          <button onClick={onClose} style={{width:38,height:38,background:'rgba(255,255,255,.08)',border:'none',borderRadius:10,cursor:'pointer',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="x" size={20}/></button>
+        </div>
+        <div style={{padding:24,overflowY:'auto'}} className="scroll-y">
+          <div style={{background:limiteAtingido?'var(--red-light)':'var(--smoke)',border:`1px solid ${limiteAtingido?'#FFBDBD':'var(--border)'}`,borderRadius:12,padding:'10px 16px',marginBottom:16,display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <Icon name="camera" size={15} style={{color:limiteAtingido?'var(--red)':'var(--muted)'}}/>
+              <span style={{fontSize:10,fontWeight:800,textTransform:'uppercase',color:limiteAtingido?'var(--red)':'var(--muted)'}}>Fotos da inspeção: {totalFotos}/{MAX_FOTOS_INSPECAO}</span>
+            </div>
+            {limiteAtingido&&<span style={{fontSize:9,fontWeight:700,color:'var(--red)'}}>Limite atingido — remova uma foto para adicionar outra</span>}
+          </div>
+          <ProblemCategoryEditor title="Ajuste" icon="wrench" color="#F59E0B" items={ajuste} setItems={setAjuste} disabled={false} limiteAtingido={limiteAtingido}/>
+          <ProblemCategoryEditor title="Martelinho" icon="hammer" color="#DC1F1F" items={martelinho} setItems={setMartelinho} disabled={false} limiteAtingido={limiteAtingido}/>
+          <ProblemCategoryEditor title="Pintura" icon="paintbrush" color="#2563EB" items={pintura} setItems={setPintura} disabled={false} limiteAtingido={limiteAtingido}/>
+          <ProblemCategoryEditor title="Vidro" icon="square" color="#0EA5E9" items={vidro} setItems={setVidro} disabled={false} limiteAtingido={limiteAtingido}/>
+        </div>
+        <div style={{padding:'16px 24px',background:'var(--smoke)',borderTop:'1px solid var(--border)',display:'flex',justifyContent:'flex-end',gap:10,flexShrink:0}}>
+          <button onClick={onClose} className="btn-ghost">Cancelar</button>
+          <button onClick={salvar} disabled={saving} className="btn-primary" style={{minWidth:160}}>
+            {saving?<><Icon name="refresh-cw" size={14} className="spin"/> Salvando...</>:<><Icon name="save" size={14}/> Salvar Alterações</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
   const[search,setSearch]=useState('');
   const[subTab,setSubTab]=useState('pendentes');
-  const[confirmDelFin,setConfirmDelFin]=useState(null);
+ const[confirmDelFin,setConfirmDelFin]=useState(null);
   const[confirmDelProb,setConfirmDelProb]=useState(null);
   const[pdfConfirmFin,setPdfConfirmFin]=useState(null);
+  const[editandoFin,setEditandoFin]=useState(null);
 
   const podeVerTodos=isMaster||loggedInUser?.role==='comercial'||loggedInUser?.user==='Cleber.Zonta';
   const baseVisiveis=useMemo(()=>{
@@ -3451,7 +3519,7 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
   const countConcluidos=comStatus.filter(c=>c.concluida).length;
   const countPendentes=comStatus.filter(c=>!c.concluida).length;
 
-  const podeEditar=(fin)=>isMaster||fin.criadoPor===loggedInUser.user;
+  const podeEditar=(fin)=>isMaster||fin.criadoPor===loggedInUser.user||loggedInUser?.user==='Cleber.Zonta';
 
   const resolverPendencia=async(finId,categoria,itemId)=>{
     const fin=finalizacoes.find(f=>f.id===finId);if(!fin)return;
@@ -3549,9 +3617,18 @@ const rows=[[csvCell('OS'),csvCell('Chassi'),csvCell('Modelo'),csvCell('Ajustes'
         const categorias=[['ajuste','Ajuste','#F59E0B','wrench'],['martelinho','Martelinho','#DC1F1F','hammer'],['pintura','Pintura','#2563EB','paintbrush'],['vidro','Vidro','#0EA5E9','square']];
             const totalPend=['ajuste','martelinho','pintura','vidro'].reduce((a,c)=>a+(fin[c]||[]).filter(p=>p.status!=='Solucionado').length,0);
             const editar=podeEditar(fin);
-            const pecasItems=getPecasParaOS(fin.os,requests);
+           const pecasItems=getPecasParaOS(fin.os,requests);
             const pecasAtivas=pecasItems.filter(it=>!it.excedente);
             const pecasExc=pecasItems.filter(it=>it.excedente);
+            const pecasSolucionadoHeader=pecasAtivas.length===0||pecasAtivas.every(it=>it.status==='Concluído');
+            const inspecaoConcluida=totalPend===0&&pecasSolucionadoHeader;
+            const dataSolucao=(()=>{
+              if(!inspecaoConcluida)return null;
+              const times=[];
+              ['ajuste','martelinho','pintura','vidro'].forEach(cat=>(fin[cat]||[]).forEach(p=>{if(p.status==='Solucionado'&&p.resolvidoEm)times.push(p.resolvidoEm);}));
+              pecasAtivas.forEach(it=>{if(it.actualDeliveryDate)times.push(new Date(it.actualDeliveryDate+'T00:00:00').getTime());});
+              return times.length?Math.max(...times):fin.criadoEm;
+            })();
             return(
               <div key={fin.id} className="card" style={{borderLeft:`3px solid ${totalPend>0?'var(--red)':'#059669'}`}}>
                 <div style={{padding:'14px 16px',borderBottom:'1px solid var(--border)',background:'var(--smoke)',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
@@ -3559,12 +3636,15 @@ const rows=[[csvCell('OS'),csvCell('Chassi'),csvCell('Modelo'),csvCell('Ajustes'
                     <span style={{fontSize:14,fontWeight:800}}>OS #{fin.os}</span>
                     <span className="pill">{fin.unidade||'Unidade 1'}</span>
                     <span style={{fontSize:9,color:'var(--muted)',fontWeight:700,textTransform:'uppercase'}}>{fin.vehicleData?.modelo||'—'}</span>
+                    <span style={{fontSize:8,fontWeight:700,color:'var(--muted)',display:'inline-flex',alignItems:'center',gap:3}}><Icon name="calendar" size={10}/> Aberto: {fin.criadoEm?new Date(fin.criadoEm).toLocaleDateString('pt-BR'):'—'}</span>
+                    {inspecaoConcluida&&dataSolucao&&<span style={{fontSize:8,fontWeight:700,color:'#059669',display:'inline-flex',alignItems:'center',gap:3}}><Icon name="check-circle" size={10}/> Solucionado: {new Date(dataSolucao).toLocaleDateString('pt-BR')}</span>}
                    {podeVerTodos&&<span style={{fontSize:8,fontWeight:700,color:'var(--muted)'}}>por {fin.criadoPor}</span>}
                     {!editar&&<span className="badge" style={{background:'var(--muted)',color:'#fff'}}>Somente leitura</span>}
                   </div>
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
                     <span style={{fontSize:9,fontWeight:800,padding:'3px 10px',borderRadius:999,background:totalPend>0?'var(--red-light)':'#EDFAF3',color:totalPend>0?'var(--red)':'#059669',border:`1px solid ${totalPend>0?'#FFBDBD':'#AAE6C5'}`}}>{totalPend>0?`${totalPend} pendente(s)`:'Tudo solucionado'}</span>
                    <button onClick={()=>setPdfConfirmFin(fin)} style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',background:'#2563EB',color:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}><Icon name="file-down" size={12}/> PDF</button>
+                    {editar&&<button onClick={()=>setEditandoFin(fin)} style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',background:'#F59E0B',color:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}><Icon name="edit-3" size={12}/> Editar</button>}
                     {isMaster&&(
                       confirmDelFin===fin.id?(
                         <div style={{display:'flex',gap:5}}>
@@ -3688,7 +3768,11 @@ const rows=[[csvCell('OS'),csvCell('Chassi'),csvCell('Modelo'),csvCell('Ajustes'
               </div>
             </div>
           </div>
-        </div>,
+       </div>,
+        document.body
+      )}
+      {editandoFin&&ReactDOM.createPortal(
+        <EditarInspecaoModal fin={editandoFin} loggedInUser={loggedInUser} onClose={()=>setEditandoFin(null)}/>,
         document.body
       )}
     </>
