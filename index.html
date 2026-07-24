@@ -3640,6 +3640,9 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
   const[confirmDelProb,setConfirmDelProb]=useState(null);
   const[pdfConfirmFin,setPdfConfirmFin]=useState(null);
   const[editandoFin,setEditandoFin]=useState(null);
+  const[resolvendoPendencia,setResolvendoPendencia]=useState(null);
+  const[obsResolucao,setObsResolucao]=useState('');
+  const[salvandoResolucao,setSalvandoResolucao]=useState(false);
 
   const podeVerTodos=isMaster||loggedInUser?.role==='comercial'||loggedInUser?.user==='Cleber.Zonta';
   const baseVisiveis=useMemo(()=>{
@@ -3668,13 +3671,27 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
 
   const podeEditar=(fin)=>isMaster||fin.criadoPor===loggedInUser.user||loggedInUser?.user==='Cleber.Zonta';
 
-  const resolverPendencia=async(finId,categoria,itemId)=>{
+  const resolverPendencia=async(finId,categoria,itemId,observacao)=>{
     const fin=finalizacoes.find(f=>f.id===finId);if(!fin)return;
     const now=Date.now();
-    const newCat=(fin[categoria]||[]).map(p=>p.id===itemId?{...p,status:'Solucionado',resolvidoPor:loggedInUser.user,resolvidoEm:now}:p);
-    const novoHistorico=[...(fin.historico||[]),{acao:`Pendência resolvida (${categoria})`,usuario:loggedInUser.user,timestamp:now}];
+    const newCat=(fin[categoria]||[]).map(p=>p.id===itemId?{...p,status:'Solucionado',resolvidoPor:loggedInUser.user,resolvidoEm:now,obsResolucao:observacao||''}:p);
+    const novoHistorico=[...(fin.historico||[]),{acao:`Pendência resolvida (${categoria})${observacao?' — Obs: '+observacao:''}`,usuario:loggedInUser.user,timestamp:now}];
     try{await col('finalizacoes').doc(finId).update({[categoria]:stripUndefined(newCat),historico:stripUndefined(novoHistorico)});}
     catch(e){alert('Erro: '+e.message);}
+  };
+
+  const abrirResolucao=(finId,categoria,itemId,descricao)=>{
+    setResolvendoPendencia({finId,categoria,itemId,descricao});
+    setObsResolucao('');
+  };
+
+  const confirmarResolucao=async()=>{
+    if(!resolvendoPendencia)return;
+    setSalvandoResolucao(true);
+    await resolverPendencia(resolvendoPendencia.finId,resolvendoPendencia.categoria,resolvendoPendencia.itemId,obsResolucao.trim());
+    setSalvandoResolucao(false);
+    setResolvendoPendencia(null);
+    setObsResolucao('');
   };
 
   const cancelarSolucao=async(finId,categoria,itemId)=>{
@@ -3821,10 +3838,11 @@ const rows=[[csvCell('OS'),csvCell('Chassi'),csvCell('Modelo'),csvCell('Ajustes'
                               <div style={{flex:1,minWidth:0}}>
                                 <p style={{fontSize:10,fontWeight:600,margin:0,color:'var(--ink)'}}>{p.descricao||'(sem descrição)'}</p>
                                 <p style={{fontSize:8,color:'var(--muted)',fontWeight:600,margin:'2px 0 0'}}>Aberto em: {p.criadoEm?new Date(p.criadoEm).toLocaleString('pt-BR'):'—'}</p>
-                                {p.status==='Solucionado'&&<p style={{fontSize:8,color:'#059669',fontWeight:700,margin:'2px 0 0'}}>✓ Resolvido {p.resolvidoPor?`por ${p.resolvidoPor}`:''} {p.resolvidoEm?'em '+new Date(p.resolvidoEm).toLocaleString('pt-BR'):''}</p>}
+                               {p.status==='Solucionado'&&<p style={{fontSize:8,color:'#059669',fontWeight:700,margin:'2px 0 0'}}>✓ Resolvido {p.resolvidoPor?`por ${p.resolvidoPor}`:''} {p.resolvidoEm?'em '+new Date(p.resolvidoEm).toLocaleString('pt-BR'):''}</p>}
+                                {p.status==='Solucionado'&&p.obsResolucao&&<p style={{fontSize:8,color:'var(--muted)',fontWeight:600,margin:'2px 0 0',fontStyle:'italic'}}>Obs: {p.obsResolucao}</p>}
                               </div>
                               {p.status!=='Solucionado'&&editar&&(
-                                <button onClick={()=>resolverPendencia(fin.id,key,p.id)} style={{padding:'5px 12px',background:'var(--ink)',color:'#fff',border:'none',borderRadius:7,fontSize:8,fontWeight:800,textTransform:'uppercase',cursor:'pointer',flexShrink:0,fontFamily:'Plus Jakarta Sans,sans-serif'}}>Resolver Pendência</button>
+                                <button onClick={()=>abrirResolucao(fin.id,key,p.id,p.descricao)} style={{padding:'5px 12px',background:'var(--ink)',color:'#fff',border:'none',borderRadius:7,fontSize:8,fontWeight:800,textTransform:'uppercase',cursor:'pointer',flexShrink:0,fontFamily:'Plus Jakarta Sans,sans-serif'}}>Resolver Pendência</button>
                               )}
                               {p.status==='Solucionado'&&(
                                 <div style={{display:'flex',alignItems:'center',gap:6,flexShrink:0,flexWrap:'wrap'}}>
@@ -3920,6 +3938,42 @@ const rows=[[csvCell('OS'),csvCell('Chassi'),csvCell('Modelo'),csvCell('Ajustes'
       )}
       {editandoFin&&ReactDOM.createPortal(
         <EditarInspecaoModal fin={editandoFin} loggedInUser={loggedInUser} onClose={()=>setEditandoFin(null)}/>,
+        document.body
+      )}
+      {resolvendoPendencia&&ReactDOM.createPortal(
+        <div style={{position:'fixed',inset:0,zIndex:750,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}} className="fade-in">
+          <div style={{background:'#fff',borderRadius:24,overflow:'hidden',maxWidth:440,width:'100%',boxShadow:'0 40px 80px rgba(0,0,0,.4)'}}>
+            <div style={{background:'var(--ink)',padding:'24px 28px',borderBottom:'4px solid #059669',color:'#fff'}}>
+              <div style={{display:'flex',alignItems:'center',gap:12}}>
+                <div style={{width:44,height:44,background:'#059669',borderRadius:12,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="check-circle" size={20}/></div>
+                <div>
+                  <h3 style={{margin:0,fontSize:17,fontWeight:800}}>Resolver Pendência</h3>
+                  <p style={{margin:0,fontSize:9,color:'rgba(255,255,255,.5)',marginTop:2,textTransform:'uppercase',letterSpacing:'.06em'}}>Confirmar solução do problema</p>
+                </div>
+              </div>
+            </div>
+            <div style={{padding:24}}>
+              <div style={{background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:10,padding:'10px 14px',marginBottom:16}}>
+                <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',margin:'0 0 4px'}}>Problema</p>
+                <p style={{fontSize:12,fontWeight:700,margin:0,textTransform:'uppercase'}}>{resolvendoPendencia.descricao||'(sem descrição)'}</p>
+              </div>
+              <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',display:'block',marginBottom:6}}>Observação (opcional)</label>
+              <textarea
+                value={obsResolucao}
+                onChange={e=>setObsResolucao(sanitize(e.target.value))}
+                placeholder="Descreva como o problema foi resolvido, se desejar..."
+                className="input"
+                style={{minHeight:80,resize:'vertical',fontSize:12,fontWeight:500,marginBottom:20}}
+              />
+              <div style={{display:'flex',gap:10}}>
+                <button onClick={()=>{setResolvendoPendencia(null);setObsResolucao('');}} className="btn-ghost" style={{flex:1}} disabled={salvandoResolucao}>Cancelar</button>
+                <button onClick={confirmarResolucao} disabled={salvandoResolucao} className="btn-primary" style={{flex:2,background:'#059669'}}>
+                  {salvandoResolucao?<><Icon name="refresh-cw" size={14} className="spin"/> Salvando...</>:<><Icon name="check" size={14}/> Confirmar Resolução</>}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
         document.body
       )}
     </>
