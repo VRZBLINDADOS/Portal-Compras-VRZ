@@ -292,7 +292,24 @@ function mergeByOS(requests){
       }
     }
   });
-  return order;
+ return order;
+}
+
+// Consolida documentos de "requests" em pedidos reais — uma submissão grande
+// pode virar vários documentos (partes) no Firestore, e transferências de
+// doação criam documentos automáticos que não são pedidos de ninguém.
+// Esta função desfaz isso pra métricas de contagem (Análises, Resumo Reunião).
+function pedidosConsolidados(requests){
+  const grupos={};const ordem=[];
+  requests.forEach(r=>{
+    if(!r.timestamp)return;
+    if(r.items?.length>0&&r.items.every(it=>it.donatedTo))return; // cópia automática de doação
+    const key=r.loteId?`lote_${r.loteId}`:(r.parte?`${r.os}_${r.responsavel}_${r.totalPartes}_legacy`:r.id);
+    if(!grupos[key]){grupos[key]={...r,items:[]};ordem.push(key);}
+    grupos[key].items=[...grupos[key].items,...(r.items||[])];
+    if(!r.parte||r.parte===1)grupos[key].timestamp=r.timestamp;
+  });
+  return ordem.map(k=>grupos[k]);
 }
 
 // ── Icon ──────────────────────────────────────────────────────────────────
@@ -390,11 +407,11 @@ function MiniBar({data,color='#DC1F1F'}){
 // ── Finalização Analytics ─────────────────────────────────────────────────
 function FinalizacaoAnalyticsView({finalizacoes}){
   const CATS=[['ajuste','Ajuste','#F59E0B','wrench'],['martelinho','Martelinho','#DC1F1F','hammer'],['pintura','Pintura','#2563EB','paintbrush'],['vidro','Vidro','#0EA5E9','square']];
-  const stats=useMemo(()=>{
+const stats=useMemo(()=>{
     const ativas=(finalizacoes||[]).filter(f=>!f.arquivada);
     if(!ativas.length)return null;
     let totalProblemas=0,totalSolucionados=0;
-    const porCategoria={ajuste:{total:0,solucionado:0},martelinho:{total:0,solucionado:0},pintura:{total:0,solucionado:0},vidro:{total:0,solucionado:0}};
+    const porCategoria={ajuste:{total:0,solucionado:0,osComProblema:0},martelinho:{total:0,solucionado:0,osComProblema:0},pintura:{total:0,solucionado:0,osComProblema:0},vidro:{total:0,solucionado:0,osComProblema:0}};
     const reclamacoesMap={};
     const porModelo={};
     const temposResolucao=[];
@@ -406,6 +423,7 @@ function FinalizacaoAnalyticsView({finalizacoes}){
         const items=fin[key]||[];
         totalProblemas+=items.length;
         porCategoria[key].total+=items.length;
+        if(items.length>0)porCategoria[key].osComProblema++;
         porModelo[modelo][key]+=items.length;
         porModelo[modelo].total+=items.length;
         items.forEach(p=>{
@@ -421,6 +439,11 @@ function FinalizacaoAnalyticsView({finalizacoes}){
           }
         });
       });
+    });
+    CATS.forEach(([key])=>{
+      const c=porCategoria[key];
+      c.mediaPorOS=c.osComProblema>0?c.total/c.osComProblema:0;
+      c.mediaGeral=ativas.length>0?c.total/ativas.length:0;
     });
     const rankReclamacoes=Object.entries(reclamacoesMap).sort((a,b)=>b[1].count-a[1].count).slice(0,8);
     const rankModelos=Object.entries(porModelo).sort((a,b)=>b[1].total-a[1].total).slice(0,8);
@@ -481,6 +504,41 @@ function FinalizacaoAnalyticsView({finalizacoes}){
         </div>
       </div>
 
+      <div className="card" style={{padding:20,marginBottom:16}}>
+        <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:4}}>Frequência de Problemas por Carro</p>
+        <p style={{fontSize:9,color:'var(--muted)',marginBottom:16}}>Quantas vezes cada problema apareceu, em quantas OS's diferentes, e a média por carro</p>
+        <div style={{display:'flex',flexDirection:'column',gap:18}}>
+          {CATS.map(([key,label,color,icon])=>{
+            const c=stats.porCategoria[key];
+            const maxTotal=Math.max(...CATS.map(([k])=>stats.porCategoria[k].total),1);
+            const maxOS=Math.max(...CATS.map(([k])=>stats.porCategoria[k].osComProblema),1);
+            return(
+              <div key={key}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6,flexWrap:'wrap',gap:6}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <div style={{width:22,height:22,borderRadius:6,background:color,display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name={icon} size={12} style={{color:'#fff'}}/></div>
+                    <span style={{fontSize:11,fontWeight:700,textTransform:'uppercase'}}>{label}</span>
+                  </div>
+                  <span style={{fontSize:11,fontWeight:800,color:'var(--red)'}}>Média: {c.osComProblema>0?c.mediaPorOS.toFixed(2):'0'} por carro afetado</span>
+                </div>
+                <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{fontSize:8,fontWeight:700,color:'var(--muted)',width:120,flexShrink:0}}>Vezes que apareceu</span>
+                    <div className="progress-track" style={{flex:1}}><div className="progress-fill" style={{width:`${c.total/maxTotal*100}%`,background:color}}/></div>
+                    <span style={{fontSize:10,fontWeight:800,width:28,textAlign:'right',flexShrink:0}}>{c.total}</span>
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{fontSize:8,fontWeight:700,color:'var(--muted)',width:120,flexShrink:0}}>OS's afetadas</span>
+                    <div className="progress-track" style={{flex:1}}><div className="progress-fill" style={{width:`${c.osComProblema/maxOS*100}%`,background:'var(--ink)'}}/></div>
+                    <span style={{fontSize:10,fontWeight:800,width:28,textAlign:'right',flexShrink:0}}>{c.osComProblema}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="grid-2col" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
         <div className="card" style={{padding:20}}>
           <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:16}}>Reclamações Mais Comuns</p>
@@ -523,10 +581,11 @@ function FinalizacaoAnalyticsView({finalizacoes}){
 function DashboardView({requests}){
   const[tab,setTab]=useState('pecas');
   const{data:finalizacoes}=useFirestore('finalizacoes');
-  const stats=useMemo(()=>{
+ const stats=useMemo(()=>{
     if(!requests?.length)return null;
+    const pedidos=pedidosConsolidados(requests);
     const byOS={};
-    requests.forEach(r=>{const k=String(r.os||'').trim();if(k){if(!byOS[k])byOS[k]=[];byOS[k].push(r);}});
+    pedidos.forEach(r=>{const k=String(r.os||'').trim();if(k){if(!byOS[k])byOS[k]=[];byOS[k].push(r);}});
     const multi=Object.entries(byOS).filter(([,a])=>a.length>1);
     const totalAdd=multi.reduce((a,[,arr])=>a+(arr.length-1),0);
     const intervalos=[];
@@ -542,10 +601,10 @@ function DashboardView({requests}){
       else if(it.status==='Em Cotação')cotac++;
       else pend++;
     }));
-    const porSol={};requests.forEach(r=>{porSol[r.responsavel]=(porSol[r.responsavel]||0)+1;});
+    const porSol={};pedidos.forEach(r=>{porSol[r.responsavel]=(porSol[r.responsavel]||0)+1;});
     const rankSol=Object.entries(porSol).sort((a,b)=>b[1]-a[1]).slice(0,6);
     const diasSem=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];const porDia=[0,0,0,0,0,0,0];
-    requests.forEach(r=>porDia[new Date(r.timestamp).getDay()]++);
+    pedidos.forEach(r=>porDia[new Date(r.timestamp).getDay()]++);
     const pedDia=diasSem.map((l,i)=>({l,v:porDia[i]}));
     const agora=Date.now();
     const hoje=new Date();const diaSem=hoje.getDay();
@@ -556,14 +615,14 @@ function DashboardView({requests}){
     const semanas=Array.from({length:8},(_,i)=>{
       const ini=new Date(inicioSemanaAtual);ini.setDate(inicioSemanaAtual.getDate()-(7-i)*7);
       const fim=new Date(ini);fim.setDate(ini.getDate()+7);
-      const cnt=requests.filter(r=>r.timestamp>=ini.getTime()&&r.timestamp<fim.getTime()).length;
+      const cnt=pedidos.filter(r=>r.timestamp>=ini.getTime()&&r.timestamp<fim.getTime()).length;
       return{l:`${ini.getDate()}/${ini.getMonth()+1}`,v:cnt};
     });
-    const porMod={};requests.forEach(r=>{const m=r.vehicleData?.modelo||'N/D';porMod[m]=(porMod[m]||0)+1;});
+    const porMod={};pedidos.forEach(r=>{const m=r.vehicleData?.modelo||'N/D';porMod[m]=(porMod[m]||0)+1;});
     const rankMod=Object.entries(porMod).sort((a,b)=>b[1]-a[1]).slice(0,5);
     const taxa=totalIt>0?Math.round(conc/totalIt*100):0;
-    const porUnidade={};requests.forEach(r=>{const u=r.unidade||'Unidade 1';porUnidade[u]=(porUnidade[u]||0)+1;});
-    return{total:requests.length,osU:Object.keys(byOS).length,totalAdd,mediaAdd:parseFloat(mediaAdd),maxAdd,totalIt,pend,cotac,comprado,conc,doado,rankSol,pedDia,semanas,rankMod,taxa,porUnidade};
+    const porUnidade={};pedidos.forEach(r=>{const u=r.unidade||'Unidade 1';porUnidade[u]=(porUnidade[u]||0)+1;});
+    return{total:pedidos.length,osU:Object.keys(byOS).length,totalAdd,mediaAdd:parseFloat(mediaAdd),maxAdd,totalIt,pend,cotac,comprado,conc,doado,rankSol,pedDia,semanas,rankMod,taxa,porUnidade};
   },[requests]);
 
   const maxSol=stats?.rankSol[0]?.[1]||1,maxMod=stats?.rankMod[0]?.[1]||1;
@@ -1228,8 +1287,9 @@ const salvar=async()=>{
       if(items.length>LIMITE){
         const partes=[];
         for(let i=0;i<items.length;i+=LIMITE)partes.push(items.slice(i,i+LIMITE));
+        const loteId=String(Date.now())+Math.floor(Math.random()*99999);
         for(let p=0;p<partes.length;p++){
-          await col('requests').add({os,responsavel:loggedInUser.user,vehicleData:vehicle,unidade,items:partes[p],timestamp:Date.now()+(p*10),status:'Pendente',userId:user?.uid||'anon',parte:p+1,totalPartes:partes.length});
+          await col('requests').add({os,responsavel:loggedInUser.user,vehicleData:vehicle,unidade,items:partes[p],timestamp:Date.now()+(p*10),status:'Pendente',userId:user?.uid||'anon',parte:p+1,totalPartes:partes.length,loteId});
         }
       }else{
         await col('requests').add({os,responsavel:loggedInUser.user,vehicleData:vehicle,unidade,items,timestamp:Date.now(),status:'Pendente',userId:user?.uid||'anon'});
@@ -4224,24 +4284,16 @@ function ResumoReuniaoView({requests}){
     });
   }, [inicioPeriodo, numDias]);
 
-const dadosDia = useMemo(() => {
+
+  const dadosDia = useMemo(() => {
     const map = {};
     diasDoPeriodo.forEach(d => { map[d.date] = { ...d, pedidos: [], osSet: new Set() }; });
 
-    // Junta as "partes" do mesmo envio (mesma OS, timestamps muito próximos, diferença
-    // de até 10ms por parte) num único pedido — assim nenhuma peça das partes 2,3... se perde.
-    const grupos = {};
-    requests.forEach(r => {
-      if (!r.timestamp) return;
-      if (r.items && r.items.length > 0 && r.items.every(it => it.donatedTo)) return; // cópia automática de doação, não é pedido do usuário
-      const baseTs = r.parte ? r.timestamp - ((r.parte - 1) * 10) : r.timestamp;
-      const key = `${r.os}_${baseTs}`;
-      if (!grupos[key]) grupos[key] = { ...r, items: [] };
-      grupos[key].items = [...grupos[key].items, ...(r.items || [])];
-      if (!r.parte || r.parte === 1) grupos[key].timestamp = r.timestamp;
-    });
+    // Usa a mesma consolidação de partes/doações da aba Análises, pra bater 100% com ela.
+    const pedidos = pedidosConsolidados(requests);
 
-    Object.values(grupos).forEach(r => {
+    pedidos.forEach(r => {
+      if (!r.timestamp) return;
       const dt = new Date(r.timestamp);
       const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
       if (map[key]) {
