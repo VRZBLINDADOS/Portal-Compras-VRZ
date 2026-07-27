@@ -405,7 +405,7 @@ function MiniBar({data,color='#DC1F1F'}){
 }
 
 // ── Finalização Analytics ─────────────────────────────────────────────────
-function FinalizacaoAnalyticsView({finalizacoes}){
+function FinalizacaoAnalyticsView({finalizacoes,requests}){
   const CATS=[['ajuste','Ajuste','#F59E0B','wrench'],['martelinho','Martelinho','#DC1F1F','hammer'],['pintura','Pintura','#2563EB','paintbrush'],['vidro','Vidro','#0EA5E9','square']];
 const stats=useMemo(()=>{
     const ativas=(finalizacoes||[]).filter(f=>!f.arquivada);
@@ -414,14 +414,18 @@ const stats=useMemo(()=>{
     const porCategoria={ajuste:{total:0,solucionado:0,osComProblema:0},martelinho:{total:0,solucionado:0,osComProblema:0},pintura:{total:0,solucionado:0,osComProblema:0},vidro:{total:0,solucionado:0,osComProblema:0}};
     const reclamacoesMap={};
     const porModelo={};
-    const temposResolucao=[];
+    const temposResolucaoInspecao=[]; // dias da abertura até TODOS os problemas + peças resolvidos
+    let inspecoesSolucionadas=0,inspecoesAbertas=0;
+    let problemasAbertasTotal=0,problemasAbertasSolucionados=0;
     ativas.forEach(fin=>{
       const modelo=fin.vehicleData?.modelo||'N/D';
       if(!porModelo[modelo])porModelo[modelo]={ajuste:0,martelinho:0,pintura:0,vidro:0,total:0,inspecoes:0};
       porModelo[modelo].inspecoes++;
+      let problemasDaInspecao=0,solucionadosDaInspecao=0,ultimaResolucao=null;
       CATS.forEach(([key])=>{
         const items=fin[key]||[];
         totalProblemas+=items.length;
+        problemasDaInspecao+=items.length;
         porCategoria[key].total+=items.length;
         if(items.length>0)porCategoria[key].osComProblema++;
         porModelo[modelo][key]+=items.length;
@@ -429,8 +433,9 @@ const stats=useMemo(()=>{
         items.forEach(p=>{
           if(p.status==='Solucionado'){
             totalSolucionados++;
+            solucionadosDaInspecao++;
             porCategoria[key].solucionado++;
-            if(p.resolvidoEm&&p.criadoEm)temposResolucao.push((p.resolvidoEm-p.criadoEm)/86400000);
+            if(p.resolvidoEm&&(!ultimaResolucao||p.resolvidoEm>ultimaResolucao))ultimaResolucao=p.resolvidoEm;
           }
           const desc=(p.descricao||'').trim().toUpperCase();
           if(desc){
@@ -439,6 +444,25 @@ const stats=useMemo(()=>{
           }
         });
       });
+      // Peças vinculadas à OS também precisam estar concluídas para a inspeção contar como solucionada
+      const pecasItems=requests?getPecasParaOS(fin.os,requests):[];
+      const pecasAtivas=pecasItems.filter(it=>!it.excedente);
+      const pecasSolucionadas=pecasAtivas.length===0||pecasAtivas.every(it=>it.status==='Concluído');
+      pecasAtivas.forEach(it=>{
+        if(it.actualDeliveryDate){
+          const t=new Date(it.actualDeliveryDate+'T00:00:00').getTime();
+          if(!ultimaResolucao||t>ultimaResolucao)ultimaResolucao=t;
+        }
+      });
+      const inspecaoConcluida=problemasDaInspecao===solucionadosDaInspecao&&pecasSolucionadas;
+      if(inspecaoConcluida){
+        inspecoesSolucionadas++;
+        if(fin.criadoEm&&ultimaResolucao)temposResolucaoInspecao.push((ultimaResolucao-fin.criadoEm)/86400000);
+      }else{
+        inspecoesAbertas++;
+        problemasAbertasTotal+=problemasDaInspecao;
+        problemasAbertasSolucionados+=solucionadosDaInspecao;
+      }
     });
     CATS.forEach(([key])=>{
       const c=porCategoria[key];
@@ -447,11 +471,12 @@ const stats=useMemo(()=>{
     });
     const rankReclamacoes=Object.entries(reclamacoesMap).sort((a,b)=>b[1].count-a[1].count).slice(0,8);
     const rankModelos=Object.entries(porModelo).sort((a,b)=>b[1].total-a[1].total).slice(0,8);
-    const taxaResolucao=totalProblemas>0?Math.round(totalSolucionados/totalProblemas*100):0;
+    const taxaResolucaoGeral=totalProblemas>0?Math.round(totalSolucionados/totalProblemas*100):0;
+    const taxaResolucaoAbertas=problemasAbertasTotal>0?Math.round(problemasAbertasSolucionados/problemasAbertasTotal*100):0;
     const mediaProblemasPorInspecao=(totalProblemas/ativas.length).toFixed(1);
-    const tempoMedioResolucao=temposResolucao.length?(temposResolucao.reduce((a,b)=>a+b,0)/temposResolucao.length).toFixed(1):0;
-    return{totalInspecoes:ativas.length,totalProblemas,totalSolucionados,porCategoria,rankReclamacoes,rankModelos,taxaResolucao,mediaProblemasPorInspecao,tempoMedioResolucao};
-  },[finalizacoes]);
+    const tempoMedioResolucaoInspecao=temposResolucaoInspecao.length?(temposResolucaoInspecao.reduce((a,b)=>a+b,0)/temposResolucaoInspecao.length).toFixed(1):0;
+    return{totalInspecoes:ativas.length,inspecoesSolucionadas,inspecoesAbertas,totalProblemas,totalSolucionados,porCategoria,rankReclamacoes,rankModelos,taxaResolucaoGeral,taxaResolucaoAbertas,mediaProblemasPorInspecao,tempoMedioResolucaoInspecao};
+  },[finalizacoes,requests]);
 
   if(!stats)return(
     <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'80px 20px',textAlign:'center'}}>
@@ -468,14 +493,15 @@ const stats=useMemo(()=>{
     <div className="fade-in">
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:12,marginBottom:16}}>
         {[
-          {label:'Inspeções Ativas',v:stats.totalInspecoes,sub:'não arquivadas',icon:'clipboard-check',dark:true},
-          {label:'Total de Problemas',v:stats.totalProblemas,sub:`${stats.totalSolucionados} solucionados`,icon:'alert-triangle',red:true},
-          {label:'Taxa de Resolução',v:stats.taxaResolucao+'%',sub:`${stats.totalSolucionados}/${stats.totalProblemas}`,icon:'check-circle'},
+          {label:'Total de Inspeções',v:stats.totalInspecoes,sub:'inspeções ativas (não arquivadas)',icon:'clipboard-check',dark:true},
+          {label:'Solucionadas',v:stats.inspecoesSolucionadas,sub:'100% dos problemas resolvidos',icon:'check-circle',green:true},
+          {label:'Em Aberto',v:stats.inspecoesAbertas,sub:'ainda com pendências',icon:'alert-triangle',red:true},
+          {label:'Tempo Médio até Solução Total',v:stats.tempoMedioResolucaoInspecao+'d',sub:'da abertura até tudo resolvido',icon:'clock'},
+          {label:'Taxa de Resolução (Abertas)',v:stats.taxaResolucaoAbertas+'%',sub:'dos problemas já resolvidos',icon:'trending-up'},
           {label:'Média por Veículo',v:stats.mediaProblemasPorInspecao,sub:'problemas / inspeção',icon:'car'},
-          {label:'Tempo Médio de Solução',v:stats.tempoMedioResolucao+'d',sub:'dias até resolver',icon:'clock'},
         ].map((k,i)=>(
-          <div key={i} style={{background:k.dark?'var(--ink)':k.red?'var(--red)':'var(--smoke)',color:k.dark||k.red?'#fff':'var(--ink)',borderRadius:14,padding:20,border:(!k.dark&&!k.red)?'1.5px solid var(--border)':'none'}}>
-            <div style={{width:32,height:32,borderRadius:8,background:k.dark||k.red?'rgba(255,255,255,.12)':'var(--border)',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:14}}><Icon name={k.icon} size={16}/></div>
+          <div key={i} style={{background:k.dark?'var(--ink)':k.red?'var(--red)':k.green?'#059669':'var(--smoke)',color:k.dark||k.red||k.green?'#fff':'var(--ink)',borderRadius:14,padding:20,border:(!k.dark&&!k.red&&!k.green)?'1.5px solid var(--border)':'none'}}>
+            <div style={{width:32,height:32,borderRadius:8,background:k.dark||k.red||k.green?'rgba(255,255,255,.12)':'var(--border)',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:14}}><Icon name={k.icon} size={16}/></div>
             <p style={{fontSize:32,fontWeight:800,lineHeight:1,margin:0,letterSpacing:'-.02em'}}>{k.v}</p>
             <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.08em',marginTop:6,opacity:.7}}>{k.label}</p>
             <p style={{fontSize:8,fontWeight:500,marginTop:2,opacity:.4}}>{k.sub}</p>
@@ -506,7 +532,7 @@ const stats=useMemo(()=>{
 
       <div className="card" style={{padding:20,marginBottom:16}}>
         <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:4}}>Frequência de Problemas por Carro</p>
-        <p style={{fontSize:9,color:'var(--muted)',marginBottom:16}}>Quantas vezes cada problema apareceu, em quantas OS's diferentes, e a média por carro</p>
+        <p style={{fontSize:9,color:'var(--muted)',marginBottom:16}}>Quantas vezes cada problema apareceu, em quantas OS's diferentes, e a média por inspeção (considerando todas as inspeções ativas)</p>
         <div style={{display:'flex',flexDirection:'column',gap:18}}>
           {CATS.map(([key,label,color,icon])=>{
             const c=stats.porCategoria[key];
@@ -519,7 +545,7 @@ const stats=useMemo(()=>{
                     <div style={{width:22,height:22,borderRadius:6,background:color,display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name={icon} size={12} style={{color:'#fff'}}/></div>
                     <span style={{fontSize:11,fontWeight:700,textTransform:'uppercase'}}>{label}</span>
                   </div>
-                  <span style={{fontSize:11,fontWeight:800,color:'var(--red)'}}>Média: {c.osComProblema>0?c.mediaPorOS.toFixed(2):'0'} por carro afetado</span>
+                 <span style={{fontSize:11,fontWeight:800,color:'var(--red)'}}>Média: {c.mediaGeral.toFixed(2)} por inspeção</span>
                 </div>
                 <div style={{display:'flex',flexDirection:'column',gap:5}}>
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
@@ -733,7 +759,7 @@ function DashboardView({requests}){
         </>
       ))}
 
-      {tab==='finalizacao'&&<FinalizacaoAnalyticsView finalizacoes={finalizacoes}/>}
+      {tab==='finalizacao'&&<FinalizacaoAnalyticsView finalizacoes={finalizacoes} requests={requests}/>}
     </div>
   );
 }
@@ -4343,7 +4369,7 @@ const dadosCompra = useMemo(() => {
   const maxValDia = Math.max(...dadosCompra.dias.map(d => d.valor), 1);
 
   // Helper para renderizar gráfico estilo "Diretoria"
-  const renderChart = (canvas, data, maxValue, type) => {
+  const renderChart = (canvas, data, maxValue, type, sempreMostrarRotulos) => {
     if (!canvas) return;
    const ctx = canvas.getContext('2d');
     const dpr = Math.max(window.devicePixelRatio || 1, 2);
@@ -4443,9 +4469,8 @@ const dadosCompra = useMemo(() => {
           ctx.fillText(vStr, x + bw / 2, barY - 8);
         }
       }
-
-      // X-axis Labels - Mostrar apenas alguns no mensal para não poluir
-   if (n <= 15 || i % Math.ceil(n/10) === 0 || i === n - 1) {
+// X-axis Labels - semanal/quinzenal sempre mostram todas; mensal só mostra algumas para não poluir
+   if (sempreMostrarRotulos || n <= 15 || i % Math.ceil(n/10) === 0 || i === n - 1) {
         ctx.fillStyle = '#000';
         ctx.font = 'bold 10px Plus Jakarta Sans';
         ctx.textAlign = 'center';
@@ -4457,8 +4482,8 @@ const dadosCompra = useMemo(() => {
         ctx.fillText(`${dtParts[2]}/${dtParts[1]}`, x + bw / 2, displayH - 57);
       }
 
-   // Rótulo abaixo da barra: itens + OS's que geraram o valor (gráfico de compras) ou peças + OS's (gráfico de pedidos)
-    if ((n <= 15 || diaSelecionado?.date === d.date) && (count > 0 || val > 0)) {
+  // Rótulo abaixo da barra: itens + OS's que geraram o valor (gráfico de compras) ou peças + OS's (gráfico de pedidos)
+    if ((sempreMostrarRotulos || n <= 15 || diaSelecionado?.date === d.date) && (count > 0 || val > 0)) {
         ctx.fillStyle = '#DC1F1F';
         ctx.font = 'bold 9px Plus Jakarta Sans';
         ctx.textAlign = 'center';
@@ -4495,10 +4520,11 @@ const dadosCompra = useMemo(() => {
   const refBar1 = useRef(null);
   const refBar2 = useRef(null);
 
-  useEffect(() => {
+ useEffect(() => {
     const desenhar = () => {
-      renderChart(refBar1.current, dadosDia, maxPedDia, 'pedidos');
-      renderChart(refBar2.current, dadosCompra.dias, maxValDia, 'valor');
+      const sempreMostrarRotulos = periodo !== 'mensal';
+      renderChart(refBar1.current, dadosDia, maxPedDia, 'pedidos', sempreMostrarRotulos);
+      renderChart(refBar2.current, dadosCompra.dias, maxValDia, 'valor', sempreMostrarRotulos);
     };
     desenhar();
     window.addEventListener('resize', desenhar);
