@@ -4408,7 +4408,7 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
           csvCellRR(r.os),
           csvCellRR(it.description || '(sem descrição)'),
           csvCellRR(it.quantity || 1),
-          csvCellRR(parsePrice(it.price).toLocaleString('pt-BR', { minimumFractionDigits: 2 })),
+          csvCellRR(parsePrice(it.price).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })),
           csvCellRR(it.supplier || '-'),
           csvCellRR(it.boughtAt),
           csvCellRR(excluido ? 'NÃO' : 'SIM'),
