@@ -4335,9 +4335,41 @@ function ResumoReuniaoView({requests}){
  const totalPecasPeriodo = dadosDia.reduce((a, d) => a + d.pedidos.reduce((s, p) => s + (p.items?.length || 0), 0), 0);
 const osUnicasPeriodo = new Set(dadosDia.flatMap(d => Array.from(d.osSet))).size;
 const mediaPorCarro = osUnicasPeriodo > 0 ? (totalPecasPeriodo / osUnicasPeriodo).toFixed(1) : '0';
-  const maxPedDia = Math.max(...dadosDia.map(d => d.pedidos.reduce((s, p) => s + (p.items?.length || 0), 0)), 1);
+const maxPedDia = Math.max(...dadosDia.map(d => d.pedidos.reduce((s, p) => s + (p.items?.length || 0), 0)), 1);
 
-
+  const exportarAuditoriaPedidos = () => {
+    const csvCellP = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+    const rows = [[csvCellP('Doc ID'), csvCellP('OS'), csvCellP('Data/Hora Envio'), csvCellP('Solicitante'), csvCellP('Peças no Documento'), csvCellP('Descrição das Peças'), csvCellP('Grupo de Consolidação'), csvCellP('Incluído no Gráfico?'), csvCellP('Motivo')].join(';')];
+    requests.forEach(r => {
+      if (!r.timestamp) return;
+      const dt = new Date(r.timestamp);
+      if (dt < inicioPeriodo || dt > fimPeriodo) return;
+      const todasDoadas = r.items?.length > 0 && r.items.every(it => it.donatedTo);
+      const key = r.loteId ? `lote_${r.loteId}` : (r.parte ? `${r.os}_${r.responsavel}_${r.totalPartes}_legacy` : r.id);
+      const descItens = (r.items || []).map(it => `${it.quantity}x ${it.description || '(sem descrição)'}`).join(' | ') || '—';
+      rows.push([
+        csvCellP(r.id),
+        csvCellP(r.os),
+        csvCellP(dt.toLocaleString('pt-BR')),
+        csvCellP(r.responsavel || '—'),
+        csvCellP(r.items?.length || 0),
+        csvCellP(descItens),
+        csvCellP(key),
+        csvCellP(todasDoadas ? 'NÃO' : 'SIM'),
+        csvCellP(todasDoadas ? 'Cópia automática de doação (100% dos itens são donatedTo)' : '-'),
+      ].join(';'));
+    });
+    rows.push('');
+    rows.push([csvCellP('GERADO EM'), csvCellP(new Date().toLocaleString('pt-BR'))].join(';'));
+    rows.push([csvCellP('PERÍODO'), csvCellP(`${inicioPeriodo.toLocaleDateString('pt-BR')} a ${fimPeriodo.toLocaleDateString('pt-BR')}`)].join(';'));
+    rows.push([csvCellP('TOTAL DE PEÇAS CALCULADO PELO GRÁFICO'), csvCellP(totalPecasPeriodo)].join(';'));
+    rows.push([csvCellP('TOTAL DE OS ÚNICAS CALCULADO PELO GRÁFICO'), csvCellP(osUnicasPeriodo)].join(';'));
+    const blob = new Blob(['\uFEFF' + rows.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `Auditoria_Pecas_${inicioPeriodo.toLocaleDateString('pt-BR').replace(/\//g, '-')}_a_${fimPeriodo.toLocaleDateString('pt-BR').replace(/\//g, '-')}.csv`;
+    a.click();
+  };
 
 const dadosCompra = useMemo(() => {
     const map = {};
@@ -4363,6 +4395,37 @@ const dadosCompra = useMemo(() => {
     return { dias, totalItens, osUnicas: osComCompra.size, totalValor, mediaValorOS };
   }, [requests, diasDoPeriodo]);
 
+const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  const exportarAuditoriaCompras = () => {
+    const rows = [[csvCellRR('OS'), csvCellRR('Peça'), csvCellRR('Qtd'), csvCellRR('Valor'), csvCellRR('Fornecedor'), csvCellRR('Data Compra'), csvCellRR('Incluído no Gráfico?'), csvCellRR('Motivo')].join(';')];
+    requests.forEach(r => {
+      (r.items || []).forEach(it => {
+        if (!it.boughtAt) return;
+        const dt = new Date(String(it.boughtAt).trim().slice(0, 10) + 'T00:00:00');
+        if (dt < inicioPeriodo || dt > fimPeriodo) return;
+        const excluido = !!it.donatedTo;
+        rows.push([
+          csvCellRR(r.os),
+          csvCellRR(it.description || '(sem descrição)'),
+          csvCellRR(it.quantity || 1),
+          csvCellRR(parsePrice(it.price).toLocaleString('pt-BR', { minimumFractionDigits: 2 })),
+          csvCellRR(it.supplier || '-'),
+          csvCellRR(it.boughtAt),
+          csvCellRR(excluido ? 'NÃO' : 'SIM'),
+          csvCellRR(excluido ? `Cópia de doação (transferido para OS ${it.donatedTo})` : '-'),
+        ].join(';'));
+      });
+    });
+    rows.push('');
+    rows.push([csvCellRR('GERADO EM'), csvCellRR(new Date().toLocaleString('pt-BR'))].join(';'));
+    rows.push([csvCellRR('PERÍODO'), csvCellRR(`${inicioPeriodo.toLocaleDateString('pt-BR')} a ${fimPeriodo.toLocaleDateString('pt-BR')}`)].join(';'));
+    rows.push([csvCellRR('TOTAL CALCULADO PELO GRÁFICO'), csvCellRR(fmtBRL(dadosCompra.totalValor))].join(';'));
+    const blob = new Blob(['\uFEFF' + rows.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `Auditoria_Compras_${inicioPeriodo.toLocaleDateString('pt-BR').replace(/\//g, '-')}_a_${fimPeriodo.toLocaleDateString('pt-BR').replace(/\//g, '-')}.csv`;
+    a.click();
+  };
   const maxValDia = Math.max(...dadosCompra.dias.map(d => d.valor), 1);
 
   // Helper para renderizar gráfico estilo "Diretoria"
@@ -4615,16 +4678,21 @@ const dadosCompra = useMemo(() => {
         ))}
       </div>
 
-      {/* Gráfico 1: Pedidos */}
+     {/* Gráfico 1: Pedidos */}
       <div className="card" style={{ padding: 24, marginBottom: 16 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 10 }}>
           <div>
-         <p style={{ fontSize: 8, fontWeight: 800, textTransform: 'uppercase', color: 'var(--red)', margin: '0 0 4px' }}>Peças por dia</p>
+            <p style={{ fontSize: 8, fontWeight: 800, textTransform: 'uppercase', color: 'var(--red)', margin: '0 0 4px' }}>Peças por dia</p>
             <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Volume de Requisições</h3>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 12, height: 12, background: '#DC1F1F', borderRadius: 3 }} />
-            <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: '#6B7280' }}>Peças (Un.)</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <button onClick={exportarAuditoriaPedidos} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'var(--ink)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 9, fontWeight: 800, textTransform: 'uppercase', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans,sans-serif' }}>
+              <Icon name="shield-check" size={13} /> Auditoria
+            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ width: 12, height: 12, background: '#DC1F1F', borderRadius: 3 }} />
+              <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: '#6B7280' }}>Peças (Un.)</span>
+            </div>
           </div>
         </div>
         <div style={{ overflowX: 'auto' }}>
@@ -4632,16 +4700,21 @@ const dadosCompra = useMemo(() => {
         </div>
       </div>
 
-      {/* Gráfico 2: Compras */}
+     {/* Gráfico 2: Compras */}
       <div className="card" style={{ padding: 24 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 10 }}>
           <div>
             <p style={{ fontSize: 8, fontWeight: 800, textTransform: 'uppercase', color: 'var(--red)', margin: '0 0 4px' }}>Valor comprado por dia</p>
             <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Valor Gasto em Peças</h3>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 12, height: 12, background: '#DC1F1F', borderRadius: 3 }} />
-            <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: '#6B7280' }}>Valor Comprado (R$)</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <button onClick={exportarAuditoriaCompras} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'var(--ink)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 9, fontWeight: 800, textTransform: 'uppercase', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans,sans-serif' }}>
+              <Icon name="shield-check" size={13} /> Auditoria
+            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{ width: 12, height: 12, background: '#DC1F1F', borderRadius: 3 }} />
+              <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: '#6B7280' }}>Valor Comprado (R$)</span>
+            </div>
           </div>
         </div>
         <div style={{ overflowX: 'auto' }}>
