@@ -928,7 +928,7 @@ function DonorSystem({requests,vehicles,loggedInUser}){
   }
   delete base.statusOriginal;delete base.receivedFrom;delete base.donatedTo;
   const novoStatus=jaComprado?(orig.status==='Comprado'?'Comprado':'Em Cotação'):'Pendente';
-  return{...base,id:String(Date.now())+String(Math.floor(Math.random()*9999)),status:novoStatus,donatedTo:targetOS};
+  return{...base,id:String(Date.now())+String(Math.floor(Math.random()*9999)),status:novoStatus,donatedTo:targetOS,duplicataDeDoacao:jaComprado||undefined};
 }).filter(Boolean);
       const doadoraDocs=requests.filter(r=>String(r.os).trim()===sourceOS.trim());
      // Comprime fotos dos itens transferidos antes de salvar na doadora
@@ -4378,7 +4378,7 @@ const dadosCompra = useMemo(() => {
     requests.forEach(r => {
       (r.items || []).forEach(it => {
         if (!it.boughtAt) return;
-        if (it.donatedTo) return; // cópia gerada por transferência de doação — já contada na OS receptora original
+       if (it.duplicataDeDoacao) return; // só exclui se a compra já existia ANTES da doação (duplicata real)
         const dateKey = String(it.boughtAt).trim().slice(0, 10);
         if (map[dateKey]) {
           const preco = parsePrice(it.price);
@@ -4403,7 +4403,7 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
         if (!it.boughtAt) return;
         const dt = new Date(String(it.boughtAt).trim().slice(0, 10) + 'T00:00:00');
         if (dt < inicioPeriodo || dt > fimPeriodo) return;
-        const excluido = !!it.donatedTo;
+        const excluido = !!it.duplicataDeDoacao;
         rows.push([
           csvCellRR(r.os),
           csvCellRR(it.description || '(sem descrição)'),
