@@ -4342,14 +4342,11 @@ const mediaPorCarro = osUnicasPeriodo > 0 ? (totalPecasPeriodo / osUnicasPeriodo
 const dadosCompra = useMemo(() => {
     const map = {};
     diasDoPeriodo.forEach(d => { map[d.date] = { ...d, itens: [], valor: 0, osSet: new Set() }; });
-    const osComCompra = new Set();
-    const vistos = new Set(); // evita contar a mesma compra 2x quando ela foi duplicada por uma doação
+   const osComCompra = new Set();
     requests.forEach(r => {
       (r.items || []).forEach(it => {
         if (!it.boughtAt) return;
-        const chave = `${it.description}|${it.price}|${it.supplier}|${it.boughtAt}`;
-        if (vistos.has(chave)) return;
-        vistos.add(chave);
+        if (it.donatedTo) return; // cópia gerada por transferência de doação — já contada na OS receptora original
         const dateKey = String(it.boughtAt).trim().slice(0, 10);
         if (map[dateKey]) {
           const preco = parsePrice(it.price);
@@ -4459,7 +4456,7 @@ const dadosCompra = useMemo(() => {
           vStr = val;
         }
         // No mensal, rotacionar se necessário ou diminuir fonte
-        if (n > 15) {
+      if (periodo === 'mensal') {
           ctx.save();
           ctx.translate(x + bw / 2, barY - 12);
           ctx.rotate(-Math.PI / 4);
@@ -4603,8 +4600,8 @@ const dadosCompra = useMemo(() => {
       {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10, marginBottom: 24 }}>
         {[
-         { label: 'Pedidos no período', v: totalPecasPeriodo, sub: `${osUnicasPeriodo} OS's no período`, icon: 'clipboard-list', dark: true },
-          { label: 'Média por veículo', v: mediaPorCarro, sub: 'pedidos / carro', icon: 'car', red: true },
+         { label: 'Peças no período', v: totalPecasPeriodo, sub: `${osUnicasPeriodo} OS's no período`, icon: 'clipboard-list', dark: true },
+          { label: 'Média por veículo', v: mediaPorCarro, sub: 'peças / carro', icon: 'car', red: true },
           { label: 'Itens comprados', v: dadosCompra.totalItens, sub: `${dadosCompra.osUnicas} OS com compra`, icon: 'shopping-bag' },
           { label: 'Valor médio / OS', v: dadosCompra.mediaValorOS > 0 ? fmtBRL(dadosCompra.mediaValorOS) : '—', sub: 'no período', icon: 'trending-up' },
           { label: 'Total gasto', v: dadosCompra.totalValor > 0 ? fmtBRL(dadosCompra.totalValor) : '—', sub: 'em compras', icon: 'banknote' },
@@ -4622,12 +4619,12 @@ const dadosCompra = useMemo(() => {
       <div className="card" style={{ padding: 24, marginBottom: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
           <div>
-            <p style={{ fontSize: 8, fontWeight: 800, textTransform: 'uppercase', color: 'var(--red)', margin: '0 0 4px' }}>Pedidos por dia</p>
+         <p style={{ fontSize: 8, fontWeight: 800, textTransform: 'uppercase', color: 'var(--red)', margin: '0 0 4px' }}>Peças por dia</p>
             <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Volume de Requisições</h3>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ width: 12, height: 12, background: '#DC1F1F', borderRadius: 3 }} />
-            <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: '#6B7280' }}>Pedidos (Un.)</span>
+            <span style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', color: '#6B7280' }}>Peças (Un.)</span>
           </div>
         </div>
         <div style={{ overflowX: 'auto' }}>
