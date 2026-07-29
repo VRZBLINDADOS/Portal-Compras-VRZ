@@ -312,6 +312,19 @@ function pedidosConsolidados(requests){
   return ordem.map(k=>grupos[k]);
 }
 
+// ── Estoque — utilitários ───────────────────────────────────────────────
+function normEstoqueTxt(s){
+  return String(s||'').trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,60);
+}
+function estoqueDocId(fabricante,modelo,descricao){
+  const f=normEstoqueTxt(fabricante)||'semfab';
+  const m=normEstoqueTxt(modelo)||'semmodelo';
+  const d=normEstoqueTxt(descricao)||'sempeca';
+  return `${f}__${m}__${d}`;
+}
+
 // ── Icon ──────────────────────────────────────────────────────────────────
 function Icon({name,size=18,className=''}){
   const ref=useRef(null);
@@ -2153,11 +2166,12 @@ function StorageView({requests,loggedInUser}){
 }
 
 // ── EditingModal — estado 100% local, salva APENAS ao clicar Salvar ────────
-function EditingModal({req,onClose,onSave}){
+function EditingModal({req,onClose,onSave,estoque,isMaster,loggedInUser}){
   // Copia profunda dos items para estado local — nunca toca no Firestore enquanto digita
   const[localItems,setLocalItems]=useState(()=>JSON.parse(JSON.stringify(req.items||[])));
   const[saving,setSaving]=useState(false);
   const[confirmDeleteIdx,setConfirmDeleteIdx]=useState(null);
+  const[baixaEstoqueOpen,setBaixaEstoqueOpen]=useState(false);
   const deleteItem=(idx)=>{
     if(localItems.length<=1){alert('O pedido precisa ter pelo menos 1 peça.');return;}
     setConfirmDeleteIdx(idx);
@@ -2368,7 +2382,12 @@ function EditingModal({req,onClose,onSave}){
           <p style={{fontSize:8,color:'var(--muted)',fontWeight:600,fontStyle:'italic',margin:0}}>
             Preencha Valor + Fornecedor + Prazo → Em Cotação &nbsp;|&nbsp; "Já foi comprado?" → Comprado &nbsp;|&nbsp; Data de Entrega Real → Concluído
           </p>
-          <div style={{display:'flex',gap:10}}>
+         <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+            {isMaster&&(
+              <button onClick={()=>setBaixaEstoqueOpen(true)} style={{display:'flex',alignItems:'center',gap:6,padding:'11px 16px',background:'#7C3AED',color:'#fff',border:'none',borderRadius:10,fontSize:10,fontWeight:800,textTransform:'uppercase',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
+                <Icon name="minus-circle" size={14}/> Baixa Estoque
+              </button>
+            )}
             <button onClick={onClose} className="btn-ghost" style={{padding:'11px 20px'}}>Cancelar</button>
             <button onClick={handleSave} disabled={saving} className="btn-primary" style={{padding:'11px 28px',minWidth:160}}>
               {saving?<><Icon name="refresh-cw" size={14} className="spin"/> Salvando...</>:<><Icon name="save" size={14}/> Salvar alterações</>}
@@ -2376,6 +2395,7 @@ function EditingModal({req,onClose,onSave}){
           </div>
         </div>
       </div>
+      {baixaEstoqueOpen&&isMaster&&<BaixaEstoqueOSModal req={req} estoque={estoque||[]} loggedInUser={loggedInUser} onClose={()=>setBaixaEstoqueOpen(false)}/>}
     </div>
   );
 }
@@ -4826,6 +4846,489 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
   );
 }
 
+// ── Estoque ────────────────────────────────────────────────────────────────
+function MovimentoEstoqueModal({item,tipo,requests,onClose,loggedInUser}){
+  const[quantidade,setQuantidade]=useState('');
+  const[osInput,setOsInput]=useState('');
+  const[saving,setSaving]=useState(false);
+  const isBaixa=tipo==='baixa';
+
+  const osEncontrada=useMemo(()=>{
+    if(!isBaixa||!osInput.trim())return null;
+    return requests?.filter(r=>String(r.os).trim()===osInput.trim())||[];
+  },[requests,osInput,isBaixa]);
+  const osValida=isBaixa?(osEncontrada&&osEncontrada.length>0):true;
+
+  const confirmar=async()=>{
+    const qtd=parseInt(quantidade)||0;
+    if(qtd<=0)return alert('Informe uma quantidade válida.');
+    if(isBaixa){
+      if(!osInput.trim())return alert('Informe a OS para associar a baixa.');
+      if(!osValida)return alert('Nenhum pedido encontrado para a OS '+osInput.trim()+'. A baixa precisa estar associada a uma OS com requisição existente.');
+      if(qtd>(Number(item.quantidade)||0))return alert('Quantidade maior que o disponível em estoque ('+(item.quantidade||0)+').');
+    }
+    setSaving(true);
+    try{
+      const now=Date.now();
+      const novaQtd=isBaixa?(Number(item.quantidade)||0)-qtd:(Number(item.quantidade)||0)+qtd;
+      await col('estoque').doc(item.id).update({quantidade:novaQtd,atualizadoEm:now,atualizadoPor:loggedInUser.user});
+      await col('estoqueMovimentos').add({
+        estoqueId:item.id,fabricante:item.fabricante,modelo:item.modelo,descricao:item.descricao,
+        tipo:isBaixa?'baixa':'entrada',quantidade:qtd,
+        os:isBaixa?osInput.trim():null,
+        executadoPor:loggedInUser.user,timestamp:now,
+      });
+      onClose();
+    }catch(e){alert('Erro: '+e.message);}
+    setSaving(false);
+  };
+
+  return(
+    <div style={{position:'fixed',inset:0,zIndex:650,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}} className="fade-in">
+      <div style={{background:'#fff',borderRadius:24,overflow:'hidden',maxWidth:440,width:'100%',boxShadow:'0 40px 80px rgba(0,0,0,.4)'}}>
+        <div style={{background:isBaixa?'var(--red)':'#059669',padding:'22px 26px',color:'#fff'}}>
+          <div style={{display:'flex',alignItems:'center',gap:12}}>
+            <div style={{width:40,height:40,background:'rgba(255,255,255,.2)',borderRadius:11,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name={isBaixa?'minus-circle':'plus-circle'} size={18}/></div>
+            <div><h3 style={{margin:0,fontSize:16,fontWeight:800}}>{isBaixa?'Baixa de Estoque':'Entrada de Estoque'}</h3><p style={{margin:0,fontSize:9,opacity:.8,textTransform:'uppercase',marginTop:2}}>{item.descricao}</p></div>
+          </div>
+        </div>
+        <div style={{padding:24,display:'flex',flexDirection:'column',gap:14}}>
+          <div style={{background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:10,padding:'10px 14px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <span style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:'var(--muted)'}}>{item.fabricante} · {item.modelo}</span>
+            <span style={{fontSize:12,fontWeight:800}}>Disponível: {item.quantidade||0}</span>
+          </div>
+          <div>
+            <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',display:'block',marginBottom:6}}>Quantidade</label>
+            <input type="number" min="1" value={quantidade} onChange={e=>setQuantidade(e.target.value)} className="input" style={{fontSize:20,fontWeight:800}} placeholder="0" autoFocus/>
+          </div>
+          {isBaixa&&(
+            <div>
+              <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--red)',display:'block',marginBottom:6}}>OS de destino (obrigatório)</label>
+              <input type="text" inputMode="numeric" value={osInput} onChange={e=>setOsInput(sanitize(e.target.value))} className="input" placeholder="Nº da OS" style={{fontSize:16,fontWeight:800}}/>
+              {osInput.trim()&&(
+                osEncontrada&&osEncontrada.length>0?(
+                  <p style={{fontSize:9,color:'#059669',fontWeight:700,marginTop:6}}>✓ OS #{osInput.trim()} encontrada — {osEncontrada[0].vehicleData?.modelo||'—'}</p>
+                ):(
+                  <p style={{fontSize:9,color:'var(--red)',fontWeight:700,marginTop:6}}>✗ Nenhum pedido encontrado para esta OS</p>
+                )
+              )}
+            </div>
+          )}
+          <div style={{display:'flex',gap:10,marginTop:6}}>
+            <button onClick={onClose} className="btn-ghost" style={{flex:1}}>Cancelar</button>
+            <button onClick={confirmar} disabled={saving} className="btn-primary" style={{flex:2,background:isBaixa?'var(--red)':'#059669'}}>
+              {saving?<Icon name="refresh-cw" size={14} className="spin"/>:<Icon name="check" size={14}/>} Confirmar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AddEstoqueModal({onClose,loggedInUser,estoque}){
+  const[fabricante,setFabricante]=useState('');
+  const[modelo,setModelo]=useState('');
+  const[descricao,setDescricao]=useState('');
+  const[quantidade,setQuantidade]=useState('');
+  const[saving,setSaving]=useState(false);
+
+  const salvar=async()=>{
+    if(!fabricante.trim()||!modelo.trim()||!descricao.trim())return alert('Preencha fabricante, modelo e peça.');
+    const qtd=parseInt(quantidade)||0;
+    setSaving(true);
+    try{
+      const id=estoqueDocId(fabricante,modelo,descricao);
+      const existing=estoque.find(e=>e.id===id);
+      const now=Date.now();
+      if(existing){
+        await col('estoque').doc(id).update({quantidade:(Number(existing.quantidade)||0)+qtd,atualizadoEm:now,atualizadoPor:loggedInUser.user});
+      }else{
+        await col('estoque').doc(id).set({fabricante:fabricante.trim(),modelo:modelo.trim(),descricao:descricao.trim().toUpperCase(),quantidade:qtd,atualizadoEm:now,atualizadoPor:loggedInUser.user});
+      }
+      if(qtd>0){
+        await col('estoqueMovimentos').add({estoqueId:id,fabricante:fabricante.trim(),modelo:modelo.trim(),descricao:descricao.trim().toUpperCase(),tipo:'entrada',quantidade:qtd,os:null,executadoPor:loggedInUser.user,timestamp:now});
+      }
+      onClose();
+    }catch(e){alert('Erro ao salvar: '+e.message);}
+    setSaving(false);
+  };
+
+  return(
+    <div style={{position:'fixed',inset:0,zIndex:600,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}} className="fade-in">
+      <div style={{background:'#fff',borderRadius:24,overflow:'hidden',maxWidth:440,width:'100%',boxShadow:'0 40px 80px rgba(0,0,0,.4)'}}>
+        <div style={{background:'var(--ink)',padding:'22px 26px',display:'flex',alignItems:'center',gap:12,color:'#fff'}}>
+          <div style={{width:40,height:40,background:'var(--red)',borderRadius:11,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="plus-circle" size={18}/></div>
+          <div><h3 style={{margin:0,fontSize:16,fontWeight:800}}>Adicionar Peça ao Estoque</h3></div>
+        </div>
+        <div style={{padding:24,display:'flex',flexDirection:'column',gap:14}}>
+          <div><label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',display:'block',marginBottom:6}}>Fabricante</label><input type="text" value={fabricante} onChange={e=>setFabricante(sanitize(e.target.value))} className="input" placeholder="Ex: Volkswagen"/></div>
+          <div><label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',display:'block',marginBottom:6}}>Modelo</label><input type="text" value={modelo} onChange={e=>setModelo(sanitize(e.target.value))} className="input" placeholder="Ex: Amarok"/></div>
+          <div><label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',display:'block',marginBottom:6}}>Peça</label><input type="text" value={descricao} onChange={e=>setDescricao(sanitize(e.target.value))} className="input" placeholder="Ex: Parachoque Dianteiro" style={{textTransform:'uppercase'}}/></div>
+          <div><label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',display:'block',marginBottom:6}}>Quantidade</label><input type="number" min="0" value={quantidade} onChange={e=>setQuantidade(e.target.value)} className="input" placeholder="0" style={{fontSize:18,fontWeight:800}}/></div>
+          <div style={{display:'flex',gap:10,marginTop:6}}>
+            <button onClick={onClose} className="btn-ghost" style={{flex:1}}>Cancelar</button>
+            <button onClick={salvar} disabled={saving} className="btn-primary" style={{flex:2}}>{saving?<Icon name="refresh-cw" size={14} className="spin"/>:<Icon name="save" size={14}/>} Salvar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ImportEstoqueModal({onClose,loggedInUser}){
+  const[rows,setRows]=useState([]);
+  const[saving,setSaving]=useState(false);
+
+  const handlePaste=e=>{
+    const text=e.clipboardData.getData('text');const lines=text.split(/\r?\n/).filter(l=>l.trim());if(!lines.length)return;
+    const headers=lines[0].split(/[,\t]/).map(h=>h.trim().toUpperCase());
+    const fi=t=>headers.findIndex(h=>t.some(x=>h.includes(x)));
+    const[iF,iM,iP,iQ]=[fi(['FABRICANTE','MARCA']),fi(['MODELO']),fi(['PEÇA','PECA','ITEM','DESCRI']),fi(['QTD','QUANTIDADE'])];
+    const hasHeader=iF!==-1||iM!==-1||iP!==-1||iQ!==-1;
+    const data=(hasHeader?lines.slice(1):lines).map(l=>{
+      const v=l.split(/[,\t]/);
+      const g=(i,fb)=>(i!==-1?v[i]:v[fb])?.trim()||'';
+      return{fabricante:g(iF,0),modelo:g(iM,1),descricao:g(iP,2),quantidade:g(iQ,3)};
+    }).filter(r=>r.modelo&&r.descricao);
+    setRows(data);
+  };
+
+  const commit=async()=>{
+    if(!rows.length)return;
+    setSaving(true);
+    try{
+      const batch=db.batch();
+      const now=Date.now();
+      rows.forEach(r=>{
+        const id=estoqueDocId(r.fabricante,r.modelo,r.descricao);
+        batch.set(col('estoque').doc(id),{
+          fabricante:r.fabricante.trim(),
+          modelo:r.modelo.trim(),
+          descricao:r.descricao.trim().toUpperCase(),
+          quantidade:parseInt(r.quantidade)||0,
+          atualizadoEm:now,
+          atualizadoPor:loggedInUser.user,
+        });
+      });
+      await batch.commit();
+      alert('Estoque atualizado! '+rows.length+' peça(s) processada(s).');
+      onClose();
+    }catch(e){alert('Erro ao importar: '+e.message);}
+    setSaving(false);
+  };
+
+  return(
+    <div style={{position:'fixed',inset:0,zIndex:600,background:'rgba(0,0,0,.9)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+      <div style={{background:'#fff',width:'100%',maxWidth:900,height:'80vh',borderRadius:24,overflow:'hidden',boxShadow:'0 40px 80px rgba(0,0,0,.5)',display:'flex',flexDirection:'column'}}>
+        <div style={{padding:'20px 28px',background:'var(--ink)',display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:'4px solid var(--red)',flexShrink:0}}>
+          <div><h3 style={{margin:0,fontSize:18,fontWeight:800,color:'#fff'}}>Importar Estoque</h3><p style={{margin:0,fontSize:9,color:'rgba(255,255,255,.35)',textTransform:'uppercase',letterSpacing:'.1em',marginTop:2}}>Colunas: Fabricante, Modelo, Peça, Quantidade</p></div>
+          <button onClick={onClose} style={{width:38,height:38,background:'rgba(255,255,255,.08)',border:'none',borderRadius:10,cursor:'pointer',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="x" size={20}/></button>
+        </div>
+        <div style={{flex:1,overflow:'hidden',display:'flex',flexDirection:'column',padding:20,gap:16}}>
+          {rows.length===0?(
+            <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',border:'2px dashed var(--border)',borderRadius:16,background:'var(--smoke)',position:'relative'}}>
+              <Icon name="file-spreadsheet" size={52} style={{color:'var(--border)',marginBottom:12}}/>
+              <p style={{fontSize:12,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',margin:0}}>Pronto para importar</p>
+              <p style={{fontSize:10,color:'var(--muted)',margin:'4px 0 0'}}>Selecione no Excel e CTRL+V</p>
+              <p style={{fontSize:9,color:'var(--muted)',margin:'10px 0 0',maxWidth:340,textAlign:'center'}}>Peças já existentes (mesmo fabricante+modelo+peça) terão a quantidade substituída pela da planilha.</p>
+              <textarea onPaste={handlePaste} style={{position:'absolute',inset:0,opacity:0,cursor:'pointer',resize:'none'}} autoFocus/>
+            </div>
+          ):(
+            <div style={{flex:1,overflow:'hidden',display:'flex',flexDirection:'column'}}>
+              <div style={{flex:1,overflow:'auto',border:'1px solid var(--border)',borderRadius:12}} className="scroll-y">
+                <table style={{width:'100%',borderCollapse:'collapse',minWidth:600}}>
+                  <thead style={{background:'var(--smoke)',position:'sticky',top:0}}>
+                    <tr>{['Fabricante','Modelo','Peça','Quantidade'].map(h=><th key={h} style={{padding:10,fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.08em',color:'var(--muted)',textAlign:'left',borderBottom:'1px solid var(--border)'}}>{h}</th>)}</tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row,rIdx)=>(
+                      <tr key={rIdx} style={{borderBottom:'1px solid var(--smoke)'}}>
+                        {['fabricante','modelo','descricao','quantidade'].map(k=>(
+                          <td key={k} style={{border:'none',padding:0,height:36}}><input className="excel-input" value={row[k]} onChange={e=>{const d=[...rows];d[rIdx][k]=sanitize(e.target.value);setRows(d);}}/></td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div style={{paddingTop:14,display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
+                <p style={{fontSize:10,color:'var(--muted)',fontWeight:600}}>{rows.length} registros</p>
+                <div style={{display:'flex',gap:10}}><button onClick={()=>setRows([])} className="btn-ghost">Limpar</button><button onClick={commit} disabled={saving} className="btn-primary" style={{padding:'11px 28px'}}>{saving?<Icon name="refresh-cw" size={14} className="spin"/>:null} Sincronizar</button></div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BaixaEstoqueOSModal({req,estoque,loggedInUser,onClose}){
+  const[search,setSearch]=useState(req.vehicleData?.modelo||'');
+  const[selecionado,setSelecionado]=useState(null);
+  const[quantidade,setQuantidade]=useState('1');
+  const[saving,setSaving]=useState(false);
+
+  const candidatos=useMemo(()=>{
+    const t=search.trim().toLowerCase();
+    return estoque.filter(e=>{
+      if((Number(e.quantidade)||0)<=0)return false;
+      if(!t)return true;
+      return String(e.modelo||'').toLowerCase().includes(t)||String(e.descricao||'').toLowerCase().includes(t)||String(e.fabricante||'').toLowerCase().includes(t);
+    }).sort((a,b)=>String(a.modelo).localeCompare(String(b.modelo)));
+  },[estoque,search]);
+
+  const confirmar=async()=>{
+    if(!selecionado)return alert('Selecione uma peça do estoque.');
+    const qtd=parseInt(quantidade)||0;
+    if(qtd<=0)return alert('Informe uma quantidade válida.');
+    if(qtd>(Number(selecionado.quantidade)||0))return alert('Quantidade maior que o disponível ('+selecionado.quantidade+').');
+    setSaving(true);
+    try{
+      const now=Date.now();
+      await col('estoque').doc(selecionado.id).update({quantidade:(Number(selecionado.quantidade)||0)-qtd,atualizadoEm:now,atualizadoPor:loggedInUser.user});
+      await col('estoqueMovimentos').add({
+        estoqueId:selecionado.id,fabricante:selecionado.fabricante,modelo:selecionado.modelo,descricao:selecionado.descricao,
+        tipo:'baixa',quantidade:qtd,os:req.os,executadoPor:loggedInUser.user,timestamp:now,
+      });
+      onClose();
+    }catch(e){alert('Erro: '+e.message);}
+    setSaving(false);
+  };
+
+  return(
+    <div style={{position:'fixed',inset:0,zIndex:350,background:'rgba(0,0,0,.88)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}} className="fade-in">
+      <div style={{background:'#fff',borderRadius:24,overflow:'hidden',maxWidth:520,width:'100%',maxHeight:'85vh',display:'flex',flexDirection:'column',boxShadow:'0 40px 80px rgba(0,0,0,.4)'}}>
+        <div style={{background:'var(--red)',padding:'22px 26px',color:'#fff',flexShrink:0}}>
+          <div style={{display:'flex',alignItems:'center',gap:12}}>
+            <div style={{width:40,height:40,background:'rgba(255,255,255,.2)',borderRadius:11,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="minus-circle" size={18}/></div>
+            <div><h3 style={{margin:0,fontSize:16,fontWeight:800}}>Baixa de Estoque — OS #{req.os}</h3><p style={{margin:0,fontSize:9,opacity:.8,textTransform:'uppercase',marginTop:2}}>{req.vehicleData?.modelo||''}</p></div>
+          </div>
+        </div>
+        <div style={{padding:20,overflowY:'auto',flex:1}} className="scroll-y">
+          <div style={{position:'relative',marginBottom:14}}>
+            <input type="text" value={search} onChange={e=>setSearch(sanitize(e.target.value))} className="input" placeholder="Buscar peça em estoque..." style={{paddingLeft:36}}/>
+            <div style={{position:'absolute',left:11,top:'50%',transform:'translateY(-50%)',color:'var(--muted)'}}><Icon name="search" size={14}/></div>
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:16}}>
+            {candidatos.length===0&&<p style={{fontSize:10,color:'var(--muted)',textAlign:'center',padding:'12px 0'}}>Nenhuma peça disponível encontrada.</p>}
+            {candidatos.slice(0,20).map(e=>(
+              <label key={e.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderRadius:10,border:`1.5px solid ${selecionado?.id===e.id?'var(--red)':'var(--border)'}`,background:selecionado?.id===e.id?'var(--red-light)':'#fff',cursor:'pointer'}}>
+                <input type="radio" checked={selecionado?.id===e.id} onChange={()=>setSelecionado(e)} style={{width:15,height:15,accentColor:'var(--red)',flexShrink:0}}/>
+                <div style={{flex:1,minWidth:0}}>
+                  <p style={{fontSize:11,fontWeight:800,textTransform:'uppercase',margin:0}}>{e.descricao}</p>
+                  <p style={{fontSize:9,color:'var(--muted)',margin:0}}>{e.fabricante} · {e.modelo}</p>
+                </div>
+                <span className="badge" style={{background:'#EDFAF3',color:'#0A6B34',border:'1px solid #AAE6C5'}}>{e.quantidade} un.</span>
+              </label>
+            ))}
+          </div>
+          {selecionado&&(
+            <div>
+              <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',display:'block',marginBottom:6}}>Quantidade a dar baixa</label>
+              <input type="number" min="1" max={selecionado.quantidade} value={quantidade} onChange={e=>setQuantidade(e.target.value)} className="input" style={{fontSize:18,fontWeight:800}}/>
+            </div>
+          )}
+        </div>
+        <div style={{padding:'16px 20px',background:'var(--smoke)',borderTop:'1px solid var(--border)',display:'flex',gap:10,flexShrink:0}}>
+          <button onClick={onClose} className="btn-ghost" style={{flex:1}}>Cancelar</button>
+          <button onClick={confirmar} disabled={saving||!selecionado} className="btn-primary" style={{flex:2}}>
+            {saving?<Icon name="refresh-cw" size={14} className="spin"/>:<Icon name="check" size={14}/>} Confirmar Baixa
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EstoqueView({estoque,movimentos,requests,loggedInUser,isMaster}){
+  const[search,setSearch]=useState('');
+  const[showImport,setShowImport]=useState(false);
+  const[showAdd,setShowAdd]=useState(false);
+  const[baixaItem,setBaixaItem]=useState(null);
+  const[entradaItem,setEntradaItem]=useState(null);
+  const[historicoAberto,setHistoricoAberto]=useState(null);
+  const[confirmDel,setConfirmDel]=useState(null);
+  const[modelosAbertos,setModelosAbertos]=useState({});
+
+  const agrupado=useMemo(()=>{
+    const t=search.trim().toLowerCase();
+    const filtered=estoque.filter(e=>{
+      if(!t)return true;
+      return String(e.modelo||'').toLowerCase().includes(t)||String(e.fabricante||'').toLowerCase().includes(t)||String(e.descricao||'').toLowerCase().includes(t);
+    });
+    const porFab={};
+    filtered.forEach(e=>{
+      const fab=e.fabricante||'Sem Fabricante';
+      const mod=e.modelo||'Sem Modelo';
+      if(!porFab[fab])porFab[fab]={};
+      if(!porFab[fab][mod])porFab[fab][mod]=[];
+      porFab[fab][mod].push(e);
+    });
+    return Object.entries(porFab).sort((a,b)=>a[0].localeCompare(b[0])).map(([fab,mods])=>({
+      fabricante:fab,
+      modelos:Object.entries(mods).sort((a,b)=>a[0].localeCompare(b[0])).map(([mod,items])=>({
+        modelo:mod,
+        items:items.sort((a,b)=>String(a.descricao).localeCompare(String(b.descricao))),
+        total:items.reduce((a,i)=>a+(Number(i.quantidade)||0),0),
+      })),
+    }));
+  },[estoque,search]);
+
+  const totalPecas=estoque.reduce((a,e)=>a+(Number(e.quantidade)||0),0);
+  const totalModelos=useMemo(()=>{
+    const set=new Set();estoque.forEach(e=>set.add((e.fabricante||'')+'|'+(e.modelo||'')));return set.size;
+  },[estoque]);
+  const semEstoque=estoque.filter(e=>(Number(e.quantidade)||0)<=0).length;
+
+  const toggleModelo=(key)=>setModelosAbertos(p=>({...p,[key]:p[key]===false}));
+  const excluirItem=async(id)=>{
+    try{await col('estoque').doc(id).delete();}catch(e){alert('Erro ao excluir: '+e.message);}
+    setConfirmDel(null);
+  };
+
+  return(
+    <div className="fade-up" style={{paddingBottom:40}}>
+      <div style={{marginBottom:16,display:'flex',justifyContent:'space-between',alignItems:'flex-end',flexWrap:'wrap',gap:12}}>
+        <div>
+          <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.15em',color:'var(--red)',marginBottom:4}}>Controle de Peças</p>
+          <h2 style={{fontSize:32,fontWeight:800,margin:0,letterSpacing:'-.02em'}}>Estoque</h2>
+        </div>
+        {isMaster&&(
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            <button onClick={()=>setShowImport(true)} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 18px',background:'var(--ink)',color:'#fff',border:'none',borderRadius:10,fontSize:10,fontWeight:800,textTransform:'uppercase',cursor:'pointer',letterSpacing:'.08em',borderBottom:'3px solid var(--red)',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
+              <Icon name="file-up" size={14}/> Importar Planilha
+            </button>
+            <button onClick={()=>setShowAdd(true)} className="btn-primary">
+              <Icon name="plus-circle" size={14}/> Adicionar Peça
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10,marginBottom:20}}>
+        {[
+          {label:'Peças em Estoque',v:totalPecas,icon:'boxes',dark:true},
+          {label:'Modelos Cadastrados',v:totalModelos,icon:'car'},
+          {label:'Itens Zerados',v:semEstoque,icon:'alert-triangle',red:semEstoque>0},
+        ].map((k,i)=>(
+          <div key={i} style={{background:k.dark?'var(--ink)':k.red?'var(--red)':'var(--smoke)',color:k.dark||k.red?'#fff':'var(--ink)',borderRadius:14,padding:18,border:(!k.dark&&!k.red)?'1.5px solid var(--border)':'none'}}>
+            <div style={{width:30,height:30,borderRadius:8,background:k.dark||k.red?'rgba(255,255,255,.12)':'var(--border)',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:12}}><Icon name={k.icon} size={15}/></div>
+            <p style={{fontSize:30,fontWeight:800,lineHeight:1,margin:0}}>{k.v}</p>
+            <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.08em',marginTop:6,opacity:.7}}>{k.label}</p>
+          </div>
+        ))}
+      </div>
+
+      <div style={{position:'relative',marginBottom:20}}>
+        <input type="text" placeholder="Buscar por modelo, fabricante ou peça..." value={search} onChange={e=>setSearch(e.target.value)} className="input" style={{paddingLeft:36,fontSize:12}}/>
+        <div style={{position:'absolute',left:11,top:'50%',transform:'translateY(-50%)',color:'var(--muted)'}}><Icon name="search" size={15}/></div>
+      </div>
+
+      {agrupado.length===0?(
+        <div style={{padding:'64px 20px',textAlign:'center',background:'#fff',borderRadius:16,border:'1.5px dashed var(--border)'}}>
+          <Icon name="boxes" size={32} style={{margin:'0 auto 10px',display:'block',color:'var(--muted)'}}/>
+          <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',margin:0}}>{search?'Nenhum resultado encontrado':'Nenhuma peça cadastrada em estoque ainda'}</p>
+        </div>
+      ):(
+        <div style={{display:'flex',flexDirection:'column',gap:16}}>
+          {agrupado.map(grupo=>(
+            <div key={grupo.fabricante}>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
+                <div style={{width:26,height:26,borderRadius:8,background:'var(--ink)',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="factory" size={13} style={{color:'#fff'}}/></div>
+                <h3 style={{fontSize:14,fontWeight:800,textTransform:'uppercase',margin:0}}>{grupo.fabricante}</h3>
+              </div>
+              <div style={{display:'flex',flexDirection:'column',gap:10,marginLeft:8}}>
+                {grupo.modelos.map(mg=>{
+                  const key=grupo.fabricante+'|'+mg.modelo;
+                  const aberto=modelosAbertos[key]!==false;
+                  return(
+                  <div key={key} className="card" style={{overflow:'hidden'}}>
+                    <div onClick={()=>toggleModelo(key)} style={{padding:'12px 16px',background:'var(--smoke)',display:'flex',alignItems:'center',justifyContent:'space-between',cursor:'pointer'}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8}}>
+                        <Icon name={aberto?'chevron-down':'chevron-right'} size={14} style={{color:'var(--muted)'}}/>
+                        <span style={{fontSize:12,fontWeight:800,textTransform:'uppercase'}}>{mg.modelo}</span>
+                        <span className="pill" style={{fontSize:8}}>{mg.items.length} peça(s)</span>
+                      </div>
+                      <span style={{fontSize:11,fontWeight:800,color:'var(--red)'}}>{mg.total} un.</span>
+                    </div>
+                    {aberto&&(
+                      <div className="table-scroll">
+                        <table className="vtable w-full" style={{minWidth:640}}>
+                          <thead><tr><th>Peça</th><th style={{textAlign:'center'}}>Qtd</th><th>Atualizado</th><th style={{textAlign:'right'}}>Ações</th></tr></thead>
+                          <tbody>
+                            {mg.items.map(it=>(
+                              <React.Fragment key={it.id}>
+                                <tr>
+                                  <td style={{fontWeight:700,textTransform:'uppercase'}}>{it.descricao}</td>
+                                  <td style={{textAlign:'center'}}>
+                                    <span className="badge" style={{background:(Number(it.quantidade)||0)<=0?'var(--red-light)':'#EDFAF3',color:(Number(it.quantidade)||0)<=0?'var(--red)':'#0A6B34',border:`1px solid ${(Number(it.quantidade)||0)<=0?'#FFBDBD':'#AAE6C5'}`}}>{it.quantidade||0}</span>
+                                  </td>
+                                  <td style={{fontSize:9,color:'var(--muted)'}}>{it.atualizadoEm?new Date(it.atualizadoEm).toLocaleDateString('pt-BR'):'—'}{it.atualizadoPor?' · '+it.atualizadoPor:''}</td>
+                                  <td style={{textAlign:'right'}}>
+                                    <div style={{display:'flex',gap:5,justifyContent:'flex-end',flexWrap:'wrap'}}>
+                                      <button onClick={()=>setHistoricoAberto(historicoAberto===it.id?null:it.id)} title="Histórico" style={{width:26,height:26,background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:7,cursor:'pointer',color:'var(--muted)',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="history" size={13}/></button>
+                                      {isMaster&&(<>
+                                        <button onClick={()=>setEntradaItem(it)} title="Entrada" style={{width:26,height:26,background:'#EDFAF3',border:'1px solid #AAE6C5',borderRadius:7,cursor:'pointer',color:'#059669',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="plus" size={13}/></button>
+                                        <button onClick={()=>setBaixaItem(it)} title="Baixa" style={{width:26,height:26,background:'var(--red-light)',border:'1px solid #FFBDBD',borderRadius:7,cursor:'pointer',color:'var(--red)',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="minus" size={13}/></button>
+                                        {confirmDel===it.id?(
+                                          <div style={{display:'flex',gap:4}}>
+                                            <button onClick={()=>setConfirmDel(null)} className="btn-ghost" style={{padding:'4px 8px',fontSize:8}}>Não</button>
+                                            <button onClick={()=>excluirItem(it.id)} style={{padding:'4px 8px',background:'var(--red)',color:'#fff',border:'none',borderRadius:6,fontSize:8,fontWeight:800,cursor:'pointer'}}>Sim</button>
+                                          </div>
+                                        ):(
+                                          <button onClick={()=>setConfirmDel(it.id)} title="Excluir" style={{width:26,height:26,background:'#fff',border:'1px solid #FFBDBD',borderRadius:7,cursor:'pointer',color:'var(--red)',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="trash-2" size={13}/></button>
+                                        )}
+                                      </>)}
+                                    </div>
+                                  </td>
+                                </tr>
+                                {historicoAberto===it.id&&(
+                                  <tr>
+                                    <td colSpan={4} style={{background:'var(--smoke)',padding:'10px 16px'}}>
+                                      {(()=>{
+                                        const movs=movimentos.filter(m=>m.estoqueId===it.id).sort((a,b)=>b.timestamp-a.timestamp).slice(0,15);
+                                        if(!movs.length)return <p style={{fontSize:9,color:'var(--muted)',margin:0}}>Nenhuma movimentação registrada ainda.</p>;
+                                        return(
+                                          <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                                            {movs.map((m,i)=>(
+                                              <div key={i} style={{display:'flex',alignItems:'center',gap:8,fontSize:9,flexWrap:'wrap'}}>
+                                                <span style={{fontWeight:800,padding:'2px 7px',borderRadius:5,background:m.tipo==='baixa'?'#FFF0F0':'#EDFAF3',color:m.tipo==='baixa'?'var(--red)':'#059669',border:`1px solid ${m.tipo==='baixa'?'#FFBDBD':'#AAE6C5'}`,textTransform:'uppercase'}}>{m.tipo==='baixa'?'-':'+'}{m.quantidade}</span>
+                                                {m.os&&<span style={{fontWeight:700}}>OS #{m.os}</span>}
+                                                <span style={{color:'var(--muted)'}}>{m.executadoPor}</span>
+                                                <span style={{color:'var(--muted)'}}>{m.timestamp?new Date(m.timestamp).toLocaleString('pt-BR'):''}</span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        );
+                                      })()}
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showAdd&&isMaster&&<AddEstoqueModal onClose={()=>setShowAdd(false)} loggedInUser={loggedInUser} estoque={estoque}/>}
+      {showImport&&isMaster&&<ImportEstoqueModal onClose={()=>setShowImport(false)} loggedInUser={loggedInUser}/>}
+      {entradaItem&&isMaster&&<MovimentoEstoqueModal item={entradaItem} tipo="entrada" onClose={()=>setEntradaItem(null)} loggedInUser={loggedInUser}/>}
+      {baixaItem&&isMaster&&<MovimentoEstoqueModal item={baixaItem} tipo="baixa" requests={requests} onClose={()=>setBaixaItem(null)} loggedInUser={loggedInUser}/>}
+    </div>
+  );
+}
+
 // ── App Principal ─────────────────────────────────────────────────────────
 function App(){
   const[user,setUser]=useState(null);
@@ -4837,9 +5340,11 @@ function App(){
 const[gestSearch,setGestSearch]=useState('');
 const[gestFab,setGestFab]=useState('');
 
-  const{data:requests,loading:reqLoad}=useFirestore('requests');
+const{data:requests,loading:reqLoad}=useFirestore('requests');
   const{data:vehicles,loading:vehLoad}=useFirestore('vehicles');
   const{data:usersData,loading:usrLoad}=useFirestore('users');
+  const{data:estoque,loading:estLoad}=useFirestore('estoque');
+  const{data:estoqueMovimentos,loading:movLoad}=useFirestore('estoqueMovimentos');
   const[users,setUsers]=useState([]);
   const[initDone,setInitDone]=useState(false);
 
@@ -5050,6 +5555,7 @@ const navItems=[
     isSol&&{key:'request',icon:'plus-circle',label:'Nova Peça'},
     {key:'status',icon:'search',label:'Histórico'},
     {key:'chegadas',icon:'package-check',label:'Chegadas',badge:chegadasNaoLidas},
+    {key:'estoque',icon:'boxes',label:'Estoque'},
     canAccessFinalizacao&&{key:'finalizacao',icon:'clipboard-check',label:'Finalização'},
     canDo(role,'donor')&&{key:'donor',icon:'git-merge',label:'Doações'},
     canDo(role,'manage')&&{key:'admin',icon:'settings',label:'Gestão'},
@@ -5057,7 +5563,7 @@ const navItems=[
     (loggedIn?.user===MASTER_USER||loggedIn?.user==='Matheus.Ransi')&&{key:'resumo',icon:'presentation',label:'Resumo Reunião'},
   ].filter(Boolean);
 
-  const loading=reqLoad||vehLoad||usrLoad;
+  const loading=reqLoad||vehLoad||usrLoad||estLoad||movLoad;
 
   // ── Return condicional APÓS todos os hooks ────────────────────────────────
   if(!loggedIn)return <LoginView onLogin={login} usersList={users} loadingUsers={usrLoad}/>;
@@ -5135,6 +5641,7 @@ const navItems=[
                 {view==='request'&&isSol&&<RequestForm user={user} loggedInUser={loggedIn} vehiclesDB={vehicles} requests={requests}/>}
                 {view==='status'&&<StatusView requests={requests} loggedInUser={loggedIn} vehicles={vehicles}/>}
                 {view==='chegadas'&&<ChegadasView requests={requests} loggedInUser={loggedIn} vehicles={vehicles}/>}
+                {view==='estoque'&&<EstoqueView estoque={estoque} movimentos={estoqueMovimentos} requests={requests} loggedInUser={loggedIn} isMaster={isMaster}/>}
                {view==='donor'&&canDo(role,'donor')&&<DonorSystem requests={requests} vehicles={vehicles} loggedInUser={loggedIn}/>}
                 {view==='finalizacao'&&canAccessFinalizacao&&<FinalizacaoView vehiclesDB={vehicles} requests={requests} loggedInUser={loggedIn} isMaster={isMaster}/>}
                 {view==='admin'&&canDo(role,'manage')&&(
@@ -5340,12 +5847,15 @@ const navItems=[
       )}
 
       {/* Editing Modal — estado local, salva só ao confirmar */}
-      {editing&&(isMaster||isAdmin)&&(
+     {editing&&(isMaster||isAdmin)&&(
         <EditingModal
           key={editing.id}
           req={editing}
           onClose={()=>setEditing(null)}
           onSave={saveItems}
+          estoque={estoque}
+          isMaster={isMaster}
+          loggedInUser={loggedIn}
         />
       )}
     </div>
