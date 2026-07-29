@@ -1832,10 +1832,16 @@ const exportCSV=()=>{
                           <span style={{fontSize:8,color:'#0A6B34',fontWeight:800}}>Recebida da OS #{it.receivedFrom}</span>
                         </div>
                       )}
-                      {it.donatedTo&&!it.receivedFrom&&(
+                     {it.donatedTo&&!it.receivedFrom&&(
                         <div style={{display:'inline-flex',alignItems:'center',gap:4,marginTop:5,padding:'2px 8px',background:'#FFF0F0',borderRadius:5,border:'1px solid #FFBDBD'}}>
                           <Icon name="arrow-right" size={9}/>
                           <span style={{fontSize:8,color:'var(--red)',fontWeight:800}}>Doada para OS #{it.donatedTo}</span>
+                        </div>
+                      )}
+                      {it.recebidoDoEstoque&&(
+                        <div style={{display:'inline-flex',alignItems:'center',gap:4,marginTop:5,padding:'2px 8px',background:'#F3E8FF',borderRadius:5,border:'1px solid #D8B4FE'}}>
+                          <Icon name="boxes" size={9}/>
+                          <span style={{fontSize:8,color:'#6B21A8',fontWeight:800}}>Recebida do Estoque</span>
                         </div>
                       )}
                     </div>
@@ -2385,7 +2391,7 @@ function EditingModal({req,onClose,onSave,estoque,isMaster,loggedInUser}){
          <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
             {isMaster&&(
               <button onClick={()=>setBaixaEstoqueOpen(true)} style={{display:'flex',alignItems:'center',gap:6,padding:'11px 16px',background:'#7C3AED',color:'#fff',border:'none',borderRadius:10,fontSize:10,fontWeight:800,textTransform:'uppercase',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
-                <Icon name="minus-circle" size={14}/> Baixa Estoque
+                <Icon name="boxes" size={14}/> Receber do Estoque
               </button>
             )}
             <button onClick={onClose} className="btn-ghost" style={{padding:'11px 20px'}}>Cancelar</button>
@@ -2395,7 +2401,17 @@ function EditingModal({req,onClose,onSave,estoque,isMaster,loggedInUser}){
           </div>
         </div>
       </div>
-      {baixaEstoqueOpen&&isMaster&&<BaixaEstoqueOSModal req={req} estoque={estoque||[]} loggedInUser={loggedInUser} onClose={()=>setBaixaEstoqueOpen(false)}/>}
+{baixaEstoqueOpen&&isMaster&&(
+        <AssociarEstoqueBaixaModal
+          reqFixo={{...req,items:localItems}}
+          estoque={estoque||[]}
+          loggedInUser={loggedInUser}
+          onClose={()=>setBaixaEstoqueOpen(false)}
+          onApplied={(itemId,fields)=>{
+            setLocalItems(prev=>prev.map(it=>String(it.id)===String(itemId)?{...it,...fields}:it));
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -4847,35 +4863,21 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
 }
 
 // ── Estoque ────────────────────────────────────────────────────────────────
-function MovimentoEstoqueModal({item,tipo,requests,onClose,loggedInUser}){
+function EntradaEstoqueModal({item,onClose,loggedInUser}){
   const[quantidade,setQuantidade]=useState('');
-  const[osInput,setOsInput]=useState('');
   const[saving,setSaving]=useState(false);
-  const isBaixa=tipo==='baixa';
-
-  const osEncontrada=useMemo(()=>{
-    if(!isBaixa||!osInput.trim())return null;
-    return requests?.filter(r=>String(r.os).trim()===osInput.trim())||[];
-  },[requests,osInput,isBaixa]);
-  const osValida=isBaixa?(osEncontrada&&osEncontrada.length>0):true;
 
   const confirmar=async()=>{
     const qtd=parseInt(quantidade)||0;
     if(qtd<=0)return alert('Informe uma quantidade válida.');
-    if(isBaixa){
-      if(!osInput.trim())return alert('Informe a OS para associar a baixa.');
-      if(!osValida)return alert('Nenhum pedido encontrado para a OS '+osInput.trim()+'. A baixa precisa estar associada a uma OS com requisição existente.');
-      if(qtd>(Number(item.quantidade)||0))return alert('Quantidade maior que o disponível em estoque ('+(item.quantidade||0)+').');
-    }
     setSaving(true);
     try{
       const now=Date.now();
-      const novaQtd=isBaixa?(Number(item.quantidade)||0)-qtd:(Number(item.quantidade)||0)+qtd;
+      const novaQtd=(Number(item.quantidade)||0)+qtd;
       await col('estoque').doc(item.id).update({quantidade:novaQtd,atualizadoEm:now,atualizadoPor:loggedInUser.user});
       await col('estoqueMovimentos').add({
         estoqueId:item.id,fabricante:item.fabricante,modelo:item.modelo,descricao:item.descricao,
-        tipo:isBaixa?'baixa':'entrada',quantidade:qtd,
-        os:isBaixa?osInput.trim():null,
+        tipo:'entrada',quantidade:qtd,os:null,
         executadoPor:loggedInUser.user,timestamp:now,
       });
       onClose();
@@ -4885,39 +4887,26 @@ function MovimentoEstoqueModal({item,tipo,requests,onClose,loggedInUser}){
 
   return(
     <div style={{position:'fixed',inset:0,zIndex:650,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}} className="fade-in">
-      <div style={{background:'#fff',borderRadius:24,overflow:'hidden',maxWidth:440,width:'100%',boxShadow:'0 40px 80px rgba(0,0,0,.4)'}}>
-        <div style={{background:isBaixa?'var(--red)':'#059669',padding:'22px 26px',color:'#fff'}}>
+      <div style={{background:'#fff',borderRadius:24,overflow:'hidden',maxWidth:420,width:'100%',boxShadow:'0 40px 80px rgba(0,0,0,.4)'}}>
+        <div style={{background:'#059669',padding:'22px 26px',color:'#fff'}}>
           <div style={{display:'flex',alignItems:'center',gap:12}}>
-            <div style={{width:40,height:40,background:'rgba(255,255,255,.2)',borderRadius:11,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name={isBaixa?'minus-circle':'plus-circle'} size={18}/></div>
-            <div><h3 style={{margin:0,fontSize:16,fontWeight:800}}>{isBaixa?'Baixa de Estoque':'Entrada de Estoque'}</h3><p style={{margin:0,fontSize:9,opacity:.8,textTransform:'uppercase',marginTop:2}}>{item.descricao}</p></div>
+            <div style={{width:40,height:40,background:'rgba(255,255,255,.2)',borderRadius:11,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="plus-circle" size={18}/></div>
+            <div><h3 style={{margin:0,fontSize:16,fontWeight:800}}>Entrada de Estoque</h3><p style={{margin:0,fontSize:9,opacity:.8,textTransform:'uppercase',marginTop:2}}>{item.descricao}</p></div>
           </div>
         </div>
         <div style={{padding:24,display:'flex',flexDirection:'column',gap:14}}>
           <div style={{background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:10,padding:'10px 14px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <span style={{fontSize:9,fontWeight:700,textTransform:'uppercase',color:'var(--muted)'}}>{item.fabricante} · {item.modelo}</span>
-            <span style={{fontSize:12,fontWeight:800}}>Disponível: {item.quantidade||0}</span>
+            <span style={{fontSize:12,fontWeight:800}}>Atual: {item.quantidade||0}</span>
           </div>
           <div>
-            <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',display:'block',marginBottom:6}}>Quantidade</label>
+            <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',display:'block',marginBottom:6}}>Quantidade a adicionar</label>
             <input type="number" min="1" value={quantidade} onChange={e=>setQuantidade(e.target.value)} className="input" style={{fontSize:20,fontWeight:800}} placeholder="0" autoFocus/>
           </div>
-          {isBaixa&&(
-            <div>
-              <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--red)',display:'block',marginBottom:6}}>OS de destino (obrigatório)</label>
-              <input type="text" inputMode="numeric" value={osInput} onChange={e=>setOsInput(sanitize(e.target.value))} className="input" placeholder="Nº da OS" style={{fontSize:16,fontWeight:800}}/>
-              {osInput.trim()&&(
-                osEncontrada&&osEncontrada.length>0?(
-                  <p style={{fontSize:9,color:'#059669',fontWeight:700,marginTop:6}}>✓ OS #{osInput.trim()} encontrada — {osEncontrada[0].vehicleData?.modelo||'—'}</p>
-                ):(
-                  <p style={{fontSize:9,color:'var(--red)',fontWeight:700,marginTop:6}}>✗ Nenhum pedido encontrado para esta OS</p>
-                )
-              )}
-            </div>
-          )}
           <div style={{display:'flex',gap:10,marginTop:6}}>
             <button onClick={onClose} className="btn-ghost" style={{flex:1}}>Cancelar</button>
-            <button onClick={confirmar} disabled={saving} className="btn-primary" style={{flex:2,background:isBaixa?'var(--red)':'#059669'}}>
-              {saving?<Icon name="refresh-cw" size={14} className="spin"/>:<Icon name="check" size={14}/>} Confirmar
+            <button onClick={confirmar} disabled={saving} className="btn-primary" style={{flex:2,background:'#059669'}}>
+              {saving?<Icon name="refresh-cw" size={14} className="spin"/>:<Icon name="check" size={14}/>} Confirmar Entrada
             </button>
           </div>
         </div>
@@ -5064,33 +5053,69 @@ function ImportEstoqueModal({onClose,loggedInUser}){
   );
 }
 
-function BaixaEstoqueOSModal({req,estoque,loggedInUser,onClose}){
-  const[search,setSearch]=useState(req.vehicleData?.modelo||'');
-  const[selecionado,setSelecionado]=useState(null);
-  const[quantidade,setQuantidade]=useState('1');
+function AssociarEstoqueBaixaModal({estoqueItemFixo,reqFixo,estoque,requests,loggedInUser,onClose,onApplied}){
+  // modoEstoque=true → veio da aba Estoque (peça de estoque já fixa; falta escolher OS + peça pendente)
+  // modoEstoque=false → veio da Gestão (OS já fixa; falta escolher a peça pendente e depois a peça de estoque compatível)
+  const modoEstoque=!!estoqueItemFixo;
+  const[osInput,setOsInput]=useState('');
+  const[itemSelecionado,setItemSelecionado]=useState(null);
+  const[estoqueSelecionadoId,setEstoqueSelecionadoId]=useState(modoEstoque?(estoqueItemFixo?.id||null):null);
   const[saving,setSaving]=useState(false);
 
-  const candidatos=useMemo(()=>{
-    const t=search.trim().toLowerCase();
-    return estoque.filter(e=>{
-      if((Number(e.quantidade)||0)<=0)return false;
-      if(!t)return true;
-      return String(e.modelo||'').toLowerCase().includes(t)||String(e.descricao||'').toLowerCase().includes(t)||String(e.fabricante||'').toLowerCase().includes(t);
-    }).sort((a,b)=>String(a.modelo).localeCompare(String(b.modelo)));
-  },[estoque,search]);
+  const reqEncontrada=useMemo(()=>{
+    if(!modoEstoque)return null;
+    const t=osInput.trim();if(!t)return null;
+    const matching=(requests||[]).filter(r=>String(r.os).trim()===t);
+    return matching.length?matching[0]:null;
+  },[requests,osInput,modoEstoque]);
+
+  const vehicleModelo=modoEstoque?(reqEncontrada?.vehicleData?.modelo||''):(reqFixo?.vehicleData?.modelo||'');
+
+  const modeloCompativel=modoEstoque
+    ?(!!reqEncontrada&&normEstoqueTxt(vehicleModelo)===normEstoqueTxt(estoqueItemFixo?.modelo))
+    :true;
+
+  const itensPendentes=useMemo(()=>{
+    if(modoEstoque){
+      if(!reqEncontrada)return[];
+      return getPecasParaOS(osInput.trim(),requests||[]).filter(it=>it.status!=='Concluído'&&it.status!=='Doado'&&!it.excedente);
+    }
+    return (reqFixo?.items||[]).filter(it=>it.status!=='Concluído'&&it.status!=='Doado'&&!it.excedente);
+  },[modoEstoque,reqEncontrada,osInput,requests,reqFixo]);
+
+  const estoqueCandidatos=useMemo(()=>{
+    if(modoEstoque)return estoqueItemFixo?[estoqueItemFixo]:[];
+    const modeloAlvo=normEstoqueTxt(reqFixo?.vehicleData?.modelo||'');
+    return (estoque||[]).filter(e=>(Number(e.quantidade)||0)>0&&normEstoqueTxt(e.modelo)===modeloAlvo);
+  },[modoEstoque,estoqueItemFixo,estoque,reqFixo]);
+
+  const estoqueSelecionado=useMemo(()=>estoqueCandidatos.find(e=>e.id===estoqueSelecionadoId)||null,[estoqueCandidatos,estoqueSelecionadoId]);
+
+  const qtdNecessaria=Number(itemSelecionado?.quantity)||1;
+  const estoqueSuficiente=estoqueSelecionado?(Number(estoqueSelecionado.quantidade)||0)>=qtdNecessaria:false;
+  const podeConfirmar=!!itemSelecionado&&!!estoqueSelecionado&&estoqueSuficiente&&(modoEstoque?modeloCompativel:true);
 
   const confirmar=async()=>{
-    if(!selecionado)return alert('Selecione uma peça do estoque.');
-    const qtd=parseInt(quantidade)||0;
-    if(qtd<=0)return alert('Informe uma quantidade válida.');
-    if(qtd>(Number(selecionado.quantidade)||0))return alert('Quantidade maior que o disponível ('+selecionado.quantidade+').');
+    if(!podeConfirmar)return;
     setSaving(true);
     try{
       const now=Date.now();
-      await col('estoque').doc(selecionado.id).update({quantidade:(Number(selecionado.quantidade)||0)-qtd,atualizadoEm:now,atualizadoPor:loggedInUser.user});
+      const qtd=qtdNecessaria;
+      const osAlvo=modoEstoque?osInput.trim():String(reqFixo.os);
+      await col('estoque').doc(estoqueSelecionado.id).update({quantidade:(Number(estoqueSelecionado.quantidade)||0)-qtd,atualizadoEm:now,atualizadoPor:loggedInUser.user});
+      const reqIdAlvo=itemSelecionado._reqId;
+      const docsAlvo=(requests||[]).filter(r=>r.id===reqIdAlvo);
+      const dataEntrega=new Date().toISOString().slice(0,10);
+      if(docsAlvo.length){
+        const reqDoc=docsAlvo[0];
+        const newItems=(reqDoc.items||[]).map(it=>String(it.id)===String(itemSelecionado.id)?{...it,status:'Concluído',recebidoDoEstoque:true,estoqueOrigemId:estoqueSelecionado.id,actualDeliveryDate:dataEntrega}:it);
+        await col('requests').doc(reqDoc.id).update({items:stripUndefined(newItems)});
+      }
+      if(onApplied)onApplied(itemSelecionado.id,{status:'Concluído',recebidoDoEstoque:true,estoqueOrigemId:estoqueSelecionado.id,actualDeliveryDate:dataEntrega});
       await col('estoqueMovimentos').add({
-        estoqueId:selecionado.id,fabricante:selecionado.fabricante,modelo:selecionado.modelo,descricao:selecionado.descricao,
-        tipo:'baixa',quantidade:qtd,os:req.os,executadoPor:loggedInUser.user,timestamp:now,
+        estoqueId:estoqueSelecionado.id,fabricante:estoqueSelecionado.fabricante,modelo:estoqueSelecionado.modelo,descricao:estoqueSelecionado.descricao,
+        tipo:'baixa',quantidade:qtd,os:osAlvo,itemDescricao:itemSelecionado.description,
+        executadoPor:loggedInUser.user,timestamp:now,
       });
       onClose();
     }catch(e){alert('Erro: '+e.message);}
@@ -5098,42 +5123,87 @@ function BaixaEstoqueOSModal({req,estoque,loggedInUser,onClose}){
   };
 
   return(
-    <div style={{position:'fixed',inset:0,zIndex:350,background:'rgba(0,0,0,.88)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}} className="fade-in">
-      <div style={{background:'#fff',borderRadius:24,overflow:'hidden',maxWidth:520,width:'100%',maxHeight:'85vh',display:'flex',flexDirection:'column',boxShadow:'0 40px 80px rgba(0,0,0,.4)'}}>
+    <div style={{position:'fixed',inset:0,zIndex:700,background:'rgba(0,0,0,.88)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}} className="fade-in">
+      <div style={{background:'#fff',borderRadius:24,overflow:'hidden',maxWidth:560,width:'100%',maxHeight:'88vh',display:'flex',flexDirection:'column',boxShadow:'0 40px 80px rgba(0,0,0,.4)'}}>
         <div style={{background:'var(--red)',padding:'22px 26px',color:'#fff',flexShrink:0}}>
           <div style={{display:'flex',alignItems:'center',gap:12}}>
             <div style={{width:40,height:40,background:'rgba(255,255,255,.2)',borderRadius:11,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="minus-circle" size={18}/></div>
-            <div><h3 style={{margin:0,fontSize:16,fontWeight:800}}>Baixa de Estoque — OS #{req.os}</h3><p style={{margin:0,fontSize:9,opacity:.8,textTransform:'uppercase',marginTop:2}}>{req.vehicleData?.modelo||''}</p></div>
+            <div>
+              <h3 style={{margin:0,fontSize:16,fontWeight:800}}>Baixa de Estoque — Associar a Requisição</h3>
+              <p style={{margin:0,fontSize:9,opacity:.8,textTransform:'uppercase',marginTop:2}}>{modoEstoque?(estoqueItemFixo?.descricao||''):'OS #'+reqFixo.os}</p>
+            </div>
           </div>
         </div>
         <div style={{padding:20,overflowY:'auto',flex:1}} className="scroll-y">
-          <div style={{position:'relative',marginBottom:14}}>
-            <input type="text" value={search} onChange={e=>setSearch(sanitize(e.target.value))} className="input" placeholder="Buscar peça em estoque..." style={{paddingLeft:36}}/>
-            <div style={{position:'absolute',left:11,top:'50%',transform:'translateY(-50%)',color:'var(--muted)'}}><Icon name="search" size={14}/></div>
-          </div>
-          <div style={{display:'flex',flexDirection:'column',gap:8,marginBottom:16}}>
-            {candidatos.length===0&&<p style={{fontSize:10,color:'var(--muted)',textAlign:'center',padding:'12px 0'}}>Nenhuma peça disponível encontrada.</p>}
-            {candidatos.slice(0,20).map(e=>(
-              <label key={e.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderRadius:10,border:`1.5px solid ${selecionado?.id===e.id?'var(--red)':'var(--border)'}`,background:selecionado?.id===e.id?'var(--red-light)':'#fff',cursor:'pointer'}}>
-                <input type="radio" checked={selecionado?.id===e.id} onChange={()=>setSelecionado(e)} style={{width:15,height:15,accentColor:'var(--red)',flexShrink:0}}/>
-                <div style={{flex:1,minWidth:0}}>
-                  <p style={{fontSize:11,fontWeight:800,textTransform:'uppercase',margin:0}}>{e.descricao}</p>
-                  <p style={{fontSize:9,color:'var(--muted)',margin:0}}>{e.fabricante} · {e.modelo}</p>
+          {modoEstoque&&(
+            <div style={{marginBottom:16}}>
+              <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',display:'block',marginBottom:6}}>Número da OS de destino</label>
+              <input type="text" inputMode="numeric" value={osInput} onChange={e=>{setOsInput(sanitize(e.target.value));setItemSelecionado(null);}} className="input" placeholder="Nº da OS" style={{fontSize:18,fontWeight:800}} autoFocus/>
+              {osInput.trim()&&!reqEncontrada&&<p style={{fontSize:9,color:'var(--red)',fontWeight:700,marginTop:6}}>✗ Nenhum pedido encontrado para esta OS.</p>}
+              {reqEncontrada&&!modeloCompativel&&(
+                <p style={{fontSize:9,color:'var(--red)',fontWeight:700,marginTop:6}}>✗ O modelo da OS ({vehicleModelo||'—'}) não corresponde ao modelo desta peça em estoque ({estoqueItemFixo?.modelo}).</p>
+              )}
+              {reqEncontrada&&modeloCompativel&&<p style={{fontSize:9,color:'#059669',fontWeight:700,marginTop:6}}>✓ OS #{osInput.trim()} — {vehicleModelo} (modelo compatível)</p>}
+            </div>
+          )}
+
+          {(!modoEstoque||(reqEncontrada&&modeloCompativel))&&(
+            <div style={{marginBottom:16}}>
+              <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',marginBottom:8}}>Selecione a peça pendente da requisição</p>
+              {itensPendentes.length===0?(
+                <p style={{fontSize:10,color:'var(--muted)'}}>Nenhuma peça pendente encontrada nesta OS.</p>
+              ):(
+                <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                  {itensPendentes.map((it,i)=>(
+                    <label key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderRadius:10,border:`1.5px solid ${itemSelecionado?.id===it.id?'var(--red)':'var(--border)'}`,background:itemSelecionado?.id===it.id?'var(--red-light)':'#fff',cursor:'pointer'}}>
+                      <input type="radio" checked={itemSelecionado?.id===it.id} onChange={()=>setItemSelecionado(it)} style={{width:15,height:15,accentColor:'var(--red)',flexShrink:0}}/>
+                      {it.photo?<img src={it.photo} style={{width:36,height:36,borderRadius:7,objectFit:'cover',flexShrink:0}}/>:<div style={{width:36,height:36,borderRadius:7,background:'var(--smoke)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="package" size={14}/></div>}
+                      <div style={{flex:1,minWidth:0}}>
+                        <p style={{fontSize:11,fontWeight:800,textTransform:'uppercase',margin:'0 0 3px'}}>{it.description}</p>
+                        <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                          <StatusBadge status={it.status||'Pendente'}/>
+                          <span style={{fontSize:8,color:'var(--muted)',fontWeight:700}}>Qtd necessária: {it.quantity}</span>
+                        </div>
+                      </div>
+                    </label>
+                  ))}
                 </div>
-                <span className="badge" style={{background:'#EDFAF3',color:'#0A6B34',border:'1px solid #AAE6C5'}}>{e.quantidade} un.</span>
-              </label>
-            ))}
-          </div>
-          {selecionado&&(
+              )}
+            </div>
+          )}
+
+          {!modoEstoque&&itemSelecionado&&(
             <div>
-              <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',display:'block',marginBottom:6}}>Quantidade a dar baixa</label>
-              <input type="number" min="1" max={selecionado.quantidade} value={quantidade} onChange={e=>setQuantidade(e.target.value)} className="input" style={{fontSize:18,fontWeight:800}}/>
+              <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',marginBottom:8}}>Selecione a peça em estoque (modelo: {reqFixo?.vehicleData?.modelo||'—'})</p>
+              {estoqueCandidatos.length===0?(
+                <p style={{fontSize:10,color:'var(--red)',fontWeight:700}}>Nenhuma peça em estoque para o modelo {reqFixo?.vehicleData?.modelo||'—'}.</p>
+              ):(
+                <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                  {estoqueCandidatos.map(e=>(
+                    <label key={e.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderRadius:10,border:`1.5px solid ${estoqueSelecionadoId===e.id?'var(--red)':'var(--border)'}`,background:estoqueSelecionadoId===e.id?'var(--red-light)':'#fff',cursor:'pointer'}}>
+                      <input type="radio" checked={estoqueSelecionadoId===e.id} onChange={()=>setEstoqueSelecionadoId(e.id)} style={{width:15,height:15,accentColor:'var(--red)',flexShrink:0}}/>
+                      <div style={{flex:1,minWidth:0}}>
+                        <p style={{fontSize:11,fontWeight:800,textTransform:'uppercase',margin:0}}>{e.descricao}</p>
+                        <p style={{fontSize:9,color:'var(--muted)',margin:0}}>{e.fabricante}</p>
+                      </div>
+                      <span className="badge" style={{background:(Number(e.quantidade)||0)>=qtdNecessaria?'#EDFAF3':'var(--red-light)',color:(Number(e.quantidade)||0)>=qtdNecessaria?'#0A6B34':'var(--red)',border:`1px solid ${(Number(e.quantidade)||0)>=qtdNecessaria?'#AAE6C5':'#FFBDBD'}`}}>{e.quantidade} un.</span>
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {modoEstoque&&itemSelecionado&&(
+            <div style={{background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:10,padding:'10px 14px',marginTop:4}}>
+              <p style={{fontSize:9,fontWeight:700,color:'var(--muted)',margin:0}}>Disponível em estoque: <strong>{estoqueItemFixo?.quantidade||0}</strong> · Necessário: <strong>{qtdNecessaria}</strong></p>
+              {!estoqueSuficiente&&<p style={{fontSize:9,color:'var(--red)',fontWeight:700,marginTop:4}}>Quantidade em estoque insuficiente para esta baixa.</p>}
             </div>
           )}
         </div>
         <div style={{padding:'16px 20px',background:'var(--smoke)',borderTop:'1px solid var(--border)',display:'flex',gap:10,flexShrink:0}}>
           <button onClick={onClose} className="btn-ghost" style={{flex:1}}>Cancelar</button>
-          <button onClick={confirmar} disabled={saving||!selecionado} className="btn-primary" style={{flex:2}}>
+          <button onClick={confirmar} disabled={saving||!podeConfirmar} className="btn-primary" style={{flex:2}}>
             {saving?<Icon name="refresh-cw" size={14} className="spin"/>:<Icon name="check" size={14}/>} Confirmar Baixa
           </button>
         </div>
@@ -5151,10 +5221,14 @@ function EstoqueView({estoque,movimentos,requests,loggedInUser,isMaster}){
   const[historicoAberto,setHistoricoAberto]=useState(null);
   const[confirmDel,setConfirmDel]=useState(null);
   const[modelosAbertos,setModelosAbertos]=useState({});
+  const[mostrarZerados,setMostrarZerados]=useState(false);
 
   const agrupado=useMemo(()=>{
     const t=search.trim().toLowerCase();
     const filtered=estoque.filter(e=>{
+      // Peça zerada some da listagem — a exceção é quando ainda sobra quantidade
+      // depois de uma baixa parcial, aí ela continua aparecendo com o saldo restante.
+      if(!mostrarZerados&&(Number(e.quantidade)||0)<=0)return false;
       if(!t)return true;
       return String(e.modelo||'').toLowerCase().includes(t)||String(e.fabricante||'').toLowerCase().includes(t)||String(e.descricao||'').toLowerCase().includes(t);
     });
@@ -5221,11 +5295,18 @@ function EstoqueView({estoque,movimentos,requests,loggedInUser,isMaster}){
         ))}
       </div>
 
-      <div style={{position:'relative',marginBottom:20}}>
-        <input type="text" placeholder="Buscar por modelo, fabricante ou peça..." value={search} onChange={e=>setSearch(e.target.value)} className="input" style={{paddingLeft:36,fontSize:12}}/>
-        <div style={{position:'absolute',left:11,top:'50%',transform:'translateY(-50%)',color:'var(--muted)'}}><Icon name="search" size={15}/></div>
+      <div style={{marginBottom:20}}>
+        <div style={{position:'relative'}}>
+          <input type="text" placeholder="Buscar por modelo, fabricante ou peça..." value={search} onChange={e=>setSearch(e.target.value)} className="input" style={{paddingLeft:36,fontSize:12}}/>
+          <div style={{position:'absolute',left:11,top:'50%',transform:'translateY(-50%)',color:'var(--muted)'}}><Icon name="search" size={15}/></div>
+        </div>
+        {isMaster&&(
+          <label style={{display:'flex',alignItems:'center',gap:6,fontSize:9,fontWeight:700,color:'var(--muted)',marginTop:8,cursor:'pointer'}}>
+            <input type="checkbox" checked={mostrarZerados} onChange={e=>setMostrarZerados(e.target.checked)} style={{accentColor:'var(--red)'}}/>
+            Mostrar peças zeradas (quantidade 0) para gerenciar
+          </label>
+        )}
       </div>
-
       {agrupado.length===0?(
         <div style={{padding:'64px 20px',textAlign:'center',background:'#fff',borderRadius:16,border:'1.5px dashed var(--border)'}}>
           <Icon name="boxes" size={32} style={{margin:'0 auto 10px',display:'block',color:'var(--muted)'}}/>
@@ -5267,18 +5348,19 @@ function EstoqueView({estoque,movimentos,requests,loggedInUser,isMaster}){
                                   </td>
                                   <td style={{fontSize:9,color:'var(--muted)'}}>{it.atualizadoEm?new Date(it.atualizadoEm).toLocaleDateString('pt-BR'):'—'}{it.atualizadoPor?' · '+it.atualizadoPor:''}</td>
                                   <td style={{textAlign:'right'}}>
-                                    <div style={{display:'flex',gap:5,justifyContent:'flex-end',flexWrap:'wrap'}}>
-                                      <button onClick={()=>setHistoricoAberto(historicoAberto===it.id?null:it.id)} title="Histórico" style={{width:26,height:26,background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:7,cursor:'pointer',color:'var(--muted)',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="history" size={13}/></button>
+                                    <div style={{display:'flex',gap:6,justifyContent:'flex-end',flexWrap:'wrap'}}>
+                                      <button onClick={()=>setHistoricoAberto(historicoAberto===it.id?null:it.id)} style={{display:'flex',alignItems:'center',gap:5,padding:'6px 10px',background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:7,cursor:'pointer',color:'var(--muted)',fontSize:9,fontWeight:800,textTransform:'uppercase',fontFamily:'Plus Jakarta Sans,sans-serif',whiteSpace:'nowrap'}}><Icon name="history" size={12}/> Histórico</button>
                                       {isMaster&&(<>
-                                        <button onClick={()=>setEntradaItem(it)} title="Entrada" style={{width:26,height:26,background:'#EDFAF3',border:'1px solid #AAE6C5',borderRadius:7,cursor:'pointer',color:'#059669',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="plus" size={13}/></button>
-                                        <button onClick={()=>setBaixaItem(it)} title="Baixa" style={{width:26,height:26,background:'var(--red-light)',border:'1px solid #FFBDBD',borderRadius:7,cursor:'pointer',color:'var(--red)',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="minus" size={13}/></button>
+                                        <button onClick={()=>setEntradaItem(it)} style={{display:'flex',alignItems:'center',gap:5,padding:'6px 10px',background:'#EDFAF3',border:'1px solid #AAE6C5',borderRadius:7,cursor:'pointer',color:'#059669',fontSize:9,fontWeight:800,textTransform:'uppercase',fontFamily:'Plus Jakarta Sans,sans-serif',whiteSpace:'nowrap'}}><Icon name="plus-circle" size={12}/> Entrada</button>
+                                        <button onClick={()=>setBaixaItem(it)} style={{display:'flex',alignItems:'center',gap:5,padding:'6px 10px',background:'var(--red-light)',border:'1px solid #FFBDBD',borderRadius:7,cursor:'pointer',color:'var(--red)',fontSize:9,fontWeight:800,textTransform:'uppercase',fontFamily:'Plus Jakarta Sans,sans-serif',whiteSpace:'nowrap'}}><Icon name="minus-circle" size={12}/> Baixa</button>
                                         {confirmDel===it.id?(
-                                          <div style={{display:'flex',gap:4}}>
-                                            <button onClick={()=>setConfirmDel(null)} className="btn-ghost" style={{padding:'4px 8px',fontSize:8}}>Não</button>
-                                            <button onClick={()=>excluirItem(it.id)} style={{padding:'4px 8px',background:'var(--red)',color:'#fff',border:'none',borderRadius:6,fontSize:8,fontWeight:800,cursor:'pointer'}}>Sim</button>
+                                          <div style={{display:'flex',gap:5,alignItems:'center'}}>
+                                            <span style={{fontSize:8,fontWeight:800,color:'var(--red)',textTransform:'uppercase'}}>Excluir sem OS?</span>
+                                            <button onClick={()=>setConfirmDel(null)} className="btn-ghost" style={{padding:'5px 10px',fontSize:8}}>Cancelar</button>
+                                            <button onClick={()=>excluirItem(it.id)} style={{padding:'5px 10px',background:'var(--red)',color:'#fff',border:'none',borderRadius:6,fontSize:8,fontWeight:800,cursor:'pointer',textTransform:'uppercase'}}>Confirmar</button>
                                           </div>
                                         ):(
-                                          <button onClick={()=>setConfirmDel(it.id)} title="Excluir" style={{width:26,height:26,background:'#fff',border:'1px solid #FFBDBD',borderRadius:7,cursor:'pointer',color:'var(--red)',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="trash-2" size={13}/></button>
+                                          <button onClick={()=>setConfirmDel(it.id)} style={{display:'flex',alignItems:'center',gap:5,padding:'6px 10px',background:'#fff',border:'1px solid #FFBDBD',borderRadius:7,cursor:'pointer',color:'var(--red)',fontSize:9,fontWeight:800,textTransform:'uppercase',fontFamily:'Plus Jakarta Sans,sans-serif',whiteSpace:'nowrap'}}><Icon name="trash-2" size={12}/> Excluir</button>
                                         )}
                                       </>)}
                                     </div>
@@ -5321,10 +5403,10 @@ function EstoqueView({estoque,movimentos,requests,loggedInUser,isMaster}){
         </div>
       )}
 
-      {showAdd&&isMaster&&<AddEstoqueModal onClose={()=>setShowAdd(false)} loggedInUser={loggedInUser} estoque={estoque}/>}
+   {showAdd&&isMaster&&<AddEstoqueModal onClose={()=>setShowAdd(false)} loggedInUser={loggedInUser} estoque={estoque}/>}
       {showImport&&isMaster&&<ImportEstoqueModal onClose={()=>setShowImport(false)} loggedInUser={loggedInUser}/>}
-      {entradaItem&&isMaster&&<MovimentoEstoqueModal item={entradaItem} tipo="entrada" onClose={()=>setEntradaItem(null)} loggedInUser={loggedInUser}/>}
-      {baixaItem&&isMaster&&<MovimentoEstoqueModal item={baixaItem} tipo="baixa" requests={requests} onClose={()=>setBaixaItem(null)} loggedInUser={loggedInUser}/>}
+      {entradaItem&&isMaster&&<EntradaEstoqueModal item={entradaItem} onClose={()=>setEntradaItem(null)} loggedInUser={loggedInUser}/>}
+      {baixaItem&&isMaster&&<AssociarEstoqueBaixaModal estoqueItemFixo={baixaItem} estoque={estoque} requests={requests} loggedInUser={loggedInUser} onClose={()=>setBaixaItem(null)}/>}
     </div>
   );
 }
