@@ -427,13 +427,17 @@ const stats=useMemo(()=>{
     const porCategoria={ajuste:{total:0,solucionado:0,osComProblema:0},martelinho:{total:0,solucionado:0,osComProblema:0},pintura:{total:0,solucionado:0,osComProblema:0},vidro:{total:0,solucionado:0,osComProblema:0},outro:{total:0,solucionado:0,osComProblema:0}};
     const reclamacoesMap={};
     const porModelo={};
+    const porLinha={};
     const temposResolucaoInspecao=[]; // dias da abertura até TODOS os problemas + peças resolvidos
     let inspecoesSolucionadas=0,inspecoesAbertas=0;
     let problemasAbertasTotal=0,problemasAbertasSolucionados=0;
-    ativas.forEach(fin=>{
+  ativas.forEach(fin=>{
       const modelo=fin.vehicleData?.modelo||'N/D';
+      const linha=fin.vehicleData?.linhaProducao||'N/D';
       if(!porModelo[modelo])porModelo[modelo]={ajuste:0,martelinho:0,pintura:0,vidro:0,outro:0,total:0,inspecoes:0};
       porModelo[modelo].inspecoes++;
+      if(!porLinha[linha])porLinha[linha]={ajuste:0,martelinho:0,pintura:0,vidro:0,outro:0,total:0,inspecoes:0};
+      porLinha[linha].inspecoes++;
       let problemasDaInspecao=0,solucionadosDaInspecao=0,ultimaResolucao=null;
       CATS.forEach(([key])=>{
         const items=fin[key]||[];
@@ -441,8 +445,10 @@ const stats=useMemo(()=>{
         problemasDaInspecao+=items.length;
         porCategoria[key].total+=items.length;
         if(items.length>0)porCategoria[key].osComProblema++;
-        porModelo[modelo][key]+=items.length;
+       porModelo[modelo][key]+=items.length;
         porModelo[modelo].total+=items.length;
+        porLinha[linha][key]+=items.length;
+        porLinha[linha].total+=items.length;
         items.forEach(p=>{
           if(p.status==='Solucionado'){
             totalSolucionados++;
@@ -484,11 +490,12 @@ const stats=useMemo(()=>{
     });
     const rankReclamacoes=Object.entries(reclamacoesMap).sort((a,b)=>b[1].count-a[1].count).slice(0,8);
     const rankModelos=Object.entries(porModelo).sort((a,b)=>b[1].total-a[1].total).slice(0,8);
+    const rankLinhas=Object.entries(porLinha).sort((a,b)=>b[1].total-a[1].total);
     const taxaResolucaoGeral=totalProblemas>0?Math.round(totalSolucionados/totalProblemas*100):0;
     const taxaResolucaoAbertas=problemasAbertasTotal>0?Math.round(problemasAbertasSolucionados/problemasAbertasTotal*100):0;
     const mediaProblemasPorInspecao=(totalProblemas/ativas.length).toFixed(1);
     const tempoMedioResolucaoInspecao=temposResolucaoInspecao.length?(temposResolucaoInspecao.reduce((a,b)=>a+b,0)/temposResolucaoInspecao.length).toFixed(1):0;
-    return{totalInspecoes:ativas.length,inspecoesSolucionadas,inspecoesAbertas,totalProblemas,totalSolucionados,porCategoria,rankReclamacoes,rankModelos,taxaResolucaoGeral,taxaResolucaoAbertas,mediaProblemasPorInspecao,tempoMedioResolucaoInspecao};
+    return{totalInspecoes:ativas.length,inspecoesSolucionadas,inspecoesAbertas,totalProblemas,totalSolucionados,porCategoria,rankReclamacoes,rankModelos,rankLinhas,taxaResolucaoGeral,taxaResolucaoAbertas,mediaProblemasPorInspecao,tempoMedioResolucaoInspecao};
   },[finalizacoes,requests]);
 
   if(!stats)return(
@@ -610,6 +617,35 @@ const stats=useMemo(()=>{
               </div>
             </div>
           ))}
+       </div>
+      </div>
+
+      <div className="card" style={{padding:20}}>
+        <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:4}}>Problemas por Linha de Produção</p>
+        <p style={{fontSize:9,color:'var(--muted)',marginBottom:16}}>Total de inspeções e problemas de cada categoria, agrupados pela linha onde o veículo foi inspecionado</p>
+        <div style={{display:'flex',flexDirection:'column',gap:18}}>
+          {stats.rankLinhas.map(([linha,d])=>{
+            const maxLinhaTotal=Math.max(...stats.rankLinhas.map(([,x])=>x.total),1);
+            return(
+              <div key={linha}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6,flexWrap:'wrap',gap:6}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <div style={{width:22,height:22,borderRadius:6,background:'var(--ink)',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="factory" size={12} style={{color:'#fff'}}/></div>
+                    <span style={{fontSize:11,fontWeight:700,textTransform:'uppercase'}}>{linha}</span>
+                    <span className="pill" style={{fontSize:8}}>{d.inspecoes} inspeção{d.inspecoes!==1?'ões':''}</span>
+                  </div>
+                  <span style={{fontSize:11,fontWeight:800,color:'var(--red)'}}>{d.total} problema{d.total!==1?'s':''} no total</span>
+                </div>
+                <div className="progress-track" style={{marginBottom:8}}><div className="progress-fill" style={{width:`${d.total/maxLinhaTotal*100}%`,background:'var(--ink)'}}/></div>
+                <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                  {CATS.map(([key,label,color])=>d[key]>0&&(
+                    <span key={key} style={{fontSize:8,fontWeight:700,padding:'2px 7px',borderRadius:5,background:color+'18',color,border:`1px solid ${color}55`}}>{label}: {d[key]}</span>
+                  ))}
+                  {d.total===0&&<span style={{fontSize:8,color:'var(--muted)',fontWeight:600}}>Nenhum problema registrado nesta linha</span>}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -3660,8 +3696,8 @@ const executarSalvar=async()=>{
             <div style={{width:'100%'}}>
               <p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',letterSpacing:'.12em',color:'rgba(255,255,255,.3)',margin:'0 0 4px'}}>Veículo encontrado</p>
               <p style={{fontSize:20,fontWeight:800,textTransform:'uppercase',color:'#fff',margin:'0 0 10px'}}>{vehicle.modelo}</p>
-              <div className="grid-3col" style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10}}>
-                {[['Etapa',vehicle.etapa],['Cor',vehicle.cor],['Chassi',vehicle.chassi]].map(([l,v])=>(
+            <div className="grid-4col" style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:10}}>
+                {[['Etapa',vehicle.etapa],['Cor',vehicle.cor],['Chassi',vehicle.chassi],['Linha',vehicle.linhaProducao]].map(([l,v])=>(
                   <div key={l}><p style={{fontSize:7,color:'rgba(255,255,255,.3)',fontWeight:700,textTransform:'uppercase',margin:'0 0 2px'}}>{l}</p><p style={{fontSize:11,color:'rgba(255,255,255,.85)',fontWeight:600,margin:0,textTransform:'uppercase'}}>{v||'—'}</p></div>
                 ))}
               </div>
@@ -5521,12 +5557,12 @@ const changeRole=async(u,r)=>{
   };
   const logout=()=>{setLoggedIn(null);setView('request');};
 
-  const handlePaste=e=>{
+ const handlePaste=e=>{
     const text=e.clipboardData.getData('text');const lines=text.split(/\r?\n/).filter(l=>l.trim());if(!lines.length)return;
     const headers=lines[0].split(/[,\t]/).map(h=>h.trim().toUpperCase());
     const fi=t=>headers.findIndex(h=>t.some(x=>h.includes(x)));
-    const[iO,iM,iF,iC,iCh,iE,iL]=[fi(['OS']),fi(['MODELO']),fi(['FABRICANTE','MARCA']),fi(['COR']),fi(['CHASSI']),fi(['ETAPA']),fi(['LOCALIZA'])];
-    const rows=(iO!==-1?lines.slice(1):lines).map(l=>{const v=l.split(/[,\t]/);const g=(i,fb)=>(i!==-1?v[i]:v[fb])?.trim()||'';return{os:g(iO,0),modelo:g(iM,1),fabricante:g(iF,2),cor:g(iC,3),chassi:g(iCh,4),etapa:g(iE,5),localizacao:g(iL,6)};}).filter(r=>r.os);
+    const[iO,iM,iF,iC,iCh,iE,iL,iLP]=[fi(['OS']),fi(['MODELO']),fi(['FABRICANTE','MARCA']),fi(['COR']),fi(['CHASSI']),fi(['ETAPA']),fi(['LOCALIZA']),fi(['LINHA'])];
+    const rows=(iO!==-1?lines.slice(1):lines).map(l=>{const v=l.split(/[,\t]/);const g=(i,fb)=>(i!==-1?v[i]:v[fb])?.trim()||'';return{os:g(iO,0),modelo:g(iM,1),fabricante:g(iF,2),cor:g(iC,3),chassi:g(iCh,4),etapa:g(iE,5),localizacao:g(iL,6),linhaProducao:g(iLP,7)};}).filter(r=>r.os);
     setImportData(rows);
   };
   const commitImport=async()=>{
@@ -5777,13 +5813,13 @@ const navItems=[
                       <div className="card" style={{overflow:'hidden'}}>
                         <div style={{overflowX:'auto',maxHeight:'60vh'}} className="scroll-y">
                           <table className="vtable w-full" style={{minWidth:900}}>
-                            <thead style={{position:'sticky',top:0}}><tr>{['OS','Modelo','Fabricante','Cor','Chassi','Etapa','Localização'].map(h=><th key={h}>{h}</th>)}</tr></thead>
+                           <thead style={{position:'sticky',top:0}}><tr>{['OS','Modelo','Fabricante','Cor','Chassi','Etapa','Localização','Linha Produção'].map(h=><th key={h}>{h}</th>)}</tr></thead>
                             <tbody>
-                              {vehicles.length===0?<tr><td colSpan="7" style={{padding:40,textAlign:'center',fontSize:10,fontWeight:700,textTransform:'uppercase',color:'var(--muted)'}}>Nenhum veículo cadastrado</td></tr>:vehicles.map((v,i)=>(
+                              {vehicles.length===0?<tr><td colSpan="8" style={{padding:40,textAlign:'center',fontSize:10,fontWeight:700,textTransform:'uppercase',color:'var(--muted)'}}>Nenhum veículo cadastrado</td></tr>:vehicles.map((v,i)=>(
                                 <tr key={i}>
                                   <td style={{fontWeight:800,fontSize:13}}>#{v.os}</td><td style={{fontWeight:600,textTransform:'uppercase'}}>{v.modelo}</td><td style={{textTransform:'uppercase'}}>{v.fabricante}</td><td style={{textTransform:'uppercase'}}>{v.cor}</td>
                                   <td className="mono" style={{fontSize:10,fontWeight:700}}>{v.chassi}</td>
-                                  <td><span className="badge badge-pending">{v.etapa}</span></td><td style={{textTransform:'uppercase'}}>{v.localizacao}</td>
+                                  <td><span className="badge badge-pending">{v.etapa}</span></td><td style={{textTransform:'uppercase'}}>{v.localizacao}</td><td style={{textTransform:'uppercase'}}>{v.linhaProducao||'—'}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -5910,12 +5946,12 @@ const navItems=[
                   <div style={{flex:1,overflow:'auto',border:'1px solid var(--border)',borderRadius:12}} className="scroll-y">
                     <table style={{width:'100%',borderCollapse:'collapse',minWidth:900}}>
                       <thead style={{background:'var(--smoke)',position:'sticky',top:0}}>
-                        <tr>{['OS','Modelo','Fabricante','Cor','Chassi','Etapa','Localização'].map(h=><th key={h} style={{padding:10,fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.08em',color:'var(--muted)',textAlign:'left',borderBottom:'1px solid var(--border)'}}>{h}</th>)}</tr>
+                       <tr>{['OS','Modelo','Fabricante','Cor','Chassi','Etapa','Localização','Linha Produção'].map(h=><th key={h} style={{padding:10,fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.08em',color:'var(--muted)',textAlign:'left',borderBottom:'1px solid var(--border)'}}>{h}</th>)}</tr>
                       </thead>
                       <tbody>
                         {importData.map((row,rIdx)=>(
                           <tr key={rIdx} style={{borderBottom:'1px solid var(--smoke)'}}>
-                            {['os','modelo','fabricante','cor','chassi','etapa','localizacao'].map(k=>(
+                            {['os','modelo','fabricante','cor','chassi','etapa','localizacao','linhaProducao'].map(k=>(
                               <td key={k} style={{border:'none',padding:0,height:36}}><input className="excel-input" value={row[k]} onChange={e=>{const d=[...importData];d[rIdx][k]=sanitize(e.target.value);setImportData(d);}}/></td>
                             ))}
                           </tr>
