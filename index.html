@@ -418,13 +418,48 @@ function MiniBar({data,color='#DC1F1F'}){
 }
 
 // ── Finalização Analytics ─────────────────────────────────────────────────
-function FinalizacaoAnalyticsView({finalizacoes,requests}){
+function FinalizacaoAnalyticsView({finalizacoes,requests,vehicles}){
   const CATS=[['ajuste','Ajuste','#F59E0B','wrench'],['martelinho','Martelinho','#DC1F1F','hammer'],['pintura','Pintura','#2563EB','paintbrush'],['vidro','Vidro','#0EA5E9','square'],['outro','Outro','#6B7280','more-horizontal']];
+  const TIPO_CATS=['pintura','vidro'];
+  const[periodo,setPeriodo]=useState('mensal');
+  const[offset,setOffset]=useState(0);
+  const{inicioPeriodo,fimPeriodo}=useMemo(()=>{
+    const agora=new Date();
+    let ini,fim;
+    if(periodo==='semanal'){
+      const diaSem=agora.getDay();
+      ini=new Date(agora);ini.setDate(agora.getDate()-diaSem+(offset*7));ini.setHours(0,0,0,0);
+      fim=new Date(ini);fim.setDate(ini.getDate()+6);fim.setHours(23,59,59,999);
+    }else if(periodo==='quinzenal'){
+      const quinzenaAtual=agora.getDate()<=15?0:1;
+      const totalQuinzenas=(agora.getFullYear()*24+agora.getMonth()*2+quinzenaAtual)+offset;
+      const year=Math.floor(totalQuinzenas/24);const month=Math.floor((totalQuinzenas%24)/2);
+      const isSecondHalf=totalQuinzenas%2!==0;
+      ini=new Date(year,month,isSecondHalf?16:1);ini.setHours(0,0,0,0);
+      fim=isSecondHalf?new Date(year,month+1,0):new Date(year,month,15);
+      fim.setHours(23,59,59,999);
+    }else{
+      const totalMonths=(agora.getFullYear()*12+agora.getMonth())+offset;
+      const year=Math.floor(totalMonths/12);const month=totalMonths%12;
+      ini=new Date(year,month,1);ini.setHours(0,0,0,0);
+      fim=new Date(year,month+1,0);fim.setHours(23,59,59,999);
+    }
+    return{inicioPeriodo:ini,fimPeriodo:fim};
+  },[periodo,offset]);
+  const isPeriodoAtual=offset===0;
+  const vehicleMap=useMemo(()=>{const m={};(vehicles||[]).forEach(v=>{m[String(v.os).trim()]=v;});return m;},[vehicles]);
+  const ativasFiltradas=useMemo(()=>{
+    return(finalizacoes||[]).filter(f=>!f.arquivada).filter(f=>{
+      if(!f.criadoEm)return false;
+      const dt=new Date(f.criadoEm);
+      return dt>=inicioPeriodo&&dt<=fimPeriodo;
+    });
+  },[finalizacoes,inicioPeriodo,fimPeriodo]);
 const stats=useMemo(()=>{
-    const ativas=(finalizacoes||[]).filter(f=>!f.arquivada);
+    const ativas=ativasFiltradas;
     if(!ativas.length)return null;
-    let totalProblemas=0,totalSolucionados=0;
-    const porCategoria={ajuste:{total:0,solucionado:0,osComProblema:0},martelinho:{total:0,solucionado:0,osComProblema:0},pintura:{total:0,solucionado:0,osComProblema:0},vidro:{total:0,solucionado:0,osComProblema:0},outro:{total:0,solucionado:0,osComProblema:0}};
+   let totalProblemas=0,totalSolucionados=0;
+    const porCategoria={ajuste:{total:0,solucionado:0,osComProblema:0},martelinho:{total:0,solucionado:0,osComProblema:0},pintura:{total:0,solucionado:0,osComProblema:0,porTipo:{Interno:0,Externo:0}},vidro:{total:0,solucionado:0,osComProblema:0,porTipo:{Interno:0,Externo:0}},outro:{total:0,solucionado:0,osComProblema:0}};
     const reclamacoesMap={};
     const porModelo={};
     const porLinha={};
@@ -432,8 +467,9 @@ const stats=useMemo(()=>{
     let inspecoesSolucionadas=0,inspecoesAbertas=0;
     let problemasAbertasTotal=0,problemasAbertasSolucionados=0;
   ativas.forEach(fin=>{
-      const modelo=fin.vehicleData?.modelo||'N/D';
-      const linha=fin.vehicleData?.linhaProducao||'N/D';
+      const vInfo=vehicleMap[String(fin.os).trim()];
+      const modelo=vInfo?.modelo||fin.vehicleData?.modelo||'N/D';
+      const linha=vInfo?.linhaProducao||fin.vehicleData?.linhaProducao||'N/D';
       if(!porModelo[modelo])porModelo[modelo]={ajuste:0,martelinho:0,pintura:0,vidro:0,outro:0,total:0,inspecoes:0};
       porModelo[modelo].inspecoes++;
       if(!porLinha[linha])porLinha[linha]={ajuste:0,martelinho:0,pintura:0,vidro:0,outro:0,total:0,inspecoes:0};
@@ -449,7 +485,11 @@ const stats=useMemo(()=>{
         porModelo[modelo].total+=items.length;
         porLinha[linha][key]+=items.length;
         porLinha[linha].total+=items.length;
-        items.forEach(p=>{
+    items.forEach(p=>{
+          if(TIPO_CATS.includes(key)){
+            const tipo=p.tipo==='Externo'?'Externo':'Interno';
+            porCategoria[key].porTipo[tipo]++;
+          }
           if(p.status==='Solucionado'){
             totalSolucionados++;
             solucionadosDaInspecao++;
@@ -495,13 +535,42 @@ const stats=useMemo(()=>{
     const taxaResolucaoAbertas=problemasAbertasTotal>0?Math.round(problemasAbertasSolucionados/problemasAbertasTotal*100):0;
     const mediaProblemasPorInspecao=(totalProblemas/ativas.length).toFixed(1);
     const tempoMedioResolucaoInspecao=temposResolucaoInspecao.length?(temposResolucaoInspecao.reduce((a,b)=>a+b,0)/temposResolucaoInspecao.length).toFixed(1):0;
-    return{totalInspecoes:ativas.length,inspecoesSolucionadas,inspecoesAbertas,totalProblemas,totalSolucionados,porCategoria,rankReclamacoes,rankModelos,rankLinhas,taxaResolucaoGeral,taxaResolucaoAbertas,mediaProblemasPorInspecao,tempoMedioResolucaoInspecao};
-  },[finalizacoes,requests]);
+  return{totalInspecoes:ativas.length,inspecoesSolucionadas,inspecoesAbertas,totalProblemas,totalSolucionados,porCategoria,rankReclamacoes,rankModelos,rankLinhas,taxaResolucaoGeral,taxaResolucaoAbertas,mediaProblemasPorInspecao,tempoMedioResolucaoInspecao};
+  },[ativasFiltradas,requests,vehicleMap]);
+
+ const fmtPeriodo=`${inicioPeriodo.toLocaleDateString('pt-BR')} – ${fimPeriodo.toLocaleDateString('pt-BR')}`;
+  const periodSelector=(
+    <div style={{marginBottom:20}}>
+      <div style={{display:'flex',background:'var(--smoke)',padding:4,borderRadius:12,border:'1.5px solid var(--border)',width:'fit-content',marginBottom:12}}>
+        {['semanal','quinzenal','mensal'].map(p=>(
+          <button key={p} onClick={()=>{setPeriodo(p);setOffset(0);}} style={{padding:'7px 16px',borderRadius:8,border:'none',fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',background:periodo===p?'#fff':'transparent',color:periodo===p?'var(--red)':'var(--muted)',boxShadow:periodo===p?'0 2px 8px rgba(0,0,0,.05)':'none',fontFamily:'Plus Jakarta Sans,sans-serif'}}>{p}</button>
+        ))}
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+        <div style={{display:'flex',alignItems:'center',background:'#fff',border:'1.5px solid var(--border)',borderRadius:12,overflow:'hidden'}}>
+          <button onClick={()=>setOffset(o=>o-1)} style={{padding:'9px 14px',background:'none',border:'none',cursor:'pointer',color:'var(--ink)',display:'flex',alignItems:'center',gap:5,fontFamily:'Plus Jakarta Sans,sans-serif',fontSize:10,fontWeight:700}}><Icon name="chevron-left" size={14}/> Anterior</button>
+          <div style={{padding:'9px 16px',borderLeft:'1px solid var(--border)',borderRight:'1px solid var(--border)',textAlign:'center',minWidth:180}}>
+            <p style={{fontSize:11,fontWeight:800,margin:0}}>{fmtPeriodo}</p>
+            {isPeriodoAtual&&<p style={{fontSize:7,fontWeight:800,textTransform:'uppercase',color:'var(--red)',margin:'2px 0 0'}}>Período atual</p>}
+          </div>
+          <button onClick={()=>setOffset(o=>o+1)} disabled={isPeriodoAtual} style={{padding:'9px 14px',background:'none',border:'none',cursor:isPeriodoAtual?'not-allowed':'pointer',color:isPeriodoAtual?'#D0C9C4':'var(--ink)',display:'flex',alignItems:'center',gap:5,fontFamily:'Plus Jakarta Sans,sans-serif',fontSize:10,fontWeight:700}}>Próxima <Icon name="chevron-right" size={14}/></button>
+        </div>
+        {!isPeriodoAtual&&(
+          <button onClick={()=>setOffset(0)} style={{display:'flex',alignItems:'center',gap:6,padding:'9px 14px',background:'var(--ink)',color:'#fff',border:'none',borderRadius:10,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
+            <Icon name="rotate-ccw" size={12}/> Atual
+          </button>
+        )}
+      </div>
+    </div>
+  );
 
   if(!stats)return(
-    <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'80px 20px',textAlign:'center'}}>
-      <div style={{width:64,height:64,background:'var(--smoke)',borderRadius:16,display:'flex',alignItems:'center',justifyContent:'center',marginBottom:16}}><Icon name="clipboard-check" size={26}/></div>
-      <p style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)'}}>Nenhuma inspeção registrada ainda</p>
+    <div className="fade-in">
+      {periodSelector}
+      <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'80px 20px',textAlign:'center'}}>
+        <div style={{width:64,height:64,background:'var(--smoke)',borderRadius:16,display:'flex',alignItems:'center',justifyContent:'center',marginBottom:16}}><Icon name="clipboard-check" size={26}/></div>
+        <p style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)'}}>Nenhuma inspeção neste período</p>
+      </div>
     </div>
   );
 
@@ -511,6 +580,7 @@ const stats=useMemo(()=>{
 
   return(
     <div className="fade-in">
+      {periodSelector}
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:12,marginBottom:16}}>
         {[
           {label:'Total de Inspeções',v:stats.totalInspecoes,sub:'inspeções ativas (não arquivadas)',icon:'clipboard-check',dark:true},
@@ -544,6 +614,12 @@ const stats=useMemo(()=>{
                   <span style={{fontSize:11,fontWeight:800}}>{c.total} <span style={{fontSize:9,fontWeight:600,color:'var(--muted)'}}>({c.solucionado} solucionado{c.solucionado!==1?'s':''})</span></span>
                 </div>
                 <div className="progress-track"><div className="progress-fill" style={{width:`${c.total/maxCat*100}%`,background:color}}/></div>
+                {TIPO_CATS.includes(key)&&c.total>0&&(
+                  <div style={{display:'flex',gap:10,marginTop:6}}>
+                    <span style={{fontSize:8,fontWeight:800,color:'#1A4EC2',background:'#EAF0FF',border:'1px solid #C0D0F5',padding:'2px 8px',borderRadius:999}}>Interno: {c.porTipo.Interno}</span>
+                    <span style={{fontSize:8,fontWeight:800,color:'#C45E00',background:'#FFF4E6',border:'1px solid #FFD9A8',padding:'2px 8px',borderRadius:999}}>Externo: {c.porTipo.Externo}</span>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -653,9 +729,9 @@ const stats=useMemo(()=>{
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────
-function DashboardView({requests}){
+function DashboardView({requests,vehicles}){
   const[tab,setTab]=useState('pecas');
-  const{data:finalizacoes}=useFirestore('finalizacoes');
+ const{data:finalizacoes}=useFirestore('finalizacoes');;
  const stats=useMemo(()=>{
     if(!requests?.length)return null;
     const pedidos=pedidosConsolidados(requests);
@@ -808,7 +884,7 @@ function DashboardView({requests}){
         </>
       ))}
 
-      {tab==='finalizacao'&&<FinalizacaoAnalyticsView finalizacoes={finalizacoes} requests={requests}/>}
+      {tab==='finalizacao'&&<FinalizacaoAnalyticsView finalizacoes={finalizacoes} requests={requests} vehicles={vehicles}/>}
     </div>
   );
 }
@@ -3281,7 +3357,7 @@ function ProblemCategoryEditor({title,icon,color,items,setItems,disabled,limiteA
              </div>
               {tipoSelect&&(
                 <div>
-                  <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.08em',color:'var(--muted)',display:'block',marginBottom:4}}>Tipo de Pintura</label>
+                 <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.08em',color:'var(--muted)',display:'block',marginBottom:4}}>Tipo de {title}</label>
                   <select value={p.tipo||'Interno'} onChange={e=>updateProblem(p.id,'tipo',e.target.value)} disabled={disabled} className="input" style={{fontSize:11,fontWeight:700,appearance:'auto',padding:'8px 12px'}}>
                     <option value="Interno">Interno</option>
                     <option value="Externo">Externo</option>
@@ -3721,7 +3797,7 @@ const executarSalvar=async()=>{
     <ProblemCategoryEditor title="Ajuste" icon="wrench" color="#F59E0B" items={ajuste} setItems={setAjuste} disabled={disabled} limiteAtingido={limiteAtingido}/>
       <ProblemCategoryEditor title="Martelinho" icon="hammer" color="#DC1F1F" items={martelinho} setItems={setMartelinho} disabled={disabled} limiteAtingido={limiteAtingido}/>
       <ProblemCategoryEditor title="Pintura" icon="paintbrush" color="#2563EB" items={pintura} setItems={setPintura} disabled={disabled} limiteAtingido={limiteAtingido} tipoSelect/>
-      <ProblemCategoryEditor title="Vidro" icon="square" color="#0EA5E9" items={vidro} setItems={setVidro} disabled={disabled} limiteAtingido={limiteAtingido}/>
+      <ProblemCategoryEditor title="Vidro" icon="square" color="#0EA5E9" items={vidro} setItems={setVidro} disabled={disabled} limiteAtingido={limiteAtingido} tipoSelect/>
       <ProblemCategoryEditor title="Outro" icon="more-horizontal" color="#6B7280" items={outro} setItems={setOutro} disabled={disabled} limiteAtingido={limiteAtingido}/>
       <PecasFinalizacaoSection os={os} requests={requests}
         novasPecas={novasPecas} setNovasPecas={setNovasPecas} excedentes={excedentes} setExcedentes={setExcedentes}
@@ -3792,7 +3868,7 @@ function EditarInspecaoModal({fin,loggedInUser,onClose}){
           <ProblemCategoryEditor title="Ajuste" icon="wrench" color="#F59E0B" items={ajuste} setItems={setAjuste} disabled={false} limiteAtingido={limiteAtingido}/>
           <ProblemCategoryEditor title="Martelinho" icon="hammer" color="#DC1F1F" items={martelinho} setItems={setMartelinho} disabled={false} limiteAtingido={limiteAtingido}/>
           <ProblemCategoryEditor title="Pintura" icon="paintbrush" color="#2563EB" items={pintura} setItems={setPintura} disabled={false} limiteAtingido={limiteAtingido} tipoSelect/>
-          <ProblemCategoryEditor title="Vidro" icon="square" color="#0EA5E9" items={vidro} setItems={setVidro} disabled={false} limiteAtingido={limiteAtingido}/>
+          <ProblemCategoryEditor title="Vidro" icon="square" color="#0EA5E9" items={vidro} setItems={setVidro} disabled={false} limiteAtingido={limiteAtingido} tipoSelect/>
           <ProblemCategoryEditor title="Outro" icon="more-horizontal" color="#6B7280" items={outro} setItems={setOutro} disabled={false} limiteAtingido={limiteAtingido}/>
         </div>
         <div style={{padding:'16px 24px',background:'var(--smoke)',borderTop:'1px solid var(--border)',display:'flex',justifyContent:'flex-end',gap:10,flexShrink:0}}>
@@ -5760,7 +5836,7 @@ const navItems=[
           <div style={{maxWidth:1100,margin:'0 auto'}}>
             {loading?<Skeleton/>:(
               <>
-                {view==='dashboard'&&(isMaster||isAdmin)&&<DashboardView requests={requests}/>}
+                {view==='dashboard'&&(isMaster||isAdmin)&&<DashboardView requests={requests} vehicles={vehicles}/>}
 {view==='resumo'&&(loggedIn?.user===MASTER_USER||loggedIn?.user==='Matheus.Ransi')&&<ResumoReuniaoView requests={requests}/>}
                 {view==='request'&&isSol&&<RequestForm user={user} loggedInUser={loggedIn} vehiclesDB={vehicles} requests={requests}/>}
                 {view==='status'&&<StatusView requests={requests} loggedInUser={loggedIn} vehicles={vehicles}/>}
