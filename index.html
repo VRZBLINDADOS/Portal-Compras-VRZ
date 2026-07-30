@@ -421,8 +421,9 @@ function MiniBar({data,color='#DC1F1F'}){
 function FinalizacaoAnalyticsView({finalizacoes,requests,vehicles}){
   const CATS=[['ajuste','Ajuste','#F59E0B','wrench'],['martelinho','Martelinho','#DC1F1F','hammer'],['pintura','Pintura','#2563EB','paintbrush'],['vidro','Vidro','#0EA5E9','square'],['outro','Outro','#6B7280','more-horizontal']];
   const TIPO_CATS=['pintura','vidro'];
-  const[periodo,setPeriodo]=useState('mensal');
+const[periodo,setPeriodo]=useState('mensal');
   const[offset,setOffset]=useState(0);
+  const[linhaSelecionada,setLinhaSelecionada]=useState(null);
   const{inicioPeriodo,fimPeriodo}=useMemo(()=>{
     const agora=new Date();
     let ini,fim;
@@ -455,6 +456,14 @@ function FinalizacaoAnalyticsView({finalizacoes,requests,vehicles}){
       return dt>=inicioPeriodo&&dt<=fimPeriodo;
     });
   },[finalizacoes,inicioPeriodo,fimPeriodo]);
+  const finalizacoesPorLinha=useMemo(()=>{
+    if(!linhaSelecionada)return[];
+    return ativasFiltradas.filter(fin=>{
+      const vInfo=vehicleMap[String(fin.os).trim()];
+      const linha=vInfo?.linhaProducao||fin.vehicleData?.linhaProducao||'N/D';
+      return linha===linhaSelecionada;
+    });
+  },[ativasFiltradas,vehicleMap,linhaSelecionada]);
 const stats=useMemo(()=>{
     const ativas=ativasFiltradas;
     if(!ativas.length)return null;
@@ -698,17 +707,18 @@ const stats=useMemo(()=>{
 
       <div className="card" style={{padding:20}}>
         <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:4}}>Problemas por Linha de Produção</p>
-        <p style={{fontSize:9,color:'var(--muted)',marginBottom:16}}>Total de inspeções e problemas de cada categoria, agrupados pela linha onde o veículo foi inspecionado</p>
+        <p style={{fontSize:9,color:'var(--muted)',marginBottom:16}}>Total de inspeções e problemas de cada categoria, agrupados pela linha onde o veículo foi inspecionado. Clique em uma linha para ver os carros.</p>
         <div style={{display:'flex',flexDirection:'column',gap:18}}>
           {stats.rankLinhas.map(([linha,d])=>{
             const maxLinhaTotal=Math.max(...stats.rankLinhas.map(([,x])=>x.total),1);
             return(
-              <div key={linha}>
+              <div key={linha} onClick={()=>setLinhaSelecionada(linha)} style={{cursor:'pointer',borderRadius:12,padding:10,margin:-10,transition:'background .15s'}} onMouseEnter={e=>e.currentTarget.style.background='var(--smoke)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6,flexWrap:'wrap',gap:6}}>
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
                     <div style={{width:22,height:22,borderRadius:6,background:'var(--ink)',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="factory" size={12} style={{color:'#fff'}}/></div>
                     <span style={{fontSize:11,fontWeight:700,textTransform:'uppercase'}}>{linha}</span>
-                    <span className="pill" style={{fontSize:8}}>{d.inspecoes} inspeção{d.inspecoes!==1?'ões':''}</span>
+                    <span className="pill" style={{fontSize:8}}>{d.inspecoes} {d.inspecoes===1?'Inspeção':'Inspeções'}</span>
+                    <Icon name="chevron-right" size={13} style={{color:'var(--muted)'}}/>
                   </div>
                   <span style={{fontSize:11,fontWeight:800,color:'var(--red)'}}>{d.total} problema{d.total!==1?'s':''} no total</span>
                 </div>
@@ -724,6 +734,64 @@ const stats=useMemo(()=>{
           })}
         </div>
       </div>
+
+      {linhaSelecionada&&(
+        <div style={{position:'fixed',inset:0,zIndex:900,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}} className="fade-in">
+          <div style={{background:'#fff',borderRadius:24,overflow:'hidden',maxWidth:640,width:'100%',maxHeight:'88vh',display:'flex',flexDirection:'column',boxShadow:'0 40px 80px rgba(0,0,0,.4)'}}>
+            <div style={{background:'var(--ink)',padding:'20px 24px',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0,borderBottom:'4px solid var(--red)'}}>
+              <div style={{display:'flex',alignItems:'center',gap:12}}>
+                <div style={{width:40,height:40,background:'var(--red)',borderRadius:11,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="factory" size={18} style={{color:'#fff'}}/></div>
+                <div>
+                  <h3 style={{margin:0,fontSize:17,fontWeight:800,color:'#fff',textTransform:'uppercase'}}>{linhaSelecionada}</h3>
+                  <p style={{margin:0,fontSize:9,color:'rgba(255,255,255,.4)',textTransform:'uppercase',letterSpacing:'.08em',marginTop:2}}>{finalizacoesPorLinha.length} {finalizacoesPorLinha.length===1?'inspeção':'inspeções'} nesta linha</p>
+                </div>
+              </div>
+              <button onClick={()=>setLinhaSelecionada(null)} style={{width:36,height:36,background:'rgba(255,255,255,.08)',border:'none',borderRadius:10,cursor:'pointer',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="x" size={18}/></button>
+            </div>
+            <div className="scroll-y" style={{padding:20,overflowY:'auto',flex:1}}>
+              {finalizacoesPorLinha.length===0?(
+                <p style={{fontSize:10,color:'var(--muted)',textAlign:'center',padding:'30px 0'}}>Nenhum carro encontrado para esta linha no período selecionado.</p>
+              ):(
+                <div style={{display:'flex',flexDirection:'column',gap:14}}>
+                  {finalizacoesPorLinha.map(fin=>{
+                    const vInfo=vehicleMap[String(fin.os).trim()];
+                    const modelo=vInfo?.modelo||fin.vehicleData?.modelo||'N/D';
+                    const problemasDoCarro=[];
+                    CATS.forEach(([key,label,color,icon])=>{
+                      (fin[key]||[]).forEach(p=>problemasDoCarro.push({categoria:label,color,icon,...p}));
+                    });
+                    return(
+                      <div key={fin.id} className="card" style={{padding:14}}>
+                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:problemasDoCarro.length?10:0,flexWrap:'wrap',gap:6}}>
+                          <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                            <span style={{fontSize:13,fontWeight:800}}>OS #{fin.os}</span>
+                            <span style={{fontSize:9,color:'var(--muted)',fontWeight:700,textTransform:'uppercase'}}>{modelo}</span>
+                          </div>
+                          <span style={{fontSize:9,fontWeight:800,padding:'2px 9px',borderRadius:999,background:problemasDoCarro.length===0?'#EDFAF3':'var(--red-light)',color:problemasDoCarro.length===0?'#059669':'var(--red)',border:`1px solid ${problemasDoCarro.length===0?'#AAE6C5':'#FFBDBD'}`}}>{problemasDoCarro.length} problema{problemasDoCarro.length!==1?'s':''}</span>
+                        </div>
+                        {problemasDoCarro.length>0&&(
+                          <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                            {problemasDoCarro.map((p,i)=>(
+                              <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',background:p.status==='Solucionado'?'#F0FBF5':'var(--smoke)',border:`1px solid ${p.status==='Solucionado'?'#AAE6C5':'var(--border)'}`,borderRadius:8}}>
+                                <span style={{fontSize:8,fontWeight:800,padding:'2px 7px',borderRadius:5,background:p.color+'18',color:p.color,border:`1px solid ${p.color}55`,flexShrink:0}}>{p.categoria}</span>
+                                <span style={{fontSize:10,fontWeight:600,color:'var(--ink)',flex:1,minWidth:0}}>{p.descricao||'(sem descrição)'}</span>
+                                {p.status==='Solucionado'&&<Icon name="check-circle" size={13} style={{color:'#059669',flexShrink:0}}/>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div style={{padding:'14px 20px',background:'var(--smoke)',borderTop:'1px solid var(--border)',flexShrink:0}}>
+              <button onClick={()=>setLinhaSelecionada(null)} className="btn-primary" style={{width:'100%'}}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
