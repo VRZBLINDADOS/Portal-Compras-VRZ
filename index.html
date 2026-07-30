@@ -5705,8 +5705,14 @@ const navItems=[
           <div style={{display:'flex',alignItems:'center',gap:8}}>
             <div style={{textAlign:'right'}}><p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:role==='master'?'#856A00':'var(--red)',margin:0,maxWidth:100,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{loggedIn.user}</p><RoleBadge role={loggedIn.role}/></div>
             {/* MELHORIA 2: botão alterar senha no mobile */}
-            <button onClick={()=>setShowChangePwd(true)} style={{width:34,height:34,background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}><Icon name="key" size={15}/></button>
-            <button onClick={logout} style={{width:34,height:34,background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}><Icon name="log-out" size={15}/></button>
+           <button onClick={()=>setShowChangePwd(true)} title="Alterar Senha" aria-label="Alterar Senha" style={{width:46,height:44,background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:9,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:2,cursor:'pointer'}}>
+  <Icon name="key" size={14}/>
+  <span style={{fontSize:6.5,fontWeight:800,textTransform:'uppercase',letterSpacing:'.04em',color:'var(--muted)'}}>Senha</span>
+</button>
+<button onClick={logout} title="Sair" aria-label="Sair" style={{width:46,height:44,background:'var(--red-light)',border:'1px solid #FFBDBD',borderRadius:9,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:2,cursor:'pointer'}}>
+  <Icon name="log-out" size={14} className="" style={{color:'var(--red)'}}/>
+  <span style={{fontSize:6.5,fontWeight:800,textTransform:'uppercase',letterSpacing:'.04em',color:'var(--red)'}}>Sair</span>
+</button>
           </div>
         </div>
       </div>
@@ -5714,7 +5720,7 @@ const navItems=[
       {/* Main */}
       <main style={{flex:1,overflowY:'auto',minWidth:0}} className="scroll-y">
         <div style={{padding:16,paddingTop:0}} id="main-pad">
-         <style>{`@media(min-width:768px){#main-pad{padding:28px!important}}@media(max-width:767px){#main-pad{padding-top:calc(env(safe-area-inset-top) + 68px)!important;padding-bottom:90px!important}}`}</style>
+         <style>{`@media(min-width:768px){#main-pad{padding:28px!important}}@media(max-width:767px){#main-pad{padding-top:calc(env(safe-area-inset-top) + 96px)!important;padding-bottom:90px!important}}`}</style>
           <div style={{maxWidth:1100,margin:'0 auto'}}>
             {loading?<Skeleton/>:(
               <>
