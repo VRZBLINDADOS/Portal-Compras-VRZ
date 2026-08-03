@@ -419,7 +419,7 @@ function MiniBar({data,color='#DC1F1F'}){
 
 // ── Finalização Analytics ─────────────────────────────────────────────────
 function FinalizacaoAnalyticsView({finalizacoes,requests,vehicles}){
-  const CATS=[['ajuste','Ajuste','#F59E0B','wrench'],['martelinho','Martelinho','#DC1F1F','hammer'],['pintura','Pintura','#2563EB','paintbrush'],['vidro','Vidro','#0EA5E9','square'],['outro','Outro','#6B7280','more-horizontal']];
+   const CATS=[['ajuste','Ajuste','#F59E0B','wrench'],['martelinho','Martelinho','#DC1F1F','hammer'],['pintura','Pintura','#2563EB','paintbrush'],['vidro','Vidro','#0EA5E9','square'],['outro','Estética','#6B7280','more-horizontal'],['instalacaoPecas','Instalação Peças','#10B981','package']];
   const TIPO_CATS=['pintura','vidro'];
 const[periodo,setPeriodo]=useState('mensal');
   const[offset,setOffset]=useState(0);
@@ -468,7 +468,7 @@ const stats=useMemo(()=>{
     const ativas=ativasFiltradas;
     if(!ativas.length)return null;
    let totalProblemas=0,totalSolucionados=0;
-    const porCategoria={ajuste:{total:0,solucionado:0,osComProblema:0},martelinho:{total:0,solucionado:0,osComProblema:0},pintura:{total:0,solucionado:0,osComProblema:0,porTipo:{Interno:0,Externo:0}},vidro:{total:0,solucionado:0,osComProblema:0,porTipo:{Interno:0,Externo:0}},outro:{total:0,solucionado:0,osComProblema:0}};
+    const porCategoria={ajuste:{total:0,solucionado:0,osComProblema:0},martelinho:{total:0,solucionado:0,osComProblema:0},pintura:{total:0,solucionado:0,osComProblema:0,porTipo:{Interno:0,Externo:0}},vidro:{total:0,solucionado:0,osComProblema:0,porTipo:{Interno:0,Externo:0}},outro:{total:0,solucionado:0,osComProblema:0},instalacaoPecas:{total:0,solucionado:0,osComProblema:0}};
     const reclamacoesMap={};
     const porModelo={};
     const porLinha={};
@@ -479,9 +479,9 @@ const stats=useMemo(()=>{
       const vInfo=vehicleMap[String(fin.os).trim()];
       const modelo=vInfo?.modelo||fin.vehicleData?.modelo||'N/D';
       const linha=vInfo?.linhaProducao||fin.vehicleData?.linhaProducao||'N/D';
-      if(!porModelo[modelo])porModelo[modelo]={ajuste:0,martelinho:0,pintura:0,vidro:0,outro:0,total:0,inspecoes:0};
+       if(!porModelo[modelo])porModelo[modelo]={ajuste:0,martelinho:0,pintura:0,vidro:0,outro:0,instalacaoPecas:0,total:0,inspecoes:0};
       porModelo[modelo].inspecoes++;
-      if(!porLinha[linha])porLinha[linha]={ajuste:0,martelinho:0,pintura:0,vidro:0,outro:0,total:0,inspecoes:0};
+      if(!porLinha[linha])porLinha[linha]={ajuste:0,martelinho:0,pintura:0,vidro:0,outro:0,instalacaoPecas:0,total:0,inspecoes:0};
       porLinha[linha].inspecoes++;
       let problemasDaInspecao=0,solucionadosDaInspecao=0,ultimaResolucao=null;
       CATS.forEach(([key])=>{
@@ -3347,11 +3347,12 @@ async function buildFinalizacaoPDF(fin, pecasItems, comFoto=true){
     }
     y+=4;
   };
-  await secao('Ajuste',fin.ajuste);
+ await secao('Ajuste',fin.ajuste);
   await secao('Martelinho',fin.martelinho);
   await secao('Pintura',fin.pintura);
   await secao('Vidro',fin.vidro);
-  await secao('Outro',fin.outro);
+  await secao('Estética',fin.outro);
+  await secao('Instalação Peças',fin.instalacaoPecas);
   if(y>250){doc.addPage();y=15;}
   doc.setFont('helvetica','bold');doc.setFontSize(11);doc.text('Peças',10,y);y+=7;
   if(!pecasItems||!pecasItems.length){doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text('Nenhuma peça vinculada.',12,y);y+=8;}
@@ -3568,10 +3569,11 @@ const[ajuste,setAjuste]=useState([]);
   const[pintura,setPintura]=useState([]);
   const[vidro,setVidro]=useState([]);
   const[outro,setOutro]=useState([]);
+  const[instalacaoPecas,setInstalacaoPecas]=useState([]);
   const totalFotos=useMemo(()=>{
     const conta=(arr)=>arr.filter(p=>p.foto).length;
-    return conta(ajuste)+conta(martelinho)+conta(pintura)+conta(vidro)+conta(outro);
-  },[ajuste,martelinho,pintura,vidro,outro]);
+    return conta(ajuste)+conta(martelinho)+conta(pintura)+conta(vidro)+conta(outro)+conta(instalacaoPecas);
+  },[ajuste,martelinho,pintura,vidro,outro,instalacaoPecas]);
   const limiteAtingido=totalFotos>=MAX_FOTOS_INSPECAO;
   const[pecasEscolha,setPecasEscolha]=useState('suficiente');
   const[mostrarNovas,setMostrarNovas]=useState(false);
@@ -3592,12 +3594,12 @@ const[showFotoAlert,setShowFotoAlert]=useState(false);
   // Rascunho automático em localStorage — protege contra perda de dados por erro/fechamento acidental
 useEffect(()=>{
     if(!os.trim()||!vehicle||readOnly)return;
-    const rascunho={ajuste,martelinho,pintura,vidro,outro,pecasEscolha,mostrarNovas,mostrarExcedente,novasPecas,excedentes,salvoEm:Date.now()};
+    const rascunho={ajuste,martelinho,pintura,vidro,outro,instalacaoPecas,pecasEscolha,mostrarNovas,mostrarExcedente,novasPecas,excedentes,salvoEm:Date.now()};
     const t=setTimeout(()=>{
       try{localStorage.setItem('rascunho_finalizacao_'+os.trim(),JSON.stringify(rascunho));}catch(e){}
     },800);
     return()=>clearTimeout(t);
-  },[ajuste,martelinho,pintura,vidro,outro,pecasEscolha,mostrarNovas,mostrarExcedente,novasPecas,excedentes,os,vehicle,readOnly]);
+  },[ajuste,martelinho,pintura,vidro,outro,instalacaoPecas,pecasEscolha,mostrarNovas,mostrarExcedente,novasPecas,excedentes,os,vehicle,readOnly]);
   const onSetOpcao=(v)=>{
     setPecasEscolha(v);
     if(v==='novas'){setMostrarNovas(true);setMostrarExcedente(false);setPerguntaExcedenteFeita(false);}
@@ -3607,13 +3609,14 @@ useEffect(()=>{
 
  const carregarFin=(t)=>{
     const fin=finalizacoes.find(f=>String(f.os).trim()===t&&!f.arquivada);
-    if(fin){
+  if(fin){
      setExistingFin(fin);
      setAjuste(fin.ajuste||[]);
       setMartelinho(fin.martelinho||[]);
       setPintura(fin.pintura||[]);
       setVidro(fin.vidro||[]);
       setOutro(fin.outro||[]);
+      setInstalacaoPecas(fin.instalacaoPecas||[]);
       const opc=fin.pecasOpcao||'suficiente';
       const novas=opc==='novas'||opc==='ambos';
       const exc=opc==='excedente'||opc==='ambos';
@@ -3624,9 +3627,9 @@ useEffect(()=>{
       setPerguntaNovasFeita(true);
       setExcedentes([]);setNovasPecas([]);
       setReadOnly(!(isMaster||fin.criadoPor===loggedInUser.user||loggedInUser?.user==='Cleber.Zonta'));
-    }else{
+  }else{
     setExistingFin(null);
-      setAjuste([]);setMartelinho([]);setPintura([]);setVidro([]);setOutro([]);
+      setAjuste([]);setMartelinho([]);setPintura([]);setVidro([]);setOutro([]);setInstalacaoPecas([]);
       setPecasEscolha('suficiente');setMostrarNovas(false);setMostrarExcedente(false);
       setPerguntaExcedenteFeita(false);setPerguntaNovasFeita(false);
       setNovasPecas([]);setExcedentes([]);
@@ -3645,12 +3648,13 @@ useEffect(()=>{
         const raw=localStorage.getItem('rascunho_finalizacao_'+t);
         if(raw){
           const rascunho=JSON.parse(raw);
-          if(window.confirm('Encontramos um rascunho não salvo desta OS (de '+new Date(rascunho.salvoEm).toLocaleString('pt-BR')+'). Deseja restaurá-lo?')){
+        if(window.confirm('Encontramos um rascunho não salvo desta OS (de '+new Date(rascunho.salvoEm).toLocaleString('pt-BR')+'). Deseja restaurá-lo?')){
             setAjuste(rascunho.ajuste||[]);
             setMartelinho(rascunho.martelinho||[]);
             setPintura(rascunho.pintura||[]);
             setVidro(rascunho.vidro||[]);
             setOutro(rascunho.outro||[]);
+            setInstalacaoPecas(rascunho.instalacaoPecas||[]);
             setPecasEscolha(rascunho.pecasEscolha||'suficiente');
             setMostrarNovas(!!rascunho.mostrarNovas);
             setMostrarExcedente(!!rascunho.mostrarExcedente);
@@ -3665,13 +3669,13 @@ useEffect(()=>{
   };
 const reset=()=>{
     try{if(os.trim())localStorage.removeItem('rascunho_finalizacao_'+os.trim());}catch(e){}
-    setOs('');setVehicle(null);setUnidade('Unidade 1');setAjuste([]);setMartelinho([]);setPintura([]);setVidro([]);setOutro([]);
+    setOs('');setVehicle(null);setUnidade('Unidade 1');setAjuste([]);setMartelinho([]);setPintura([]);setVidro([]);setOutro([]);setInstalacaoPecas([]);
     setPecasEscolha('suficiente');setMostrarNovas(false);setMostrarExcedente(false);
     setPerguntaExcedenteFeita(false);setPerguntaNovasFeita(false);setPerguntaPendente(null);
     setNovasPecas([]);setExcedentes([]);setDone(false);setExistingFin(null);setReadOnly(false);
   };
 const executarSalvar=async()=>{
-    const problemasSemDescricao=[...ajuste,...martelinho,...pintura,...vidro,...outro].some(p=>!p.descricao||!p.descricao.trim());
+    const problemasSemDescricao=[...ajuste,...martelinho,...pintura,...vidro,...outro,...instalacaoPecas].some(p=>!p.descricao||!p.descricao.trim());
     if(problemasSemDescricao){alert('Preencha a descrição de todos os problemas em Ajuste, Martelinho, Pintura e Vidro antes de salvar.');return;}
     if(mostrarNovas&&novasPecas.some(p=>!p.description||!p.description.trim())){alert('Preencha a descrição de todas as peças antes de salvar.');return;}
     const pecasValidas=novasPecas.filter(p=>p.description.trim());
@@ -3687,7 +3691,7 @@ const executarSalvar=async()=>{
 
      // Storage não está disponível no plano Firebase atual — fotos já vêm
       // comprimidas em base64 e vão direto pro Firestore, igual ao resto do app.
-     const ajusteUp=ajuste, martelinhoUp=martelinho, pinturaUp=pintura, vidroUp=vidro, outroUp=outro;
+     const ajusteUp=ajuste, martelinhoUp=martelinho, pinturaUp=pintura, vidroUp=vidro, outroUp=outro, instalacaoPecasUp=instalacaoPecas;
       if(mostrarNovas&&pecasValidas.length){
         await col('requests').add(stripUndefined({
           os,responsavel:loggedInUser.user,vehicleData:vehicle,unidade,
@@ -3708,20 +3712,21 @@ const executarSalvar=async()=>{
       }
      const opcaoFinal=mostrarNovas&&mostrarExcedente?'ambos':mostrarExcedente?'excedente':mostrarNovas?'novas':'suficiente';
       const historicoEntry={acao:existingFin?'Inspeção atualizada':'Inspeção criada',usuario:loggedInUser.user,timestamp:now};
-      const payloadCheck=stripUndefined({ajuste:ajusteUp,martelinho:martelinhoUp,pintura:pinturaUp,vidro:vidroUp,outro:outroUp});
+      const payloadCheck=stripUndefined({ajuste:ajusteUp,martelinho:martelinhoUp,pintura:pinturaUp,vidro:vidroUp,outro:outroUp,instalacaoPecas:instalacaoPecasUp});
       const tamanhoEstimado=JSON.stringify(payloadCheck).length;
       if(tamanhoEstimado>900000){
         alert(`As fotos desta inspeção estão grandes demais (~${Math.round(tamanhoEstimado/1024)}KB). Remova algumas fotos e tente novamente.`);
         setSaving(false);
         return;
       }
-      if(existingFin){
+    if(existingFin){
         await col('finalizacoes').doc(existingFin.id).update(stripUndefined({
           ajuste:ajusteUp.map(p=>({...p})),
           martelinho:martelinhoUp.map(p=>({...p})),
           pintura:pinturaUp.map(p=>({...p})),
           vidro:vidroUp.map(p=>({...p})),
           outro:outroUp.map(p=>({...p})),
+          instalacaoPecas:instalacaoPecasUp.map(p=>({...p})),
           pecasOpcao:opcaoFinal,
           historico:[...(existingFin.historico||[]),historicoEntry],
         }));
@@ -3734,6 +3739,7 @@ const executarSalvar=async()=>{
           pintura:pinturaUp.map(p=>({...p})),
           vidro:vidroUp.map(p=>({...p})),
           outro:outroUp.map(p=>({...p})),
+          instalacaoPecas:instalacaoPecasUp.map(p=>({...p})),
           pecasOpcao:opcaoFinal,
           historico:[historicoEntry],
         }));
@@ -3866,7 +3872,8 @@ const executarSalvar=async()=>{
       <ProblemCategoryEditor title="Martelinho" icon="hammer" color="#DC1F1F" items={martelinho} setItems={setMartelinho} disabled={disabled} limiteAtingido={limiteAtingido}/>
       <ProblemCategoryEditor title="Pintura" icon="paintbrush" color="#2563EB" items={pintura} setItems={setPintura} disabled={disabled} limiteAtingido={limiteAtingido} tipoSelect/>
       <ProblemCategoryEditor title="Vidro" icon="square" color="#0EA5E9" items={vidro} setItems={setVidro} disabled={disabled} limiteAtingido={limiteAtingido} tipoSelect/>
-      <ProblemCategoryEditor title="Outro" icon="more-horizontal" color="#6B7280" items={outro} setItems={setOutro} disabled={disabled} limiteAtingido={limiteAtingido}/>
+      <ProblemCategoryEditor title="Estética" icon="more-horizontal" color="#6B7280" items={outro} setItems={setOutro} disabled={disabled} limiteAtingido={limiteAtingido}/>
+      <ProblemCategoryEditor title="Instalação Peças" icon="package" color="#10B981" items={instalacaoPecas} setItems={setInstalacaoPecas} disabled={disabled} limiteAtingido={limiteAtingido}/>
       <PecasFinalizacaoSection os={os} requests={requests}
         novasPecas={novasPecas} setNovasPecas={setNovasPecas} excedentes={excedentes} setExcedentes={setExcedentes}
         pecasEscolha={pecasEscolha} mostrarNovas={mostrarNovas} mostrarExcedente={mostrarExcedente}
@@ -3887,27 +3894,28 @@ function EditarInspecaoModal({fin,loggedInUser,onClose}){
   const[pintura,setPintura]=useState(()=>JSON.parse(JSON.stringify(fin.pintura||[])));
   const[vidro,setVidro]=useState(()=>JSON.parse(JSON.stringify(fin.vidro||[])));
   const[outro,setOutro]=useState(()=>JSON.parse(JSON.stringify(fin.outro||[])));
+  const[instalacaoPecas,setInstalacaoPecas]=useState(()=>JSON.parse(JSON.stringify(fin.instalacaoPecas||[])));
   const[saving,setSaving]=useState(false);
   const totalFotos=useMemo(()=>{
     const conta=(arr)=>arr.filter(p=>p.foto).length;
-    return conta(ajuste)+conta(martelinho)+conta(pintura)+conta(vidro)+conta(outro);
-  },[ajuste,martelinho,pintura,vidro,outro]);
+    return conta(ajuste)+conta(martelinho)+conta(pintura)+conta(vidro)+conta(outro)+conta(instalacaoPecas);
+  },[ajuste,martelinho,pintura,vidro,outro,instalacaoPecas]);
   const limiteAtingido=totalFotos>=MAX_FOTOS_INSPECAO;
 
   const salvar=async()=>{
-    const problemasSemDescricao=[...ajuste,...martelinho,...pintura,...vidro,...outro].some(p=>!p.descricao||!p.descricao.trim());
+    const problemasSemDescricao=[...ajuste,...martelinho,...pintura,...vidro,...outro,...instalacaoPecas].some(p=>!p.descricao||!p.descricao.trim());
     if(problemasSemDescricao){alert('Preencha a descrição de todos os problemas antes de salvar.');return;}
     setSaving(true);
     try{
       const now=Date.now();
-      const payload=stripUndefined({ajuste,martelinho,pintura,vidro,outro});
+      const payload=stripUndefined({ajuste,martelinho,pintura,vidro,outro,instalacaoPecas});
       const estimado=JSON.stringify(payload).length;
       if(estimado>900000){
         alert(`As fotos desta inspeção estão grandes demais (~${Math.round(estimado/1024)}KB). Remova algumas fotos e tente novamente.`);
         setSaving(false);return;
       }
       await col('finalizacoes').doc(fin.id).update({
-        ajuste:payload.ajuste,martelinho:payload.martelinho,pintura:payload.pintura,vidro:payload.vidro,outro:payload.outro,
+        ajuste:payload.ajuste,martelinho:payload.martelinho,pintura:payload.pintura,vidro:payload.vidro,outro:payload.outro,instalacaoPecas:payload.instalacaoPecas,
         historico:[...(fin.historico||[]),{acao:'Inspeção editada',usuario:loggedInUser.user,timestamp:now}],
       });
       onClose();
@@ -3933,11 +3941,12 @@ function EditarInspecaoModal({fin,loggedInUser,onClose}){
             </div>
             {limiteAtingido&&<span style={{fontSize:9,fontWeight:700,color:'var(--red)'}}>Limite atingido — remova uma foto para adicionar outra</span>}
           </div>
-          <ProblemCategoryEditor title="Ajuste" icon="wrench" color="#F59E0B" items={ajuste} setItems={setAjuste} disabled={false} limiteAtingido={limiteAtingido}/>
+         <ProblemCategoryEditor title="Ajuste" icon="wrench" color="#F59E0B" items={ajuste} setItems={setAjuste} disabled={false} limiteAtingido={limiteAtingido}/>
           <ProblemCategoryEditor title="Martelinho" icon="hammer" color="#DC1F1F" items={martelinho} setItems={setMartelinho} disabled={false} limiteAtingido={limiteAtingido}/>
           <ProblemCategoryEditor title="Pintura" icon="paintbrush" color="#2563EB" items={pintura} setItems={setPintura} disabled={false} limiteAtingido={limiteAtingido} tipoSelect/>
           <ProblemCategoryEditor title="Vidro" icon="square" color="#0EA5E9" items={vidro} setItems={setVidro} disabled={false} limiteAtingido={limiteAtingido} tipoSelect/>
-          <ProblemCategoryEditor title="Outro" icon="more-horizontal" color="#6B7280" items={outro} setItems={setOutro} disabled={false} limiteAtingido={limiteAtingido}/>
+          <ProblemCategoryEditor title="Estética" icon="more-horizontal" color="#6B7280" items={outro} setItems={setOutro} disabled={false} limiteAtingido={limiteAtingido}/>
+          <ProblemCategoryEditor title="Instalação Peças" icon="package" color="#10B981" items={instalacaoPecas} setItems={setInstalacaoPecas} disabled={false} limiteAtingido={limiteAtingido}/>
         </div>
         <div style={{padding:'16px 24px',background:'var(--smoke)',borderTop:'1px solid var(--border)',display:'flex',justifyContent:'flex-end',gap:10,flexShrink:0}}>
           <button onClick={onClose} className="btn-ghost">Cancelar</button>
@@ -3973,8 +3982,8 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
   },[finalizacoes,loggedInUser,isMaster,search]);
 
   // Calcula se a inspeção está 100% concluída (Ajuste + Pintura + Peças sem pendência)
-  const comStatus=useMemo(()=>baseVisiveis.map(fin=>{
-    const pendAjustePintura=['ajuste','martelinho','pintura','vidro','outro'].reduce((a,c)=>a+(fin[c]||[]).filter(p=>p.status!=='Solucionado').length,0);
+ const comStatus=useMemo(()=>baseVisiveis.map(fin=>{
+    const pendAjustePintura=['ajuste','martelinho','pintura','vidro','outro','instalacaoPecas'].reduce((a,c)=>a+(fin[c]||[]).filter(p=>p.status!=='Solucionado').length,0);
     const pecasItems=getPecasParaOS(fin.os,requests);
     const pecasAtivas=pecasItems.filter(it=>!it.excedente);
     const pecasSolucionado=pecasAtivas.length===0||pecasAtivas.every(it=>it.status==='Concluído');
@@ -4049,7 +4058,7 @@ const exportarPDF=async(fin,comFoto=true)=>{
 
   const exportarExcel=()=>{
     const csvCell=(v)=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
-const rows=[[csvCell('OS'),csvCell('Chassi'),csvCell('Modelo'),csvCell('Ajustes'),csvCell('Martelinho'),csvCell('Pintura'),csvCell('Vidro'),csvCell('Outro'),csvCell('Peças'),csvCell('Responsável')].join(';')];
+const rows=[[csvCell('OS'),csvCell('Chassi'),csvCell('Modelo'),csvCell('Ajustes'),csvCell('Martelinho'),csvCell('Pintura'),csvCell('Vidro'),csvCell('Estética'),csvCell('Instalação Peças'),csvCell('Peças'),csvCell('Responsável')].join(';')];
     baseVisiveis.forEach(fin=>{
       const fmtProblemas=(items)=>(items||[]).map(p=>`${p.status==='Solucionado'?'[Solucionado]':'[Pendente]'} ${p.descricao||'(sem descrição)'}${p.tipo?' ('+p.tipo+')':''}`).join(' | ')||'—';
       const pecasItems=getPecasParaOS(fin.os,requests).filter(it=>!it.excedente);
@@ -4063,6 +4072,7 @@ const rows=[[csvCell('OS'),csvCell('Chassi'),csvCell('Modelo'),csvCell('Ajustes'
         csvCell(fmtProblemas(fin.pintura)),
         csvCell(fmtProblemas(fin.vidro)),
         csvCell(fmtProblemas(fin.outro)),
+        csvCell(fmtProblemas(fin.instalacaoPecas)),
         csvCell(fmtPecas),
         csvCell(fin.criadoPor||'—'),
       ].join(';'));
@@ -4096,8 +4106,8 @@ const rows=[[csvCell('OS'),csvCell('Chassi'),csvCell('Modelo'),csvCell('Ajustes'
       ):(
         <div style={{display:'flex',flexDirection:'column',gap:12}}>
           {visiveis.map(fin=>{
-        const categorias=[['ajuste','Ajuste','#F59E0B','wrench'],['martelinho','Martelinho','#DC1F1F','hammer'],['pintura','Pintura','#2563EB','paintbrush'],['vidro','Vidro','#0EA5E9','square'],['outro','Outro','#6B7280','more-horizontal']];
-            const totalPend=['ajuste','martelinho','pintura','vidro','outro'].reduce((a,c)=>a+(fin[c]||[]).filter(p=>p.status!=='Solucionado').length,0);
+      const categorias=[['ajuste','Ajuste','#F59E0B','wrench'],['martelinho','Martelinho','#DC1F1F','hammer'],['pintura','Pintura','#2563EB','paintbrush'],['vidro','Vidro','#0EA5E9','square'],['outro','Estética','#6B7280','more-horizontal'],['instalacaoPecas','Instalação Peças','#10B981','package']];
+            const totalPend=['ajuste','martelinho','pintura','vidro','outro','instalacaoPecas'].reduce((a,c)=>a+(fin[c]||[]).filter(p=>p.status!=='Solucionado').length,0);
             const editar=podeEditar(fin);
            const pecasItems=getPecasParaOS(fin.os,requests);
             const pecasAtivas=pecasItems.filter(it=>!it.excedente);
@@ -5819,7 +5829,7 @@ const navItems=[
     {key:'chegadas',icon:'package-check',label:'Chegadas',badge:chegadasNaoLidas},
     {key:'estoque',icon:'boxes',label:'Estoque'},
     canAccessFinalizacao&&{key:'finalizacao',icon:'clipboard-check',label:'Finalização'},
-    canDo(role,'donor')&&{key:'donor',icon:'git-merge',label:'Doações'},
+    loggedIn?.user===MASTER_USER&&{key:'donor',icon:'git-merge',label:'Doações'},
     canDo(role,'manage')&&{key:'admin',icon:'settings',label:'Gestão'},
     (isMaster||isAdmin)&&{key:'dashboard',icon:'bar-chart-2',label:'Análises'},
     (loggedIn?.user===MASTER_USER||loggedIn?.user==='Matheus.Ransi')&&{key:'resumo',icon:'presentation',label:'Resumo Reunião'},
