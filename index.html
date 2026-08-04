@@ -37,7 +37,7 @@ body{font-family:'Plus Jakarta Sans',sans-serif;margin:0;background:#fff;overflo
 .scroll-y::-webkit-scrollbar-thumb{background:var(--border);border-radius:999px}
 
 /* ── BLACK SIDEBAR NAV ── */
-.nav-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;cursor:pointer;transition:all .18s;font-size:10px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:rgba(255,255,255,.4);border:none;background:transparent;width:100%;text-align:left;font-family:'Plus Jakarta Sans',sans-serif}
+.nav-item{display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:9px;cursor:pointer;transition:all .18s;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:rgba(255,255,255,.4);border:none;background:transparent;width:100%;text-align:left;font-family:'Plus Jakarta Sans',sans-serif}
 .nav-item:hover{background:rgba(255,255,255,.12);color:#fff}
 .nav-item.active{background:#fff;color:var(--ink)}
 .nav-item .nav-icon{width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:7px;background:rgba(255,255,255,.08);flex-shrink:0;transition:all .18s}
@@ -152,7 +152,7 @@ const col=(c)=>db.collection('artifacts').doc(AID).collection('public').doc('dat
 const{useState,useEffect,useMemo,useRef,useCallback}=React;
 
 const MASTER_USER='Lucas.Sabino'; // Master 1 — pode promover/rebaixar qualquer um, inclusive outros masters
-const ADMIN_ESPECIAL=['Cleber.Zonta','Leonardo.Teixeira']; // Admin especial: Nova Peça, Histórico (sem excluir), Chegadas, Finalização (vendo todos), Feedback Finalização completo e Análises completo
+
 const parsePrice = (v) => {
   if (v === null || v === undefined || v === '') return 0;
   if (typeof v === 'number') return v;
@@ -1099,7 +1099,7 @@ function ChangePasswordModal({loggedInUser,onClose}){
   };
 
   return(
-        <div style={{position:'fixed',inset:0,zIndex:800,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',padding:16,overflowY:'auto'}} className="fade-in">
+    <div style={{position:'fixed',inset:0,zIndex:800,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}} className="fade-in">
       <div style={{background:'#fff',borderRadius:24,overflow:'hidden',maxWidth:400,width:'100%',boxShadow:'0 40px 80px rgba(0,0,0,.4)'}}>
         <div style={{background:'var(--ink)',padding:'24px 28px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:'4px solid var(--red)'}}>
           <div style={{display:'flex',alignItems:'center',gap:12}}>
@@ -1313,8 +1313,8 @@ function DonorSystem({requests,vehicles,loggedInUser}){
     </div>
   );
 
- if(showConfirm)return(
-    <div style={{position:'fixed',inset:0,zIndex:700,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',padding:16,overflowY:'auto'}} className="fade-in">
+  if(showConfirm)return(
+    <div style={{position:'fixed',inset:0,zIndex:700,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}} className="fade-in">
       <div style={{background:'#fff',borderRadius:24,overflow:'hidden',maxWidth:460,width:'100%',boxShadow:'0 40px 80px rgba(0,0,0,.4)'}}>
         <div style={{background:'var(--ink)',padding:'28px 28px 24px',color:'#fff'}}>
           <div style={{display:'flex',alignItems:'center',gap:14,marginBottom:16}}>
@@ -1665,8 +1665,8 @@ const salvar=async()=>{
 
   return(
     <div className="fade-up" style={{paddingBottom:16}}>
-      {showFotoAlert&&(
-        <div style={{position:'fixed',inset:0,zIndex:600,background:'rgba(0,0,0,.8)',display:'flex',alignItems:'center',justifyContent:'center',padding:16,overflowY:'auto'}}>
+      {showFoto&&(
+        <div style={{position:'fixed',inset:0,zIndex:600,background:'rgba(0,0,0,.8)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
           <div style={{background:'#fff',borderRadius:20,overflow:'hidden',maxWidth:360,width:'100%'}}>
             <div style={{background:'var(--red)',padding:'24px 20px',textAlign:'center',color:'#fff'}}>
               <div style={{width:52,height:52,background:'rgba(255,255,255,.2)',borderRadius:14,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 12px'}}><Icon name="camera" size={26}/></div>
@@ -1677,7 +1677,7 @@ const salvar=async()=>{
         </div>
       )}
       {showDup&&(
-        <div style={{position:'fixed',inset:0,zIndex:600,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',padding:16,overflowY:'auto'}}>
+        <div style={{position:'fixed',inset:0,zIndex:600,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
           <div style={{background:'#fff',borderRadius:20,overflow:'hidden',maxWidth:560,width:'100%'}}>
             <div style={{background:'var(--ink)',padding:'20px 24px',display:'flex',alignItems:'center',gap:14,color:'#fff',borderBottom:'4px solid var(--red)'}}>
               <div style={{width:44,height:44,background:'var(--red)',borderRadius:12,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="alert-triangle" size={20}/></div>
@@ -1825,8 +1825,8 @@ function StatusView({requests,loggedInUser,vehicles}){
   const[statusTab,setStatusTab]=useState('geral');
   const[toDelete,setToDelete]=useState(null);
   const[pdfConfirm,setPdfConfirm]=useState(null);
- const role=loggedInUser?.role||'solicitante';
-  const canDelete=canDo(role,'delete')&&!ADMIN_ESPECIAL.includes(loggedInUser?.user);
+  const role=loggedInUser?.role||'solicitante';
+  const canDelete=canDo(role,'delete');
 
   // Cria mapa de veículos por OS para lookup rápido
   const vehicleMap=useMemo(()=>{
@@ -1938,8 +1938,8 @@ const exportCSV=()=>{
 
   return(
     <div className="fade-up" style={{paddingBottom:16}}>
-    {toDelete&&(
-        <div style={{position:'fixed',inset:0,zIndex:500,background:'rgba(0,0,0,.8)',display:'flex',alignItems:'center',justifyContent:'center',padding:16,overflowY:'auto'}}>
+      {toDelete&&(
+        <div style={{position:'fixed',inset:0,zIndex:500,background:'rgba(0,0,0,.8)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
           <div style={{background:'#fff',borderRadius:20,overflow:'hidden',maxWidth:360,width:'100%'}}>
             <div style={{background:'var(--red)',padding:'24px 20px',textAlign:'center',color:'#fff'}}>
               <div style={{width:48,height:48,background:'rgba(255,255,255,.2)',borderRadius:14,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 12px'}}><Icon name="trash-2" size={22}/></div>
@@ -1972,7 +1972,7 @@ const exportCSV=()=>{
       )}
 
       {pdfConfirm&&(
-        <div style={{position:'fixed',inset:0,zIndex:550,background:'rgba(0,0,0,.8)',display:'flex',alignItems:'center',justifyContent:'center',padding:16,overflowY:'auto'}}>
+        <div style={{position:'fixed',inset:0,zIndex:550,background:'rgba(0,0,0,.8)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
           <div style={{background:'#fff',borderRadius:20,overflow:'hidden',maxWidth:380,width:'100%'}}>
             <div style={{background:'#2563EB',padding:'24px 20px',textAlign:'center',color:'#fff'}}>
               <div style={{width:48,height:48,background:'rgba(255,255,255,.2)',borderRadius:14,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 12px'}}><Icon name="file-down" size={22}/></div>
@@ -2369,7 +2369,7 @@ function StorageView({requests,loggedInUser}){
   return(
     <div className="fade-in" style={{display:'flex',flexDirection:'column',gap:20,paddingBottom:40}}>
       {confirmar&&(
-        <div style={{position:'fixed',inset:0,zIndex:600,background:'rgba(0,0,0,.9)',display:'flex',alignItems:'center',justifyContent:'center',padding:16,overflowY:'auto'}}>
+        <div style={{position:'fixed',inset:0,zIndex:600,background:'rgba(0,0,0,.9)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
           <div style={{background:'#fff',borderRadius:20,overflow:'hidden',maxWidth:400,width:'100%'}}>
             <div style={{background:'var(--red)',padding:'24px 20px',textAlign:'center',color:'#fff'}}><div style={{width:52,height:52,background:'rgba(255,255,255,.2)',borderRadius:14,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 12px'}}><Icon name="trash-2" size={26}/></div><h3 style={{margin:0,fontSize:18,fontWeight:800}}>Confirmar Exclusão</h3><p style={{margin:0,fontSize:9,opacity:.8,textTransform:'uppercase',letterSpacing:'.08em',marginTop:4}}>Ação irreversível</p></div>
             <div style={{padding:20,display:'flex',flexDirection:'column',gap:14}}>
@@ -3083,8 +3083,8 @@ function CancelDonationView({requests,loggedInUser}){
       ))}
 
       {/* Modal de confirmação */}
-      {cancelando&&(
-  <div style={{position:'fixed',inset:0,zIndex:700,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',padding:16,overflowY:'auto'}} className="fade-in">
+     {cancelando&&(
+  <div style={{position:'fixed',inset:0,zIndex:700,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}} className="fade-in">
     <div style={{background:'#fff',borderRadius:24,overflow:'hidden',maxWidth:500,width:'100%',boxShadow:'0 40px 80px rgba(0,0,0,.4)'}}>
       <div style={{background:'var(--ink)',padding:'24px 28px',borderBottom:'4px solid var(--red)',color:'#fff'}}>
         <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:4}}>
@@ -3296,8 +3296,9 @@ function DeletedItemsView({loggedInUser}){
       })}
 
       {/* Modal restaurar */}
-       {restaurando&&(
-        <div style={{position:'fixed',inset:0,zIndex:700,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',padding:16,overflowY:'auto'}} className="fade-in">
+      {restaurando&&(
+        <div style={{position:'fixed',inset:0,zIndex:700,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}} className="fade-in">
+          <div style={{background:'#fff',borderRadius:24,overflow:'hidden',maxWidth:420,width:'100%'}}>
             <div style={{background:'#059669',padding:'24px 28px',color:'#fff'}}>
               <div style={{display:'flex',alignItems:'center',gap:12}}>
                 <div style={{width:44,height:44,background:'rgba(255,255,255,.2)',borderRadius:12,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="archive-restore" size={20}/></div>
@@ -3741,7 +3742,7 @@ useEffect(()=>{
       setPerguntaExcedenteFeita(true);
       setPerguntaNovasFeita(true);
       setExcedentes([]);setNovasPecas([]);
-       setReadOnly(!(isMaster||fin.criadoPor===loggedInUser.user||ADMIN_ESPECIAL.includes(loggedInUser?.user)));
+      setReadOnly(!(isMaster||fin.criadoPor===loggedInUser.user||loggedInUser?.user==='Cleber.Zonta'));
   }else{
     setExistingFin(null);
       setAjuste([]);setMartelinho([]);setPintura([]);setVidro([]);setOutro([]);setInstalacaoPecas([]);
@@ -3913,8 +3914,8 @@ const executarSalvar=async()=>{
 
   return(
     <div className="fade-up" style={{paddingBottom:20}}>
-      {showFoto&&(
-        <div style={{position:'fixed',inset:0,zIndex:600,background:'rgba(0,0,0,.8)',display:'flex',alignItems:'center',justifyContent:'center',padding:16,overflowY:'auto'}}>
+      {showFotoAlert&&(
+        <div style={{position:'fixed',inset:0,zIndex:600,background:'rgba(0,0,0,.8)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
           <div style={{background:'#fff',borderRadius:20,overflow:'hidden',maxWidth:360,width:'100%'}}>
             <div style={{background:'var(--red)',padding:'24px 20px',textAlign:'center',color:'#fff'}}>
               <div style={{width:52,height:52,background:'rgba(255,255,255,.2)',borderRadius:14,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 12px'}}><Icon name="camera" size={26}/></div>
@@ -3924,8 +3925,8 @@ const executarSalvar=async()=>{
           </div>
         </div>
       )}
-  {perguntaPendente&&(
-        <div style={{position:'fixed',inset:0,zIndex:600,background:'rgba(0,0,0,.8)',display:'flex',alignItems:'center',justifyContent:'center',padding:16,overflowY:'auto'}}>
+      {perguntaPendente&&(
+        <div style={{position:'fixed',inset:0,zIndex:600,background:'rgba(0,0,0,.8)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
           <div style={{background:'#fff',borderRadius:20,overflow:'hidden',maxWidth:400,width:'100%'}}>
             <div style={{background:'var(--ink)',padding:'24px 20px',textAlign:'center',color:'#fff'}}>
               <div style={{width:52,height:52,background:'rgba(255,255,255,.1)',borderRadius:14,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 12px'}}><Icon name="package" size={26}/></div>
@@ -4085,7 +4086,7 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
   const[obsResolucao,setObsResolucao]=useState('');
   const[salvandoResolucao,setSalvandoResolucao]=useState(false);
 
-   const podeVerTodos=isMaster||loggedInUser?.role==='comercial'||ADMIN_ESPECIAL.includes(loggedInUser?.user);
+  const podeVerTodos=isMaster||loggedInUser?.role==='comercial'||loggedInUser?.user==='Cleber.Zonta';
   const baseVisiveis=useMemo(()=>{
     let list=podeVerTodos?finalizacoes:finalizacoes.filter(f=>f.criadoPor===loggedInUser.user);
     list=list.filter(f=>!f.arquivada);
@@ -4110,7 +4111,7 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
   const countConcluidos=comStatus.filter(c=>c.concluida).length;
   const countPendentes=comStatus.filter(c=>!c.concluida).length;
 
-  const podeEditar=(fin)=>isMaster||fin.criadoPor===loggedInUser.user||ADMIN_ESPECIAL.includes(loggedInUser?.user);
+  const podeEditar=(fin)=>isMaster||fin.criadoPor===loggedInUser.user||loggedInUser?.user==='Cleber.Zonta';
 
   const resolverPendencia=async(finId,categoria,itemId,observacao)=>{
     const fin=finalizacoes.find(f=>f.id===finId);if(!fin)return;
@@ -5756,10 +5757,9 @@ const{data:requests,loading:reqLoad}=useFirestore('requests');
 
  const role=loggedIn?.role||'solicitante';
   const isMaster=role==='master';
-  const isAdminEspecial=ADMIN_ESPECIAL.includes(loggedIn?.user);
-  const isAdmin=role==='admin'||isMaster||isAdminEspecial;
-  const isSol=canDo(role,'newReq')||isAdminEspecial;
-  const canAccessFinalizacao=isMaster||loggedIn?.acessoFinalizacao===true||isAdminEspecial;
+  const isAdmin=role==='admin'||isMaster;
+  const isSol=canDo(role,'newReq');
+  const canAccessFinalizacao=isMaster||loggedIn?.acessoFinalizacao===true;
 
   const addUser=async(u,p,r='solicitante')=>{
     // Só o Master 1 (Lucas.Sabino) pode criar masters
@@ -5965,21 +5965,21 @@ const navItems=[
       {showChangePwd&&<ChangePasswordModal loggedInUser={loggedIn} onClose={()=>setShowChangePwd(false)}/>}
 
       {/* Desktop Sidebar */}
-      <nav style={{display:'none',width:252,background:'#0D0D0D',padding:'20px 12px',flexDirection:'column',gap:4,flexShrink:0}} id="desktop-nav">
+      <nav style={{display:'none',width:220,background:'#0D0D0D',padding:'20px 14px',flexDirection:'column',gap:4,flexShrink:0}} id="desktop-nav">
         <style>{`@media(min-width:768px){#desktop-nav{display:flex!important}}`}</style>
         <div style={{display:'flex',alignItems:'center',gap:10,padding:'6px 6px 20px',borderBottom:'1px solid rgba(255,255,255,.08)',marginBottom:8}}>
           <div style={{width:36,height:36,background:'var(--red)',borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,boxShadow:'0 4px 12px rgba(220,31,31,.3)'}}><Icon name="shopping-cart" size={18}/></div>
           <div><p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',letterSpacing:'.14em',color:'rgba(255,255,255,.3)',margin:0,lineHeight:1}}>Portal Compras</p><h1 style={{fontSize:20,fontWeight:800,margin:0,lineHeight:1.1,color:'#fff'}}>VRZ</h1></div>
         </div>
         <div style={{flex:1,display:'flex',flexDirection:'column',gap:2}}>
-        {navItems.map(n=>(
-            <button key={n.key} onClick={()=>setView(n.key)} className={`nav-item ${view===n.key?'active':''}`} title={n.label}>
+          {navItems.map(n=>(
+            <button key={n.key} onClick={()=>setView(n.key)} className={`nav-item ${view===n.key?'active':''}`}>
               <div className="nav-icon" style={{position:'relative'}}>
                 <Icon name={n.icon} size={15}/>
                 {n.badge>0&&<span style={{position:'absolute',top:-4,right:-4,background:'var(--red)',color:'#fff',borderRadius:999,fontSize:7,fontWeight:800,minWidth:14,height:14,display:'flex',alignItems:'center',justifyContent:'center',padding:'0 3px',border:'1.5px solid #0D0D0D'}}>{n.badge>99?'99+':n.badge}</span>}
               </div>
-              <span style={{flex:1,minWidth:0,lineHeight:1.25,whiteSpace:'normal',wordBreak:'break-word'}}>{n.label}</span>
-              {n.badge>0&&view!==n.key&&<span className="pulse-beacon" style={{width:7,height:7,borderRadius:'50%',background:'var(--red)',display:'inline-block',flexShrink:0}}/>}
+              {n.label}
+              {n.badge>0&&view!==n.key&&<span className="pulse-beacon" style={{marginLeft:'auto',width:7,height:7,borderRadius:'50%',background:'var(--red)',display:'inline-block',flexShrink:0}}/>}
             </button>
           ))}
         </div>
