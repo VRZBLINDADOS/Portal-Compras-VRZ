@@ -490,6 +490,8 @@ const[periodo,setPeriodo]=useState('mensal');
   const[offset,setOffset]=useState(0);
   const[linhaSelecionada,setLinhaSelecionada]=useState(null);
   const[drill,setDrill]=useState(null);
+  const[drillSearch,setDrillSearch]=useState('');
+  useEffect(()=>{setDrillSearch('');},[drill]);
   const{inicioPeriodo,fimPeriodo}=useMemo(()=>{
     const agora=new Date();
     let ini,fim;
@@ -538,10 +540,19 @@ const[periodo,setPeriodo]=useState('mensal');
       return linha===linhaSelecionada;
     });
   },[ativasFiltradas,vehicleMap,linhaSelecionada]);
-  const finalizacoesDrill=useMemo(()=>{
+const finalizacoesDrill=useMemo(()=>{
     if(!drill)return[];
     return ativasFiltradas.filter(drill.predicate);
   },[ativasFiltradas,drill]);
+  const finalizacoesDrillFiltered=useMemo(()=>{
+    if(!drillSearch.trim())return finalizacoesDrill;
+    const t=drillSearch.toLowerCase();
+    return finalizacoesDrill.filter(fin=>{
+      const vInfo=vehicleMap[String(fin.os).trim()];
+      const modelo=vInfo?.modelo||fin.vehicleData?.modelo||'';
+      return String(fin.os).toLowerCase().includes(t)||modelo.toLowerCase().includes(t);
+    });
+  },[finalizacoesDrill,drillSearch,vehicleMap]);
 const stats=useMemo(()=>{
     const ativas=ativasFiltradas;
     if(!ativas.length)return null;
@@ -667,23 +678,35 @@ const stats=useMemo(()=>{
     </div>
   );
 
-  const maxCat=Math.max(...CATS.map(([key])=>stats.porCategoria[key].total),1);
+ const maxCat=Math.max(...CATS.map(([key])=>stats.porCategoria[key].total),1);
   const maxRecl=stats.rankReclamacoes[0]?.[1]?.count||1;
   const maxMod=stats.rankModelos[0]?.[1]?.total||1;
+  const inspecaoConcluidaCheck=(fin)=>{
+    let problemasDaInspecao=0,solucionadosDaInspecao=0;
+    CATS.forEach(([key])=>{
+      const items=fin[key]||[];
+      problemasDaInspecao+=items.length;
+      solucionadosDaInspecao+=items.filter(p=>p.status==='Solucionado').length;
+    });
+    const pecasItems=requests?getPecasParaOS(fin.os,requests):[];
+    const pecasAtivas=pecasItems.filter(it=>!it.excedente);
+    const pecasSolucionadas=pecasAtivas.length===0||pecasAtivas.every(it=>it.status==='Concluído');
+    return problemasDaInspecao===solucionadosDaInspecao&&pecasSolucionadas;
+  };
 
   return(
     <div className="fade-in">
       {periodSelector}
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:12,marginBottom:16}}>
         {[
-          {label:'Total de Inspeções',v:stats.totalInspecoes,sub:'inspeções ativas (não arquivadas)',icon:'clipboard-check',dark:true},
-          {label:'Solucionadas',v:stats.inspecoesSolucionadas,sub:'100% dos problemas resolvidos',icon:'check-circle',green:true},
-          {label:'Em Aberto',v:stats.inspecoesAbertas,sub:'ainda com pendências',icon:'alert-triangle',red:true},
+          {label:'Total de Inspeções',v:stats.totalInspecoes,sub:'inspeções ativas (não arquivadas)',icon:'clipboard-check',dark:true,predicate:()=>true},
+          {label:'Solucionadas',v:stats.inspecoesSolucionadas,sub:'100% dos problemas resolvidos',icon:'check-circle',green:true,predicate:(f)=>inspecaoConcluidaCheck(f)},
+          {label:'Em Aberto',v:stats.inspecoesAbertas,sub:'ainda com pendências',icon:'alert-triangle',red:true,predicate:(f)=>!inspecaoConcluidaCheck(f)},
           {label:'Tempo Médio até Solução Total',v:stats.tempoMedioResolucaoInspecao+'d',sub:'da abertura até tudo resolvido',icon:'clock'},
           {label:'Taxa de Resolução (Abertas)',v:stats.taxaResolucaoAbertas+'%',sub:'dos problemas já resolvidos',icon:'trending-up'},
           {label:'Média por Veículo',v:stats.mediaProblemasPorInspecao,sub:'problemas / inspeção',icon:'car'},
         ].map((k,i)=>(
-          <div key={i} style={{background:k.dark?'var(--ink)':k.red?'var(--red)':k.green?'#059669':'var(--smoke)',color:k.dark||k.red||k.green?'#fff':'var(--ink)',borderRadius:14,padding:20,border:(!k.dark&&!k.red&&!k.green)?'1.5px solid var(--border)':'none'}}>
+          <div key={i} onClick={()=>k.predicate&&setDrill({titulo:`${k.label} — Veículos`,predicate:k.predicate})} style={{cursor:k.predicate?'pointer':'default',background:k.dark?'var(--ink)':k.red?'var(--red)':k.green?'#059669':'var(--smoke)',color:k.dark||k.red||k.green?'#fff':'var(--ink)',borderRadius:14,padding:20,border:(!k.dark&&!k.red&&!k.green)?'1.5px solid var(--border)':'none'}}>
             <div style={{width:32,height:32,borderRadius:8,background:k.dark||k.red||k.green?'rgba(255,255,255,.12)':'var(--border)',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:14}}><Icon name={k.icon} size={16}/></div>
             <p style={{fontSize:32,fontWeight:800,lineHeight:1,margin:0,letterSpacing:'-.02em'}}>{k.v}</p>
             <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.08em',marginTop:6,opacity:.7}}>{k.label}</p>
@@ -698,7 +721,7 @@ const stats=useMemo(()=>{
           {CATS.map(([key,label,color,icon])=>{
             const c=stats.porCategoria[key];
             return(
-              <div key={key} onClick={()=>c.total>0&&setDrill({titulo:`${label} — Veículos com problema`,predicate:(f)=>(f[key]||[]).length>0})} style={{cursor:c.total>0?'pointer':'default'}}>
+              <div key={key} onClick={()=>c.total>0&&setDrill({titulo:`${label} — Veículos com problema`,predicate:(f)=>(f[key]||[]).length>0,categoriaFiltro:key})} style={{cursor:c.total>0?'pointer':'default'}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
                     <div style={{width:22,height:22,borderRadius:6,background:color,display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name={icon} size={12} style={{color:'#fff'}}/></div>
@@ -723,12 +746,12 @@ const stats=useMemo(()=>{
         <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:4}}>Frequência de Problemas por Carro</p>
         <p style={{fontSize:9,color:'var(--muted)',marginBottom:16}}>Quantas vezes cada problema apareceu, em quantas OS's diferentes, e a média por inspeção (considerando todas as inspeções ativas)</p>
         <div style={{display:'flex',flexDirection:'column',gap:18}}>
-          {CATS.map(([key,label,color,icon])=>{
+         {CATS.map(([key,label,color,icon])=>{
             const c=stats.porCategoria[key];
             const maxTotal=Math.max(...CATS.map(([k])=>stats.porCategoria[k].total),1);
             const maxOS=Math.max(...CATS.map(([k])=>stats.porCategoria[k].osComProblema),1);
             return(
-              <div key={key}>
+              <div key={key} onClick={()=>c.total>0&&setDrill({titulo:`${label} — Veículos com problema`,predicate:(f)=>(f[key]||[]).length>0,categoriaFiltro:key})} style={{cursor:c.total>0?'pointer':'default'}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6,flexWrap:'wrap',gap:6}}>
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
                     <div style={{width:22,height:22,borderRadius:6,background:color,display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name={icon} size={12} style={{color:'#fff'}}/></div>
@@ -877,26 +900,34 @@ const stats=useMemo(()=>{
         </div>
       )}
 
-      {drill&&(
+   {drill&&(
         <div style={{position:'fixed',inset:0,zIndex:900,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}} className="fade-in">
           <div style={{background:'#fff',borderRadius:24,overflow:'hidden',maxWidth:640,width:'100%',maxHeight:'88vh',display:'flex',flexDirection:'column',boxShadow:'0 40px 80px rgba(0,0,0,.4)'}}>
             <div style={{background:'var(--ink)',padding:'20px 24px',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0,borderBottom:'4px solid var(--red)'}}>
               <div>
                 <h3 style={{margin:0,fontSize:16,fontWeight:800,color:'#fff'}}>{drill.titulo}</h3>
-                <p style={{margin:0,fontSize:9,color:'rgba(255,255,255,.4)',textTransform:'uppercase',letterSpacing:'.08em',marginTop:2}}>{finalizacoesDrill.length} {finalizacoesDrill.length===1?'OS encontrada':"OS's encontradas"}</p>
+                <p style={{margin:0,fontSize:9,color:'rgba(255,255,255,.4)',textTransform:'uppercase',letterSpacing:'.08em',marginTop:2}}>{finalizacoesDrillFiltered.length} {finalizacoesDrillFiltered.length===1?'OS encontrada':"OS's encontradas"}{drillSearch.trim()?` de ${finalizacoesDrill.length}`:''}</p>
               </div>
-              <button onClick={()=>setDrill(null)} style={{width:36,height:36,background:'rgba(255,255,255,.08)',border:'none',borderRadius:10,cursor:'pointer',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="x" size={18}/></button>
+              <button onClick={()=>{setDrill(null);setDrillSearch('');}} style={{width:36,height:36,background:'rgba(255,255,255,.08)',border:'none',borderRadius:10,cursor:'pointer',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="x" size={18}/></button>
             </div>
+            {finalizacoesDrill.length>5&&(
+              <div style={{padding:'12px 20px 0',flexShrink:0}}>
+                <div style={{position:'relative'}}>
+                  <input type="text" placeholder="Buscar por OS ou modelo..." value={drillSearch} onChange={e=>setDrillSearch(e.target.value)} className="input" style={{paddingLeft:34,fontSize:11}}/>
+                  <div style={{position:'absolute',left:10,top:'50%',transform:'translateY(-50%)',color:'var(--muted)'}}><Icon name="search" size={13}/></div>
+                </div>
+              </div>
+            )}
             <div className="scroll-y" style={{padding:20,overflowY:'auto',flex:1}}>
-              {finalizacoesDrill.length===0?(
-                <p style={{fontSize:10,color:'var(--muted)',textAlign:'center',padding:'30px 0'}}>Nenhum veículo encontrado para este filtro no período selecionado.</p>
+              {finalizacoesDrillFiltered.length===0?(
+                <p style={{fontSize:10,color:'var(--muted)',textAlign:'center',padding:'30px 0'}}>{drillSearch.trim()?'Nenhum resultado para essa busca.':'Nenhum veículo encontrado para este filtro no período selecionado.'}</p>
               ):(
                 <div style={{display:'flex',flexDirection:'column',gap:14}}>
-                  {finalizacoesDrill.map(fin=>{
+                  {finalizacoesDrillFiltered.map(fin=>{
                     const vInfo=vehicleMap[String(fin.os).trim()];
                     const modelo=vInfo?.modelo||fin.vehicleData?.modelo||'N/D';
                     const problemasDoCarro=[];
-                    CATS.forEach(([key,label,color,icon])=>{
+                    CATS.filter(([key])=>!drill.categoriaFiltro||key===drill.categoriaFiltro).forEach(([key,label,color,icon])=>{
                       (fin[key]||[]).forEach(p=>problemasDoCarro.push({categoria:label,color,icon,...p}));
                     });
                     return(
@@ -3555,9 +3586,8 @@ async function buildFinalizacaoPDF(fin, pecasItems, comFoto=true){
   return doc;
 }
 function ProblemCategoryEditor({title,icon,color,items,setItems,disabled,limiteAtingido,tipoSelect}){
-  const addProblem=()=>{
+const addProblem=()=>{
     if(disabled)return;
-    if(limiteAtingido){alert('Limite de '+MAX_FOTOS_INSPECAO+' fotos por inspeção atingido. Remova uma foto para adicionar outra.');return;}
     setItems([...items,{id:String(Date.now())+Math.floor(Math.random()*999),descricao:'',foto:null,status:'Pendente',criadoEm:Date.now(),...(tipoSelect?{tipo:'Interno'}:{})}]);
   };
   const updateProblem=(id,key,val)=>{
@@ -3582,7 +3612,7 @@ function ProblemCategoryEditor({title,icon,color,items,setItems,disabled,limiteA
             <p style={{margin:0,fontSize:9,color:'var(--muted)',fontWeight:600}}>{items.length} problema(s) registrado(s)</p>
           </div>
         </div>
-      <button type="button" onClick={addProblem} disabled={disabled||limiteAtingido} className="btn-primary" style={{padding:'8px 14px',fontSize:9,opacity:limiteAtingido?.5:1}}>+ Adicionar</button>
+      <button type="button" onClick={addProblem} disabled={disabled} className="btn-primary" style={{padding:'8px 14px',fontSize:9}}>+ Adicionar</button>
       </div>
       <div style={{padding:18,display:'flex',flexDirection:'column',gap:12}}>
         {items.length===0&&(
@@ -4157,6 +4187,20 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
   const[salvandoResolucao,setSalvandoResolucao]=useState(false);
 
    const podeVerTodos=isMaster||loggedInUser?.role==='comercial'||ADMIN_ESPECIAL.includes(loggedInUser?.user);
+  const pecasByOS=useMemo(()=>{
+    const acc={};
+    requests.forEach(r=>{
+      const k=String(r.os||'').trim();if(!k)return;
+      if(!acc[k])acc[k]={seen:new Set(),items:[]};
+      (r.items||[]).forEach(it=>{
+        const key=it.id||it.description;
+        if(!acc[k].seen.has(key)){acc[k].seen.add(key);acc[k].items.push({...it,_responsavel:r.responsavel,_timestamp:r.timestamp});}
+      });
+    });
+    const map={};
+    Object.entries(acc).forEach(([k,v])=>{map[k]=v.items;});
+    return map;
+  },[requests]);
   const baseVisiveis=useMemo(()=>{
     let list=podeVerTodos?finalizacoes:finalizacoes.filter(f=>f.criadoPor===loggedInUser.user);
     list=list.filter(f=>!f.arquivada);
@@ -4168,14 +4212,14 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
   },[finalizacoes,loggedInUser,isMaster,search]);
 
   // Calcula se a inspeção está 100% concluída (Ajuste + Pintura + Peças sem pendência)
- const comStatus=useMemo(()=>baseVisiveis.map(fin=>{
+const comStatus=useMemo(()=>baseVisiveis.map(fin=>{
     const pendAjustePintura=['ajuste','martelinho','pintura','vidro','outro','instalacaoPecas'].reduce((a,c)=>a+(fin[c]||[]).filter(p=>p.status!=='Solucionado').length,0);
-    const pecasItems=getPecasParaOS(fin.os,requests);
+    const pecasItems=pecasByOS[String(fin.os).trim()]||[];
     const pecasAtivas=pecasItems.filter(it=>!it.excedente);
     const pecasSolucionado=pecasAtivas.length===0||pecasAtivas.every(it=>it.status==='Concluído');
     const totalPend=pendAjustePintura+(pecasSolucionado?0:1);
     return{fin,totalPend,concluida:totalPend===0};
-  }),[baseVisiveis,requests]);
+  }),[baseVisiveis,pecasByOS]);
 
   const visiveis=useMemo(()=>comStatus.filter(c=>subTab==='concluidos'?c.concluida:!c.concluida).map(c=>c.fin),[comStatus,subTab]);
   const countConcluidos=comStatus.filter(c=>c.concluida).length;
@@ -4245,9 +4289,9 @@ const exportarPDF=async(fin,comFoto=true)=>{
   const exportarExcel=()=>{
     const csvCell=(v)=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
 const rows=[[csvCell('OS'),csvCell('Chassi'),csvCell('Modelo'),csvCell('Ajustes'),csvCell('Martelinho'),csvCell('Pintura'),csvCell('Vidro'),csvCell('Estética'),csvCell('Instalação Peças'),csvCell('Peças'),csvCell('Responsável')].join(';')];
-    baseVisiveis.forEach(fin=>{
+  baseVisiveis.forEach(fin=>{
       const fmtProblemas=(items)=>(items||[]).map(p=>`${p.status==='Solucionado'?'[Solucionado]':'[Pendente]'} ${p.descricao||'(sem descrição)'}${p.tipo?' ('+p.tipo+')':''}`).join(' | ')||'—';
-      const pecasItems=getPecasParaOS(fin.os,requests).filter(it=>!it.excedente);
+      const pecasItems=(pecasByOS[String(fin.os).trim()]||[]).filter(it=>!it.excedente);
       const fmtPecas=pecasItems.map(it=>`${it.quantity}x ${it.description} — ${it.statusOriginal||it.status||'Pendente'}`).join(' | ')||'—';
       rows.push([
         csvCell(fin.os),
@@ -4294,8 +4338,8 @@ const rows=[[csvCell('OS'),csvCell('Chassi'),csvCell('Modelo'),csvCell('Ajustes'
           {visiveis.map(fin=>{
       const categorias=[['ajuste','Ajuste','#F59E0B','wrench'],['martelinho','Martelinho','#DC1F1F','hammer'],['pintura','Pintura','#2563EB','paintbrush'],['vidro','Vidro','#0EA5E9','square'],['outro','Estética','#6B7280','more-horizontal'],['instalacaoPecas','Instalação Peças','#10B981','package']];
             const totalPend=['ajuste','martelinho','pintura','vidro','outro','instalacaoPecas'].reduce((a,c)=>a+(fin[c]||[]).filter(p=>p.status!=='Solucionado').length,0);
-            const editar=podeEditar(fin);
-           const pecasItems=getPecasParaOS(fin.os,requests);
+          const editar=podeEditar(fin);
+           const pecasItems=pecasByOS[String(fin.os).trim()]||[];
             const pecasAtivas=pecasItems.filter(it=>!it.excedente);
             const pecasExc=pecasItems.filter(it=>it.excedente);
             const pecasSolucionadoHeader=pecasAtivas.length===0||pecasAtivas.every(it=>it.status==='Concluído');
@@ -4563,7 +4607,7 @@ function FinalizacaoView({vehiclesDB,requests,loggedInUser,isMaster}){
           continue;
         }
         if(now-fin.entregueDetectadoEm<5*86400000)continue;
-        try{
+try{
           const pecasItems=getPecasParaOS(fin.os,requests);
           const doc=await buildFinalizacaoPDF(fin,pecasItems);
           // Firebase Storage indisponível no plano atual — salvamos o PDF direto
@@ -4572,6 +4616,10 @@ function FinalizacaoView({vehiclesDB,requests,loggedInUser,isMaster}){
           try{
             pdfDataUrl=doc.output('datauristring');
           }catch(e){console.warn('Geração do PDF histórico falhou:',e);}
+          if(!pdfDataUrl){
+            console.warn('PDF não gerado para OS',fin.os,'— tentando novamente na próxima verificação.');
+            continue; // nunca arquiva (e apaga os dados) sem o PDF pronto
+          }
           await col('finalizacoesHistorico').add(stripUndefined({os:fin.os,unidade:fin.unidade,vehicleData:fin.vehicleData,criadoPor:fin.criadoPor,criadoEm:fin.criadoEm,arquivadoEm:now,pdfDataUrl}));
         await col('finalizacoes').doc(fin.id).update({arquivada:true,ajuste:[],martelinho:[],pintura:[],vidro:[],outro:[],instalacaoPecas:[],historico:[...(fin.historico||[]),{acao:'Inspeção arquivada automaticamente (5 dias após entrega)',usuario:'Sistema',timestamp:now}]});
         }catch(e){console.warn('Arquivamento automático falhou para OS',fin.os,e);}
