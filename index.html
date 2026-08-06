@@ -421,8 +421,7 @@ const NetworkStatus=()=>{
   return <div style={{position:'fixed',top:0,left:0,right:0,background:'#F59E0B',color:'#000',textAlign:'center',padding:'6px',fontSize:'11px',fontWeight:700,zIndex:1000}}>📡 Modo Offline — alterações sincronizarão ao reconectar</div>;
 };
 
-const Skeleton=()=>(
-  function LastUpdateBadge(){
+function LastUpdateBadge(){
   const[t,setT]=useState(new Date());
   useEffect(()=>{
     const upd=()=>setT(new Date());
@@ -435,6 +434,8 @@ const Skeleton=()=>(
     </span>
   );
 }
+
+const Skeleton=()=>(
   <div style={{padding:24}} className="space-y-3">
     {[1,2,3].map(i=>(
       <div key={i} className="card" style={{padding:20}}>
@@ -5030,8 +5031,9 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
               <span className="pulse-beacon" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--red)', display: 'inline-block' }} />
               <span style={{ fontSize: 8, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.14em', color: 'rgba(255, 255, 255, .6)' }}>Relatório de Diretoria</span>
             </div>
-           <h2 style={{ fontSize: 34, fontWeight: 800, margin: '0', letterSpacing: '-.03em', lineHeight: 1 }}>Resumo {periodo === 'semanal' ? 'da Semana' : periodo === 'quinzenal' ? 'da Quinzena' : 'do Mês'}</h2>
+          <h2 style={{ fontSize: 34, fontWeight: 800, margin: '0', letterSpacing: '-.03em', lineHeight: 1 }}>Resumo {periodo === 'semanal' ? 'da Semana' : periodo === 'quinzenal' ? 'da Quinzena' : 'do Mês'}</h2>
             <div style={{marginTop:10}}><LastUpdateBadge/></div>
+          </div>
 
           {/* Seletores de Período */}
           <div style={{ display: 'flex', background: 'var(--smoke)', padding: 4, borderRadius: 12, border: '1.5px solid var(--border)' }}>
