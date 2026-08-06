@@ -148,7 +148,23 @@ const FB={apiKey:"AIzaSyBT1N43mp6hoxXOj6bmTlqouQWSmfn32-E",authDomain:"portal-co
 if(!firebase.apps.length)firebase.initializeApp(FB);
 const db=firebase.firestore();const auth=firebase.auth();const storage=firebase.storage();
 const AID='portal-compras-vrz';
-const col=(c)=>db.collection('artifacts').doc(AID).collection('public').doc('data').collection(c);
+let refreshTimer=null;
+const dispatchRefresh=()=>{clearTimeout(refreshTimer);refreshTimer=setTimeout(()=>window.dispatchEvent(new Event('vrz-refresh')),800);};
+const col=(c)=>{
+  const ref=db.collection('artifacts').doc(AID).collection('public').doc('data').collection(c);
+  const origAdd=ref.add.bind(ref);
+  ref.add=(...a)=>origAdd(...a).then(r=>{dispatchRefresh();return r;});
+  const origDoc=ref.doc.bind(ref);
+  ref.doc=(id)=>{
+    const d=origDoc(id);
+    const origUpdate=d.update.bind(d);const origDelete=d.delete.bind(d);const origSet=d.set.bind(d);
+    d.update=(...a)=>origUpdate(...a).then(r=>{dispatchRefresh();return r;});
+    d.delete=(...a)=>origDelete(...a).then(r=>{dispatchRefresh();return r;});
+    d.set=(...a)=>origSet(...a).then(r=>{dispatchRefresh();return r;});
+    return d;
+  };
+  return ref;
+};
 const{useState,useEffect,useMemo,useRef,useCallback}=React;
 
 const MASTER_USER='Lucas.Sabino'; // Master 1 — pode promover/rebaixar qualquer um, inclusive outros masters
@@ -182,14 +198,49 @@ const parsePrice = (v) => {
   return parseFloat(s) || 0;
 };
 
-const useFirestore=(collectionName)=>{
-  const[data,setData]=useState([]);const[loading,setLoading]=useState(true);
+const useFirestore=(collectionName,opts)=>{
+  const cacheKey='vrzcache_'+collectionName;
+  const[data,setData]=useState(()=>{
+    try{const raw=localStorage.getItem(cacheKey);if(raw)return JSON.parse(raw).data||[];}catch(e){}
+    return[];
+  });
+  const[loading,setLoading]=useState(()=>{
+    try{
+      const raw=localStorage.getItem(cacheKey);
+      if(raw&&Date.now()-JSON.parse(raw).t<5*60*1000)return false;
+    }catch(e){}
+    return true;
+  });
+  const lastFetchRef=useRef(0);
+  const fetchData=useCallback(()=>{
+    lastFetchRef.current=Date.now();
+    let q=col(collectionName);
+    if(opts?.orderBy)q=q.orderBy(opts.orderBy,opts.direction||'desc');
+    if(opts?.limit)q=q.limit(opts.limit);
+    q.get().then(s=>{
+      const arr=s.docs.map(d=>({id:d.id,...d.data()}));
+      setData(arr);setLoading(false);
+      try{localStorage.setItem(cacheKey,JSON.stringify({t:Date.now(),data:arr}));}catch(e){/* coleção grande demais pra cache local — segue sem cachear */}
+      window.dispatchEvent(new Event('vrz-updated'));
+    }).catch(e=>{console.error(e);setLoading(false);});
+  },[collectionName,opts?.orderBy,opts?.direction,opts?.limit]);
   useEffect(()=>{
-    setLoading(true);
-    const u=col(collectionName).onSnapshot(s=>{setData(s.docs.map(d=>({id:d.id,...d.data()})));setLoading(false);},e=>{console.error(e);setLoading(false);});
-    return u;
-  },[collectionName]);
-  return{data,loading};
+    let cacheFresco=false;
+    try{
+      const raw=localStorage.getItem(cacheKey);
+      if(raw){
+        const parsed=JSON.parse(raw);
+        if(Date.now()-parsed.t<5*60*1000){lastFetchRef.current=parsed.t;cacheFresco=true;}
+      }
+    }catch(e){}
+    if(!cacheFresco)fetchData();
+    const interval=setInterval(()=>{if(!document.hidden)fetchData();},5*60*1000);
+    const onVisible=()=>{if(!document.hidden&&Date.now()-lastFetchRef.current>5*60*1000)fetchData();};
+    document.addEventListener('visibilitychange',onVisible);
+    window.addEventListener('vrz-refresh',fetchData);
+    return()=>{clearInterval(interval);document.removeEventListener('visibilitychange',onVisible);window.removeEventListener('vrz-refresh',fetchData);};
+  },[fetchData]);
+  return{data,loading,refetch:fetchData};
 };
 
 const sanitize=(v)=>typeof v!=='string'?v:DOMPurify.sanitize(v);
@@ -371,6 +422,19 @@ const NetworkStatus=()=>{
 };
 
 const Skeleton=()=>(
+  function LastUpdateBadge(){
+  const[t,setT]=useState(new Date());
+  useEffect(()=>{
+    const upd=()=>setT(new Date());
+    window.addEventListener('vrz-updated',upd);
+    return()=>window.removeEventListener('vrz-updated',upd);
+  },[]);
+  return(
+    <span style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:8,fontWeight:700,color:'var(--muted)',background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:999,padding:'4px 11px',whiteSpace:'nowrap'}}>
+      <Icon name="clock" size={10}/> Atualizado às {t.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}
+    </span>
+  );
+}
   <div style={{padding:24}} className="space-y-3">
     {[1,2,3].map(i=>(
       <div key={i} className="card" style={{padding:20}}>
@@ -964,10 +1028,11 @@ function DashboardView({requests,vehicles}){
 
   return(
     <div style={{paddingBottom:40}} className="fade-up">
-      <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:12}}>
+     <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:12}}>
         <div>
           <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.15em',color:'var(--red)',marginBottom:4}}>Inteligência Operacional</p>
           <h2 style={{fontSize:36,fontWeight:800,lineHeight:1,color:'var(--ink)',margin:0,letterSpacing:'-.02em'}}>Análises VRZ</h2>
+          <div style={{marginTop:8}}><LastUpdateBadge/></div>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:8,background:'var(--ink)',color:'#fff',padding:'8px 16px',borderRadius:10}}>
           <span className="pulse-beacon" style={{width:7,height:7,borderRadius:'50%',background:'var(--red)',display:'inline-block'}}/>
@@ -1992,8 +2057,11 @@ const exportCSV=()=>{
       )}
 
       <div style={{marginBottom:16}}>
-        <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.15em',color:'var(--red)',marginBottom:4}}>Registros do Portal</p>
-        <h2 style={{fontSize:26,fontWeight:800,margin:'0 0 12px',letterSpacing:'-.02em'}}>Histórico de OS</h2>
+       <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.15em',color:'var(--red)',marginBottom:4}}>Registros do Portal</p>
+        <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',margin:'0 0 12px'}}>
+          <h2 style={{fontSize:26,fontWeight:800,margin:0,letterSpacing:'-.02em'}}>Histórico de OS</h2>
+          <LastUpdateBadge/>
+        </div>
         <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)',overflowX:'auto',marginBottom:12,WebkitOverflowScrolling:'touch'}}>
           {[
             {key:'geral',label:`Todos (${counts.geral})`,color:'var(--ink)'},
@@ -2782,9 +2850,10 @@ function ChegadasView({requests,loggedInUser,vehicles}){
       <div style={{marginBottom:20}}>
         <div style={{display:'flex',alignItems:'flex-end',justifyContent:'space-between',flexWrap:'wrap',gap:12,marginBottom:16}}>
           <div>
-            <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.15em',color:'var(--red)',marginBottom:4}}>Portal VRZ</p>
-            <div style={{display:'flex',alignItems:'center',gap:12}}>
+           <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.15em',color:'var(--red)',marginBottom:4}}>Portal VRZ</p>
+            <div style={{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
               <h2 style={{fontSize:32,fontWeight:800,margin:0,letterSpacing:'-.02em'}}>Chegadas</h2>
+              <LastUpdateBadge/>
               {naoLidas>0&&(
                 <div style={{background:'var(--red)',color:'#fff',borderRadius:999,padding:'4px 10px',fontSize:10,fontWeight:800,display:'flex',alignItems:'center',gap:5}}>
                   <span className="pulse-beacon" style={{width:6,height:6,borderRadius:'50%',background:'#fff',display:'inline-block'}}/>
@@ -4515,7 +4584,10 @@ function FinalizacaoView({vehiclesDB,requests,loggedInUser,isMaster}){
     <div className="fade-up" style={{paddingBottom:16}}>
       <div style={{marginBottom:16}}>
         <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.15em',color:'var(--red)',marginBottom:4}}>Inspeção Final</p>
-        <h2 style={{fontSize:30,fontWeight:800,margin:'0 0 14px',letterSpacing:'-.02em'}}>Finalização</h2>
+        <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',margin:'0 0 14px'}}>
+          <h2 style={{fontSize:30,fontWeight:800,margin:0,letterSpacing:'-.02em'}}>Finalização</h2>
+          <LastUpdateBadge/>
+        </div>
         <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)',width:'fit-content',flexWrap:'wrap'}}>
           {[!isComercial&&{k:'nova',l:'Nova Inspeção'},{k:'meus',l:'Meus Carros'},isMaster&&{k:'historico',l:'Histórico'}].filter(Boolean).map(t=>(
             <button key={t.k} onClick={()=>setSub(t.k)} style={{padding:'8px 16px',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',border:'none',cursor:'pointer',letterSpacing:'.06em',fontFamily:'Plus Jakarta Sans,sans-serif',background:sub===t.k?'#fff':'transparent',color:sub===t.k?'var(--red)':'var(--muted)',boxShadow:sub===t.k?'0 2px 8px rgba(0,0,0,.08)':'none'}}>{t.l}</button>
@@ -4958,8 +5030,8 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
               <span className="pulse-beacon" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--red)', display: 'inline-block' }} />
               <span style={{ fontSize: 8, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.14em', color: 'rgba(255, 255, 255, .6)' }}>Relatório de Diretoria</span>
             </div>
-            <h2 style={{ fontSize: 34, fontWeight: 800, margin: '0', letterSpacing: '-.03em', lineHeight: 1 }}>Resumo {periodo === 'semanal' ? 'da Semana' : periodo === 'quinzenal' ? 'da Quinzena' : 'do Mês'}</h2>
-          </div>
+           <h2 style={{ fontSize: 34, fontWeight: 800, margin: '0', letterSpacing: '-.03em', lineHeight: 1 }}>Resumo {periodo === 'semanal' ? 'da Semana' : periodo === 'quinzenal' ? 'da Quinzena' : 'do Mês'}</h2>
+            <div style={{marginTop:10}}><LastUpdateBadge/></div>
 
           {/* Seletores de Período */}
           <div style={{ display: 'flex', background: 'var(--smoke)', padding: 4, borderRadius: 12, border: '1.5px solid var(--border)' }}>
@@ -5305,6 +5377,7 @@ function ImportEstoqueModal({onClose,loggedInUser}){
         });
       });
       await batch.commit();
+      dispatchRefresh();
       alert('Estoque atualizado! '+rows.length+' peça(s) processada(s).');
       onClose();
     }catch(e){alert('Erro ao importar: '+e.message);}
@@ -5570,8 +5643,9 @@ function EstoqueView({estoque,movimentos,requests,loggedInUser,isMaster}){
     <div className="fade-up" style={{paddingBottom:40}}>
       <div style={{marginBottom:16,display:'flex',justifyContent:'space-between',alignItems:'flex-end',flexWrap:'wrap',gap:12}}>
         <div>
-          <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.15em',color:'var(--red)',marginBottom:4}}>Controle de Peças</p>
+         <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.15em',color:'var(--red)',marginBottom:4}}>Controle de Peças</p>
           <h2 style={{fontSize:32,fontWeight:800,margin:0,letterSpacing:'-.02em'}}>Estoque</h2>
+          <div style={{marginTop:8}}><LastUpdateBadge/></div>
         </div>
         {isMaster&&(
           <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
@@ -5718,7 +5792,7 @@ function EstoqueView({estoque,movimentos,requests,loggedInUser,isMaster}){
 // ── App Principal ─────────────────────────────────────────────────────────
 function App(){
   const[user,setUser]=useState(null);
-  const[loggedIn,setLoggedIn]=useState(null);
+  const[loggedIn,setLoggedIn]=useState(()=>{try{const s=localStorage.getItem('vrz_session');return s?JSON.parse(s):null;}catch(e){return null;}});
   const[view,setView]=useState('request');
   const[subView,setSubView]=useState('pending');
   const[importData,setImportData]=useState([]);const[showImport,setShowImport]=useState(false);const[editing,setEditing]=useState(null);
@@ -5730,7 +5804,7 @@ const{data:requests,loading:reqLoad}=useFirestore('requests');
   const{data:vehicles,loading:vehLoad}=useFirestore('vehicles');
   const{data:usersData,loading:usrLoad}=useFirestore('users');
   const{data:estoque,loading:estLoad}=useFirestore('estoque');
-  const{data:estoqueMovimentos,loading:movLoad}=useFirestore('estoqueMovimentos');
+  const{data:estoqueMovimentos,loading:movLoad}=useFirestore('estoqueMovimentos',{orderBy:'timestamp',direction:'desc',limit:300});
   const{data:finalizacoesApp,loading:finLoad}=useFirestore('finalizacoes');
   const[users,setUsers]=useState([]);
   const[initDone,setInitDone]=useState(false);
@@ -5754,6 +5828,28 @@ const{data:requests,loading:reqLoad}=useFirestore('requests');
   },[usersData,usrLoad]);
 
   useEffect(()=>{const u=auth.onAuthStateChanged(u=>{if(u)setUser(u);else auth.signInAnonymously();});return u;},[]);
+
+ useEffect(()=>{
+    try{if(loggedIn)localStorage.setItem('vrz_session',JSON.stringify(loggedIn));else localStorage.removeItem('vrz_session');}catch(e){}
+  },[loggedIn]);
+
+ useEffect(()=>{
+    if(!loggedIn)return;
+    let timer;
+    const reset=()=>{clearTimeout(timer);timer=setTimeout(()=>{setLoggedIn(null);setView('request');},20*60*1000);};
+    const evts=['mousemove','keydown','touchstart','click','scroll'];
+    evts.forEach(ev=>window.addEventListener(ev,reset));
+    reset();
+    return()=>{clearTimeout(timer);evts.forEach(ev=>window.removeEventListener(ev,reset));};
+  },[loggedIn]);
+
+  const[lastUpdate,setLastUpdate]=useState(new Date());
+  useEffect(()=>{
+    const upd=()=>setLastUpdate(new Date());
+    window.addEventListener('vrz-updated',upd);
+    return()=>window.removeEventListener('vrz-updated',upd);
+  },[]);
+  const fmtHora=d=>d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
 
  const role=loggedIn?.role||'solicitante';
   const isMaster=role==='master';
@@ -5838,7 +5934,7 @@ const changeRole=async(u,r)=>{
   const commitImport=async()=>{
     if(!importData.length)return;const batch=db.batch();
     importData.forEach(v=>batch.set(col('vehicles').doc(v.os),v));
-    await batch.commit();alert('Sucesso! '+importData.length+' veículos importados.');setImportData([]);setShowImport(false);
+    await batch.commit();dispatchRefresh();alert('Sucesso! '+importData.length+' veículos importados.');setImportData([]);setShowImport(false);
   };
 
   // Salva array completo de items no Firestore — chamado só ao confirmar
@@ -5991,15 +6087,19 @@ const navItems=[
             <RoleBadge role={loggedIn.role}/>
           </div>
           {/* MELHORIA 2: botão alterar senha */}
+         <button onClick={()=>window.dispatchEvent(new Event('vrz-refresh'))} style={{width:'100%',padding:'6px 0',marginBottom:8,background:'rgba(255,255,255,.06)',border:'1px solid rgba(255,255,255,.1)',borderRadius:8,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',color:'rgba(255,255,255,.5)',transition:'all .15s',fontFamily:'Plus Jakarta Sans,sans-serif',display:'flex',alignItems:'center',justifyContent:'center',gap:6}} onMouseEnter={e=>{e.currentTarget.style.background='rgba(255,255,255,.14)';e.currentTarget.style.color='#fff';}} onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,.06)';e.currentTarget.style.color='rgba(255,255,255,.5)';}}>
+            <Icon name="refresh-cw" size={12}/> Atualizar Informações
+          </button>
           <button onClick={()=>setShowChangePwd(true)} style={{width:'100%',padding:'6px 0',marginBottom:8,background:'rgba(255,255,255,.06)',border:'1px solid rgba(255,255,255,.1)',borderRadius:8,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',color:'rgba(255,255,255,.5)',transition:'all .15s',fontFamily:'Plus Jakarta Sans,sans-serif',display:'flex',alignItems:'center',justifyContent:'center',gap:6}} onMouseEnter={e=>{e.currentTarget.style.background='rgba(255,255,255,.14)';e.currentTarget.style.color='#fff';}} onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,.06)';e.currentTarget.style.color='rgba(255,255,255,.5)';}}>
             <Icon name="key" size={12}/> Alterar Senha
           </button>
           <button onClick={logout} style={{width:'100%',padding:7,background:'rgba(255,255,255,.08)',border:'1px solid rgba(255,255,255,.12)',borderRadius:8,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',color:'rgba(255,255,255,.5)',transition:'all .15s',fontFamily:'Plus Jakarta Sans,sans-serif'}} onMouseEnter={e=>{e.currentTarget.style.background='var(--red)';e.currentTarget.style.color='#fff';e.currentTarget.style.borderColor='var(--red)';}} onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,.08)';e.currentTarget.style.color='rgba(255,255,255,.5)';e.currentTarget.style.borderColor='rgba(255,255,255,.12)';}}>Sair</button>
         </div>
-        <div style={{textAlign:'center',paddingTop:6}}>
+       <div style={{textAlign:'center',paddingTop:6}}>
           <span style={{fontSize:8,fontWeight:700,color:user?'var(--red)':'rgba(255,255,255,.25)',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>
             <span className="pulse-beacon" style={{width:6,height:6,borderRadius:'50%',background:user?'var(--red)':'var(--muted)',display:'inline-block'}}/>{user?'ONLINE':'RECONECTANDO...'}
           </span>
+          <p style={{fontSize:7,fontWeight:700,color:'rgba(255,255,255,.25)',margin:'4px 0 0'}}>Atualizado às {fmtHora(lastUpdate)}</p>
         </div>
       </nav>
 
@@ -6011,8 +6111,12 @@ const navItems=[
             <h1 style={{fontSize:20,fontWeight:800,margin:0}}>VRZ</h1>
           </div>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
-            <div style={{textAlign:'right'}}><p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:role==='master'?'#856A00':'var(--red)',margin:0,maxWidth:100,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{loggedIn.user}</p><RoleBadge role={loggedIn.role}/></div>
+            <div style={{textAlign:'right'}}><p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:role==='master'?'#856A00':'var(--red)',margin:0,maxWidth:100,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{loggedIn.user}</p><RoleBadge role={loggedIn.role}/><p style={{fontSize:7,fontWeight:700,color:'var(--muted)',margin:'2px 0 0'}}>Atualizado {fmtHora(lastUpdate)}</p></div>
             {/* MELHORIA 2: botão alterar senha no mobile */}
+        <button onClick={()=>window.dispatchEvent(new Event('vrz-refresh'))} title="Atualizar" aria-label="Atualizar" style={{width:46,height:44,background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:9,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:2,cursor:'pointer'}}>
+  <Icon name="refresh-cw" size={14}/>
+  <span style={{fontSize:6.5,fontWeight:800,textTransform:'uppercase',letterSpacing:'.04em',color:'var(--muted)'}}>Atualizar</span>
+</button>
            <button onClick={()=>setShowChangePwd(true)} title="Alterar Senha" aria-label="Alterar Senha" style={{width:46,height:44,background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:9,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:2,cursor:'pointer'}}>
   <Icon name="key" size={14}/>
   <span style={{fontSize:6.5,fontWeight:800,textTransform:'uppercase',letterSpacing:'.04em',color:'var(--muted)'}}>Senha</span>
@@ -6044,8 +6148,11 @@ const navItems=[
                 {view==='admin'&&canDo(role,'manage')&&(
                   <div className="fade-up" style={{paddingBottom:40}}>
                     <div style={{marginBottom:16}}>
-                      <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.15em',color:'var(--red)',marginBottom:4}}>Administração</p>
-                      <h2 style={{fontSize:32,fontWeight:800,margin:'0 0 16px',letterSpacing:'-.02em'}}>Gestão de Compras</h2>
+                    <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.15em',color:'var(--red)',marginBottom:4}}>Administração</p>
+                      <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',margin:'0 0 16px'}}>
+                        <h2 style={{fontSize:32,fontWeight:800,margin:0,letterSpacing:'-.02em'}}>Gestão de Compras</h2>
+                        <LastUpdateBadge/>
+                      </div>
                     </div>
                    <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginBottom:16,flexWrap:'wrap'}}>
   <button onClick={()=>setShowImport(true)} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 18px',background:'var(--ink)',color:'#fff',border:'none',borderRadius:10,fontSize:10,fontWeight:800,textTransform:'uppercase',cursor:'pointer',letterSpacing:'.08em',borderBottom:'3px solid var(--red)',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
