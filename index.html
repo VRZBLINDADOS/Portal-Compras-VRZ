@@ -545,7 +545,7 @@ const finalizacoesDrill=useMemo(()=>{
     if(!drill)return[];
     return ativasFiltradas.filter(drill.predicate);
   },[ativasFiltradas,drill]);
-  const finalizacoesDrillFiltered=useMemo(()=>{
+ const finalizacoesDrillFiltered=useMemo(()=>{
     if(!drillSearch.trim())return finalizacoesDrill;
     const t=drillSearch.toLowerCase();
     return finalizacoesDrill.filter(fin=>{
@@ -554,6 +554,17 @@ const finalizacoesDrill=useMemo(()=>{
       return String(fin.os).toLowerCase().includes(t)||modelo.toLowerCase().includes(t);
     });
   },[finalizacoesDrill,drillSearch,vehicleMap]);
+  const drillTipoCounts=useMemo(()=>{
+    if(!drill||!drill.categoriaFiltro||drill.tipoFiltro||!TIPO_CATS.includes(drill.categoriaFiltro))return null;
+    let interno=0,externo=0;
+    finalizacoesDrill.forEach(fin=>{
+      (fin[drill.categoriaFiltro]||[]).forEach(p=>{
+        if(p.tipo==='Interno')interno++;
+        else if(p.tipo==='Externo')externo++;
+      });
+    });
+    return{interno,externo};
+  },[drill,finalizacoesDrill]);
 const stats=useMemo(()=>{
     const ativas=ativasFiltradas;
     if(!ativas.length)return null;
@@ -911,10 +922,16 @@ const stats=useMemo(()=>{
    {drill&&ReactDOM.createPortal((
         <div style={{position:'fixed',inset:0,zIndex:900,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}} className="fade-in">
           <div style={{background:'#fff',borderRadius:24,overflow:'hidden',maxWidth:640,width:'100%',maxHeight:'88vh',display:'flex',flexDirection:'column',boxShadow:'0 40px 80px rgba(0,0,0,.4)'}}>
-            <div style={{background:'var(--ink)',padding:'20px 24px',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0,borderBottom:'4px solid var(--red)'}}>
-              <div>
-                <h3 style={{margin:0,fontSize:16,fontWeight:800,color:'#fff'}}>{drill.titulo}</h3>
+           <div style={{background:'var(--ink)',padding:'20px 24px',display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12,flexShrink:0,borderBottom:'4px solid var(--red)'}}>
+              <div style={{flex:1,minWidth:0}}>
+                <h3 style={{margin:0,fontSize:16,fontWeight:800,color:'#fff',wordBreak:'break-word'}}>{drill.titulo}</h3>
                 <p style={{margin:0,fontSize:9,color:'rgba(255,255,255,.4)',textTransform:'uppercase',letterSpacing:'.08em',marginTop:2}}>{finalizacoesDrillFiltered.length} {finalizacoesDrillFiltered.length===1?'OS encontrada':"OS's encontradas"}{drillSearch.trim()?` de ${finalizacoesDrill.length}`:''}</p>
+                {drillTipoCounts&&(
+                  <div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap'}}>
+                    <span style={{fontSize:8,fontWeight:800,color:'#8FB4FF',background:'rgba(234,240,255,.12)',border:'1px solid rgba(192,208,245,.35)',padding:'3px 9px',borderRadius:999}}>Interno: {drillTipoCounts.interno}</span>
+                    <span style={{fontSize:8,fontWeight:800,color:'#FFCE8A',background:'rgba(255,244,230,.1)',border:'1px solid rgba(255,217,168,.35)',padding:'3px 9px',borderRadius:999}}>Externo: {drillTipoCounts.externo}</span>
+                  </div>
+                )}
               </div>
               <button onClick={()=>{setDrill(null);setDrillSearch('');}} style={{width:36,height:36,background:'rgba(255,255,255,.08)',border:'none',borderRadius:10,cursor:'pointer',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="x" size={18}/></button>
             </div>
@@ -6151,13 +6168,13 @@ const navItems=[
       {showChangePwd&&<ChangePasswordModal loggedInUser={loggedIn} onClose={()=>setShowChangePwd(false)}/>}
 
       {/* Desktop Sidebar */}
-      <nav style={{display:'none',width:252,background:'#0D0D0D',padding:'20px 12px',flexDirection:'column',gap:4,flexShrink:0}} id="desktop-nav">
+     <nav style={{display:'none',width:252,background:'#0D0D0D',padding:'20px 12px 12px',flexDirection:'column',gap:4,flexShrink:0,height:'100vh',maxHeight:'100dvh'}} id="desktop-nav">
         <style>{`@media(min-width:768px){#desktop-nav{display:flex!important}}`}</style>
-        <div style={{display:'flex',alignItems:'center',gap:10,padding:'6px 6px 20px',borderBottom:'1px solid rgba(255,255,255,.08)',marginBottom:8}}>
+        <div style={{display:'flex',alignItems:'center',gap:10,padding:'6px 6px 20px',borderBottom:'1px solid rgba(255,255,255,.08)',marginBottom:8,flexShrink:0}}>
           <div style={{width:36,height:36,background:'var(--red)',borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,boxShadow:'0 4px 12px rgba(220,31,31,.3)'}}><Icon name="shopping-cart" size={18}/></div>
           <div><p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',letterSpacing:'.14em',color:'rgba(255,255,255,.3)',margin:0,lineHeight:1}}>Portal Compras</p><h1 style={{fontSize:20,fontWeight:800,margin:0,lineHeight:1.1,color:'#fff'}}>VRZ</h1></div>
         </div>
-        <div style={{flex:1,display:'flex',flexDirection:'column',gap:2}}>
+        <div className="scroll-y" style={{flex:1,minHeight:0,overflowY:'auto',display:'flex',flexDirection:'column',gap:2}}>
         {navItems.map(n=>(
             <button key={n.key} onClick={()=>setView(n.key)} className={`nav-item ${view===n.key?'active':''}`} title={n.label}>
               <div className="nav-icon" style={{position:'relative'}}>
@@ -6169,7 +6186,7 @@ const navItems=[
             </button>
           ))}
         </div>
-        <div style={{background:'rgba(255,255,255,.06)',borderRadius:12,padding:12,border:'1px solid rgba(255,255,255,.1)'}}>
+        <div style={{background:'rgba(255,255,255,.06)',borderRadius:12,padding:12,border:'1px solid rgba(255,255,255,.1)',flexShrink:0}}>
           <p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',color:'rgba(255,255,255,.3)',margin:'0 0 4px'}}>Logado como</p>
           <p style={{fontSize:11,fontWeight:800,textTransform:'uppercase',color:role==='master'?'#FFD700':'var(--red)',margin:'0 0 6px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{loggedIn.user}</p>
           <div style={{marginBottom:10,display:'flex',alignItems:'center',gap:6}}>
@@ -6184,7 +6201,7 @@ const navItems=[
           </button>
           <button onClick={logout} style={{width:'100%',padding:7,background:'rgba(255,255,255,.08)',border:'1px solid rgba(255,255,255,.12)',borderRadius:8,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',color:'rgba(255,255,255,.5)',transition:'all .15s',fontFamily:'Plus Jakarta Sans,sans-serif'}} onMouseEnter={e=>{e.currentTarget.style.background='var(--red)';e.currentTarget.style.color='#fff';e.currentTarget.style.borderColor='var(--red)';}} onMouseLeave={e=>{e.currentTarget.style.background='rgba(255,255,255,.08)';e.currentTarget.style.color='rgba(255,255,255,.5)';e.currentTarget.style.borderColor='rgba(255,255,255,.12)';}}>Sair</button>
         </div>
-       <div style={{textAlign:'center',paddingTop:6}}>
+      <div style={{textAlign:'center',paddingTop:6,flexShrink:0}}>
           <span style={{fontSize:8,fontWeight:700,color:user?'var(--red)':'rgba(255,255,255,.25)',display:'flex',alignItems:'center',justifyContent:'center',gap:5}}>
             <span className="pulse-beacon" style={{width:6,height:6,borderRadius:'50%',background:user?'var(--red)':'var(--muted)',display:'inline-block'}}/>{user?'ONLINE':'RECONECTANDO...'}
           </span>
