@@ -133,6 +133,7 @@ canvas{display:block}
 <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone@7.23.10/babel.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -4551,17 +4552,45 @@ const rows=[[csvCell('OS'),csvCell('Chassi'),csvCell('Modelo'),csvCell('Ajustes'
 function FinalizacaoHistoricoView(){
   const{data:historico,loading}=useFirestore('finalizacoesHistorico');
   const[search,setSearch]=useState('');
+  const[baixandoZip,setBaixandoZip]=useState(false);
   const visiveis=useMemo(()=>{
     let list=historico;
     if(search){const t=search.toLowerCase();list=list.filter(h=>String(h.os).toLowerCase().includes(t)||String(h.vehicleData?.modelo||'').toLowerCase().includes(t));}
     return list.sort((a,b)=>b.arquivadoEm-a.arquivadoEm);
   },[historico,search]);
+  const baixarTodosPDFs=async()=>{
+    const comPdf=visiveis.filter(h=>h.pdfUrl||h.pdfDataUrl);
+    if(!comPdf.length)return alert('Nenhum PDF disponível para download nesta lista.');
+    setBaixandoZip(true);
+    try{
+      const zip=new JSZip();
+      for(const h of comPdf){
+        try{
+          const src=h.pdfUrl||h.pdfDataUrl;
+          const res=await fetch(src);
+          const blob=await res.blob();
+          zip.file(`OS_${h.os}_Finalizacao.pdf`,blob);
+        }catch(e){console.warn('Falha ao incluir PDF da OS',h.os,e);}
+      }
+      const content=await zip.generateAsync({type:'blob'});
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(content);
+      a.download=`Inspecoes_Finalizacao_VRZ_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.zip`;
+      a.click();
+    }catch(e){alert('Erro ao gerar o arquivo ZIP: '+e.message);}
+    setBaixandoZip(false);
+  };
   if(loading)return<Skeleton/>;
   return(
     <div className="fade-up" style={{paddingBottom:30}}>
-      <div style={{position:'relative',marginBottom:16}}>
-        <input type="text" placeholder="Buscar OS / Modelo..." value={search} onChange={e=>setSearch(e.target.value)} className="input" style={{paddingLeft:36}}/>
-        <div style={{position:'absolute',left:11,top:'50%',transform:'translateY(-50%)',color:'var(--muted)'}}><Icon name="search" size={14}/></div>
+      <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center',marginBottom:16}}>
+        <div style={{position:'relative',flex:1,minWidth:200}}>
+          <input type="text" placeholder="Buscar OS / Modelo..." value={search} onChange={e=>setSearch(e.target.value)} className="input" style={{paddingLeft:36}}/>
+          <div style={{position:'absolute',left:11,top:'50%',transform:'translateY(-50%)',color:'var(--muted)'}}><Icon name="search" size={14}/></div>
+        </div>
+        <button onClick={baixarTodosPDFs} disabled={baixandoZip} style={{display:'flex',alignItems:'center',gap:8,padding:'11px 18px',background:baixandoZip?'var(--smoke)':'#2563EB',color:baixandoZip?'var(--muted)':'#fff',border:'none',borderRadius:10,fontSize:10,fontWeight:800,textTransform:'uppercase',cursor:baixandoZip?'not-allowed':'pointer',letterSpacing:'.06em',fontFamily:'Plus Jakarta Sans,sans-serif',whiteSpace:'nowrap'}}>
+          {baixandoZip?<Icon name="refresh-cw" size={14} className="spin"/>:<Icon name="download" size={14}/>} {baixandoZip?'Gerando ZIP...':'Baixar Todos (ZIP)'}
+        </button>
       </div>
       {visiveis.length===0?(
         <div style={{padding:'56px 20px',textAlign:'center',background:'#fff',borderRadius:16,border:'1.5px dashed var(--border)'}}>
