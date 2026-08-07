@@ -587,21 +587,24 @@ const stats=useMemo(()=>{
       let problemasDaInspecao=0,solucionadosDaInspecao=0,ultimaResolucao=null;
       CATS.forEach(([key])=>{
         const items=fin[key]||[];
-        totalProblemas+=items.length;
+        const visivel=!categoriasVisiveis||categoriasVisiveis.includes(key);
         problemasDaInspecao+=items.length;
         porCategoria[key].total+=items.length;
         if(items.length>0)porCategoria[key].osComProblema++;
        porModelo[modelo][key]+=items.length;
-        porModelo[modelo].total+=items.length;
         porLinha[linha][key]+=items.length;
-        porLinha[linha].total+=items.length;
+        if(visivel){
+          totalProblemas+=items.length;
+          porModelo[modelo].total+=items.length;
+          porLinha[linha].total+=items.length;
+        }
     items.forEach(p=>{
           if(TIPO_CATS.includes(key)){
             const tipo=p.tipo==='Externo'?'Externo':'Interno';
             porCategoria[key].porTipo[tipo]++;
           }
           if(p.status==='Solucionado'){
-            totalSolucionados++;
+            if(visivel)totalSolucionados++;
             solucionadosDaInspecao++;
             porCategoria[key].solucionado++;
             if(p.resolvidoEm&&(!ultimaResolucao||p.resolvidoEm>ultimaResolucao))ultimaResolucao=p.resolvidoEm;
@@ -754,8 +757,11 @@ const stats=useMemo(()=>{
         </div>
       </div>
 
-      <div className="card" style={{padding:20,marginBottom:16}}>
-        <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:4}}>Frequência de Problemas por Carro</p>
+     <div className="card" style={{padding:20,marginBottom:16}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8,marginBottom:4}}>
+          <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',margin:0}}>Frequência de Problemas por Carro</p>
+          <span className="pill" style={{fontSize:8}}>{stats.totalInspecoes} {stats.totalInspecoes===1?'inspeção no período':'inspeções no período'}</span>
+        </div>
         <p style={{fontSize:9,color:'var(--muted)',marginBottom:16}}>Quantas vezes cada problema apareceu, em quantas OS's diferentes, e a média por inspeção (considerando todas as inspeções ativas)</p>
         <div style={{display:'flex',flexDirection:'column',gap:18}}>
          {CATS_VIS.map(([key,label,color,icon])=>{
