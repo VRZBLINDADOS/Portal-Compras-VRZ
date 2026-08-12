@@ -3619,10 +3619,31 @@ async function buildFinalizacaoPDF(fin, pecasItems, comFoto=true){
   });
   return doc;
 }
-function ProblemCategoryEditor({title,icon,color,items,setItems,disabled,limiteAtingido,tipoSelect}){
+const CATEGORIA_LABELS_HIST={ajuste:'Ajuste',martelinho:'Martelinho',pintura:'Pintura',vidro:'Vidro',outro:'Estética',instalacaoPecas:'Instalação Peças'};
+function diffHistoricoProblemas(original,atualizado,usuario,now){
+  const entradas=[];
+  Object.keys(CATEGORIA_LABELS_HIST).forEach(cat=>{
+    const antigos=original?.[cat]||[];
+    const novos=atualizado?.[cat]||[];
+    const idsAntigos=new Set(antigos.map(p=>p.id));
+    const idsNovos=new Set(novos.map(p=>p.id));
+    novos.forEach(p=>{
+      if(!idsAntigos.has(p.id)){
+        entradas.push({acao:`Problema adicionado em ${CATEGORIA_LABELS_HIST[cat]}: "${p.descricao||'(sem descrição)'}"`,usuario,timestamp:now});
+      }
+    });
+    antigos.forEach(p=>{
+      if(!idsNovos.has(p.id)){
+        entradas.push({acao:`Problema removido em ${CATEGORIA_LABELS_HIST[cat]}: "${p.descricao||'(sem descrição)'}"`,usuario,timestamp:now});
+      }
+    });
+  });
+  return entradas;
+}
+function ProblemCategoryEditor({title,icon,color,items,setItems,disabled,limiteAtingido,tipoSelect,loggedInUser}){
 const addProblem=()=>{
     if(disabled)return;
-    setItems([...items,{id:String(Date.now())+Math.floor(Math.random()*999),descricao:'',foto:null,status:'Pendente',criadoEm:Date.now(),...(tipoSelect?{tipo:'Interno'}:{})}]);
+    setItems([...items,{id:String(Date.now())+Math.floor(Math.random()*999),descricao:'',foto:null,status:'Pendente',criadoEm:Date.now(),criadoPor:loggedInUser?.user||'—',...(tipoSelect?{tipo:'Interno'}:{})}]);
   };
   const updateProblem=(id,key,val)=>{
     if(key==='foto'&&val){
@@ -3660,8 +3681,11 @@ const addProblem=()=>{
             <style>{`@media(max-width:600px){.finaliz-problem-row{grid-template-columns:1fr!important}}`}</style>
             <PhotoDropzone photo={p.foto} onChange={v=>updateProblem(p.id,'foto',v)} disabled={disabled||(!p.foto&&limiteAtingido)}/>
             <div style={{display:'flex',flexDirection:'column',gap:8}}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                <span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)'}}>Problema {idx+1}</span>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:6}}>
+                <div>
+                  <span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)'}}>Problema {idx+1}</span>
+                  <span style={{display:'block',fontSize:8,fontWeight:700,color:'var(--muted)',marginTop:2}}>Adicionado por <strong style={{color:'var(--ink)'}}>{p.criadoPor||'—'}</strong> em {p.criadoEm?new Date(p.criadoEm).toLocaleString('pt-BR'):'—'}</span>
+                </div>
                 {confirmDel===p.id?(
                   <div style={{display:'flex',gap:6,alignItems:'center'}}>
                     <span style={{fontSize:8,fontWeight:700,color:'var(--red)'}}>Excluir?</span>
@@ -3876,7 +3900,7 @@ useEffect(()=>{
       setPerguntaExcedenteFeita(true);
       setPerguntaNovasFeita(true);
       setExcedentes([]);setNovasPecas([]);
-       setReadOnly(!(isMaster||fin.criadoPor===loggedInUser.user||ADMIN_ESPECIAL.includes(loggedInUser?.user)));
+       setReadOnly(false);
   }else{
     setExistingFin(null);
       setAjuste([]);setMartelinho([]);setPintura([]);setVidro([]);setOutro([]);setInstalacaoPecas([]);
@@ -3960,8 +3984,10 @@ const executarSalvar=async()=>{
           if(changed)await col('requests').doc(req.id).update({items:stripUndefined(newItems)});
         }
       }
-     const opcaoFinal=mostrarNovas&&mostrarExcedente?'ambos':mostrarExcedente?'excedente':mostrarNovas?'novas':'suficiente';
+    const opcaoFinal=mostrarNovas&&mostrarExcedente?'ambos':mostrarExcedente?'excedente':mostrarNovas?'novas':'suficiente';
       const historicoEntry={acao:existingFin?'Inspeção atualizada':'Inspeção criada',usuario:loggedInUser.user,timestamp:now};
+      const atualizadoCatsHist={ajuste:ajusteUp,martelinho:martelinhoUp,pintura:pinturaUp,vidro:vidroUp,outro:outroUp,instalacaoPecas:instalacaoPecasUp};
+      const diffEntradasHist=diffHistoricoProblemas(existingFin||{},atualizadoCatsHist,loggedInUser.user,now);
       const payloadCheck=stripUndefined({ajuste:ajusteUp,martelinho:martelinhoUp,pintura:pinturaUp,vidro:vidroUp,outro:outroUp,instalacaoPecas:instalacaoPecasUp});
       const tamanhoEstimado=JSON.stringify(payloadCheck).length;
       if(tamanhoEstimado>900000){
@@ -3978,7 +4004,7 @@ const executarSalvar=async()=>{
           outro:outroUp.map(p=>({...p})),
           instalacaoPecas:instalacaoPecasUp.map(p=>({...p})),
           pecasOpcao:opcaoFinal,
-          historico:[...(existingFin.historico||[]),historicoEntry],
+          historico:[...(existingFin.historico||[]),historicoEntry,...diffEntradasHist],
         }));
       }else{
         await col('finalizacoes').add(stripUndefined({
@@ -3991,7 +4017,7 @@ const executarSalvar=async()=>{
           outro:outroUp.map(p=>({...p})),
           instalacaoPecas:instalacaoPecasUp.map(p=>({...p})),
           pecasOpcao:opcaoFinal,
-          historico:[historicoEntry],
+          historico:[historicoEntry,...diffEntradasHist],
         }));
       }
      try{localStorage.removeItem('rascunho_finalizacao_'+os.trim());}catch(e){}
@@ -4081,12 +4107,11 @@ const executarSalvar=async()=>{
             <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',display:'block',marginBottom:6}}>Número da OS</label>
             <input type="text" inputMode="numeric" value={os} onChange={e=>setOs(sanitize(e.target.value))} onBlur={onOSBlur} placeholder="Nº da OS" className="input" style={{fontSize:22,fontWeight:800}}/>
           </div>
-          {existingFin&&(
-            <div style={{background:readOnly?'#FFFBE6':'#EAF0FF',border:`1px solid ${readOnly?'#FFE680':'#C0D0F5'}`,borderRadius:10,padding:'10px 14px',display:'flex',alignItems:'center',gap:10}}>
-              <Icon name={readOnly?'lock':'info'} size={16} style={{color:readOnly?'#856A00':'#1A4EC2',flexShrink:0}}/>
-              <p style={{fontSize:10,fontWeight:700,color:readOnly?'#856A00':'#1A4EC2',margin:0}}>
-                Esta Ordem de Serviço já possui uma inspeção criada por <strong>{existingFin.criadoPor}</strong>.
-                {readOnly?' Você pode apenas consultar (somente leitura).':' Você pode continuar editando.'}
+         {existingFin&&(
+            <div style={{background:'#EAF0FF',border:'1px solid #C0D0F5',borderRadius:10,padding:'10px 14px',display:'flex',alignItems:'center',gap:10}}>
+              <Icon name="info" size={16} style={{color:'#1A4EC2',flexShrink:0}}/>
+              <p style={{fontSize:10,fontWeight:700,color:'#1A4EC2',margin:0}}>
+                Esta Ordem de Serviço já possui uma inspeção criada por <strong>{existingFin.criadoPor}</strong>. Qualquer inspetor pode continuar editando, adicionando ou removendo itens — todas as alterações ficam registradas no histórico.
               </p>
             </div>
           )}
@@ -4118,12 +4143,12 @@ const executarSalvar=async()=>{
       </div>
       {limiteAtingido&&<span style={{fontSize:9,fontWeight:700,color:'var(--red)'}}>Limite atingido — remova uma foto para adicionar outra</span>}
     </div>
-    <ProblemCategoryEditor title="Ajuste" icon="wrench" color="#F59E0B" items={ajuste} setItems={setAjuste} disabled={disabled} limiteAtingido={limiteAtingido}/>
-      <ProblemCategoryEditor title="Martelinho" icon="hammer" color="#DC1F1F" items={martelinho} setItems={setMartelinho} disabled={disabled} limiteAtingido={limiteAtingido}/>
-      <ProblemCategoryEditor title="Pintura" icon="paintbrush" color="#2563EB" items={pintura} setItems={setPintura} disabled={disabled} limiteAtingido={limiteAtingido} tipoSelect/>
-      <ProblemCategoryEditor title="Vidro" icon="square" color="#0EA5E9" items={vidro} setItems={setVidro} disabled={disabled} limiteAtingido={limiteAtingido} tipoSelect/>
-      <ProblemCategoryEditor title="Estética" icon="more-horizontal" color="#6B7280" items={outro} setItems={setOutro} disabled={disabled} limiteAtingido={limiteAtingido}/>
-      <ProblemCategoryEditor title="Instalação Peças" icon="package" color="#10B981" items={instalacaoPecas} setItems={setInstalacaoPecas} disabled={disabled} limiteAtingido={limiteAtingido}/>
+  <ProblemCategoryEditor title="Ajuste" icon="wrench" color="#F59E0B" items={ajuste} setItems={setAjuste} disabled={disabled} limiteAtingido={limiteAtingido} loggedInUser={loggedInUser}/>
+      <ProblemCategoryEditor title="Martelinho" icon="hammer" color="#DC1F1F" items={martelinho} setItems={setMartelinho} disabled={disabled} limiteAtingido={limiteAtingido} loggedInUser={loggedInUser}/>
+      <ProblemCategoryEditor title="Pintura" icon="paintbrush" color="#2563EB" items={pintura} setItems={setPintura} disabled={disabled} limiteAtingido={limiteAtingido} tipoSelect loggedInUser={loggedInUser}/>
+      <ProblemCategoryEditor title="Vidro" icon="square" color="#0EA5E9" items={vidro} setItems={setVidro} disabled={disabled} limiteAtingido={limiteAtingido} tipoSelect loggedInUser={loggedInUser}/>
+      <ProblemCategoryEditor title="Estética" icon="more-horizontal" color="#6B7280" items={outro} setItems={setOutro} disabled={disabled} limiteAtingido={limiteAtingido} loggedInUser={loggedInUser}/>
+      <ProblemCategoryEditor title="Instalação Peças" icon="package" color="#10B981" items={instalacaoPecas} setItems={setInstalacaoPecas} disabled={disabled} limiteAtingido={limiteAtingido} loggedInUser={loggedInUser}/>
       <PecasFinalizacaoSection os={os} requests={requests}
         novasPecas={novasPecas} setNovasPecas={setNovasPecas} excedentes={excedentes} setExcedentes={setExcedentes}
         pecasEscolha={pecasEscolha} mostrarNovas={mostrarNovas} mostrarExcedente={mostrarExcedente}
@@ -4164,9 +4189,10 @@ function EditarInspecaoModal({fin,loggedInUser,onClose}){
         alert(`As fotos desta inspeção estão grandes demais (~${Math.round(estimado/1024)}KB). Remova algumas fotos e tente novamente.`);
         setSaving(false);return;
       }
+      const diffEntradasHist=diffHistoricoProblemas(fin,{ajuste,martelinho,pintura,vidro,outro,instalacaoPecas},loggedInUser.user,now);
       await col('finalizacoes').doc(fin.id).update({
         ajuste:payload.ajuste,martelinho:payload.martelinho,pintura:payload.pintura,vidro:payload.vidro,outro:payload.outro,instalacaoPecas:payload.instalacaoPecas,
-        historico:[...(fin.historico||[]),{acao:'Inspeção editada',usuario:loggedInUser.user,timestamp:now}],
+        historico:[...(fin.historico||[]),{acao:'Inspeção editada',usuario:loggedInUser.user,timestamp:now},...diffEntradasHist],
       });
       onClose();
     }catch(e){alert('Erro ao salvar: '+e.message);}
@@ -4191,12 +4217,12 @@ function EditarInspecaoModal({fin,loggedInUser,onClose}){
             </div>
             {limiteAtingido&&<span style={{fontSize:9,fontWeight:700,color:'var(--red)'}}>Limite atingido — remova uma foto para adicionar outra</span>}
           </div>
-         <ProblemCategoryEditor title="Ajuste" icon="wrench" color="#F59E0B" items={ajuste} setItems={setAjuste} disabled={false} limiteAtingido={limiteAtingido}/>
-          <ProblemCategoryEditor title="Martelinho" icon="hammer" color="#DC1F1F" items={martelinho} setItems={setMartelinho} disabled={false} limiteAtingido={limiteAtingido}/>
-          <ProblemCategoryEditor title="Pintura" icon="paintbrush" color="#2563EB" items={pintura} setItems={setPintura} disabled={false} limiteAtingido={limiteAtingido} tipoSelect/>
-          <ProblemCategoryEditor title="Vidro" icon="square" color="#0EA5E9" items={vidro} setItems={setVidro} disabled={false} limiteAtingido={limiteAtingido} tipoSelect/>
-          <ProblemCategoryEditor title="Estética" icon="more-horizontal" color="#6B7280" items={outro} setItems={setOutro} disabled={false} limiteAtingido={limiteAtingido}/>
-          <ProblemCategoryEditor title="Instalação Peças" icon="package" color="#10B981" items={instalacaoPecas} setItems={setInstalacaoPecas} disabled={false} limiteAtingido={limiteAtingido}/>
+        <ProblemCategoryEditor title="Ajuste" icon="wrench" color="#F59E0B" items={ajuste} setItems={setAjuste} disabled={false} limiteAtingido={limiteAtingido} loggedInUser={loggedInUser}/>
+          <ProblemCategoryEditor title="Martelinho" icon="hammer" color="#DC1F1F" items={martelinho} setItems={setMartelinho} disabled={false} limiteAtingido={limiteAtingido} loggedInUser={loggedInUser}/>
+          <ProblemCategoryEditor title="Pintura" icon="paintbrush" color="#2563EB" items={pintura} setItems={setPintura} disabled={false} limiteAtingido={limiteAtingido} tipoSelect loggedInUser={loggedInUser}/>
+          <ProblemCategoryEditor title="Vidro" icon="square" color="#0EA5E9" items={vidro} setItems={setVidro} disabled={false} limiteAtingido={limiteAtingido} tipoSelect loggedInUser={loggedInUser}/>
+          <ProblemCategoryEditor title="Estética" icon="more-horizontal" color="#6B7280" items={outro} setItems={setOutro} disabled={false} limiteAtingido={limiteAtingido} loggedInUser={loggedInUser}/>
+          <ProblemCategoryEditor title="Instalação Peças" icon="package" color="#10B981" items={instalacaoPecas} setItems={setInstalacaoPecas} disabled={false} limiteAtingido={limiteAtingido} loggedInUser={loggedInUser}/>
         </div>
         <div style={{padding:'16px 24px',background:'var(--smoke)',borderTop:'1px solid var(--border)',display:'flex',justifyContent:'flex-end',gap:10,flexShrink:0}}>
           <button onClick={onClose} className="btn-ghost">Cancelar</button>
@@ -4215,10 +4241,9 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
  const[confirmDelFin,setConfirmDelFin]=useState(null);
   const[confirmDelProb,setConfirmDelProb]=useState(null);
   const[pdfConfirmFin,setPdfConfirmFin]=useState(null);
-  const[editandoFin,setEditandoFin]=useState(null);
-  const[resolvendoPendencia,setResolvendoPendencia]=useState(null);
-  const[obsResolucao,setObsResolucao]=useState('');
-  const[salvandoResolucao,setSalvandoResolucao]=useState(false);
+ const baseVisiveis=useMemo(()=>{
+    let list=finalizacoes;
+    list=list.filter(f=>!f.arquivada);
 
    const podeVerTodos=isMaster||loggedInUser?.role==='comercial'||ADMIN_ESPECIAL.includes(loggedInUser?.user);
   const pecasByOS=useMemo(()=>{
@@ -4259,7 +4284,7 @@ const comStatus=useMemo(()=>baseVisiveis.map(fin=>{
   const countConcluidos=comStatus.filter(c=>c.concluida).length;
   const countPendentes=comStatus.filter(c=>!c.concluida).length;
 
-  const podeEditar=(fin)=>isMaster||fin.criadoPor===loggedInUser.user||ADMIN_ESPECIAL.includes(loggedInUser?.user);
+  const podeEditar=(fin)=>true;
 
   const resolverPendencia=async(finId,categoria,itemId,observacao)=>{
     const fin=finalizacoes.find(f=>f.id===finId);if(!fin)return;
@@ -4297,17 +4322,18 @@ const comStatus=useMemo(()=>baseVisiveis.map(fin=>{
     catch(e){alert('Erro: '+e.message);}
   };
 
-  const excluirProblema=async()=>{
+ const excluirProblema=async()=>{
     if(!confirmDelProb)return;
     const{finId,categoria,itemId}=confirmDelProb;
     const fin=finalizacoes.find(f=>f.id===finId);if(!fin)return;
+    const problemaRemovido=(fin[categoria]||[]).find(p=>p.id===itemId);
     const newCat=(fin[categoria]||[]).filter(p=>p.id!==itemId);
     const now=Date.now();
-    try{await col('finalizacoes').doc(finId).update({[categoria]:stripUndefined(newCat),historico:stripUndefined([...(fin.historico||[]),{acao:`Problema excluído (${categoria}) por ${loggedInUser.user}`,usuario:loggedInUser.user,timestamp:now}])});}
+    const labelCat=CATEGORIA_LABELS_HIST[categoria]||categoria;
+    try{await col('finalizacoes').doc(finId).update({[categoria]:stripUndefined(newCat),historico:stripUndefined([...(fin.historico||[]),{acao:`Problema removido em ${labelCat}: "${problemaRemovido?.descricao||'(sem descrição)'}"`,usuario:loggedInUser.user,timestamp:now}])});}
     catch(e){alert('Erro: '+e.message);}
     setConfirmDelProb(null);
   };
-
   const excluirInspecao=async()=>{
     if(!confirmDelFin)return;
     try{await col('finalizacoes').doc(confirmDelFin).delete();}catch(e){alert('Erro: '+e.message);}
@@ -4394,8 +4420,7 @@ const rows=[[csvCell('OS'),csvCell('Chassi'),csvCell('Modelo'),csvCell('Ajustes'
                     <span style={{fontSize:9,color:'var(--muted)',fontWeight:700,textTransform:'uppercase'}}>{fin.vehicleData?.modelo||'—'}</span>
                     <span style={{fontSize:8,fontWeight:700,color:'var(--muted)',display:'inline-flex',alignItems:'center',gap:3}}><Icon name="calendar" size={10}/> Aberto: {fin.criadoEm?new Date(fin.criadoEm).toLocaleDateString('pt-BR'):'—'}</span>
                     {inspecaoConcluida&&dataSolucao&&<span style={{fontSize:8,fontWeight:700,color:'#059669',display:'inline-flex',alignItems:'center',gap:3}}><Icon name="check-circle" size={10}/> Solucionado: {new Date(dataSolucao).toLocaleDateString('pt-BR')}</span>}
-                   {podeVerTodos&&<span style={{fontSize:8,fontWeight:700,color:'var(--muted)'}}>por {fin.criadoPor}</span>}
-                    {!editar&&<span className="badge" style={{background:'var(--muted)',color:'#fff'}}>Somente leitura</span>}
+                   <span style={{fontSize:8,fontWeight:700,color:'var(--muted)'}}>Criado por {fin.criadoPor}</span>
                   </div>
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
                     <span style={{fontSize:9,fontWeight:800,padding:'3px 10px',borderRadius:999,background:totalPend>0?'var(--red-light)':'#EDFAF3',color:totalPend>0?'var(--red)':'#059669',border:`1px solid ${totalPend>0?'#FFBDBD':'#AAE6C5'}`}}>{totalPend>0?`${totalPend} pendente(s)`:'Tudo solucionado'}</span>
@@ -4429,7 +4454,7 @@ const rows=[[csvCell('OS'),csvCell('Chassi'),csvCell('Modelo'),csvCell('Ajustes'
                               {p.foto?<img src={p.foto} style={{width:36,height:36,borderRadius:7,objectFit:'cover',flexShrink:0}}/>:<div style={{width:36,height:36,borderRadius:7,background:'#fff',border:'1px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name={icon} size={14}/></div>}
                               <div style={{flex:1,minWidth:0}}>
                                 <p style={{fontSize:10,fontWeight:600,margin:0,color:'var(--ink)'}}>{p.descricao||'(sem descrição)'}{p.tipo&&<span style={{marginLeft:6,fontSize:8,fontWeight:800,textTransform:'uppercase',padding:'1px 7px',borderRadius:999,background:p.tipo==='Interno'?'#EAF0FF':'#FFF4E6',color:p.tipo==='Interno'?'#1A4EC2':'#C45E00',border:`1px solid ${p.tipo==='Interno'?'#C0D0F5':'#FFD9A8'}`}}>{p.tipo}</span>}</p>
-                                <p style={{fontSize:8,color:'var(--muted)',fontWeight:600,margin:'2px 0 0'}}>Aberto em: {p.criadoEm?new Date(p.criadoEm).toLocaleString('pt-BR'):'—'}</p>
+                                <p style={{fontSize:8,color:'var(--muted)',fontWeight:600,margin:'2px 0 0'}}>Adicionado por <strong>{p.criadoPor||'—'}</strong> em {p.criadoEm?new Date(p.criadoEm).toLocaleString('pt-BR'):'—'}</p>
                                {p.status==='Solucionado'&&<p style={{fontSize:8,color:'#059669',fontWeight:700,margin:'2px 0 0'}}>✓ Resolvido {p.resolvidoPor?`por ${p.resolvidoPor}`:''} {p.resolvidoEm?'em '+new Date(p.resolvidoEm).toLocaleString('pt-BR'):''}</p>}
                                 {p.status==='Solucionado'&&p.obsResolucao&&<p style={{fontSize:8,color:'var(--muted)',fontWeight:600,margin:'2px 0 0',fontStyle:'italic'}}>Obs: {p.obsResolucao}</p>}
                               </div>
@@ -4498,6 +4523,23 @@ const rows=[[csvCell('OS'),csvCell('Chassi'),csvCell('Modelo'),csvCell('Ajustes'
                   {fin.pecasOpcao&&(
                     <div style={{fontSize:9,color:'var(--muted)',fontWeight:600}}>
                       Opção escolhida: {fin.pecasOpcao==='suficiente'?'peças confirmadas como suficientes':fin.pecasOpcao==='novas'?'novo pedido gerado':fin.pecasOpcao==='ambos'?'novo pedido gerado + itens marcados como excedentes':'itens marcados como excedentes'}
+                    </div>
+                  )}
+                  {fin.historico&&fin.historico.length>0&&(
+                    <div>
+                      <button type="button" onClick={()=>setVerHistorico(p=>({...p,[fin.id]:!p[fin.id]}))} style={{display:'flex',alignItems:'center',gap:6,padding:'6px 12px',background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:8,fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
+                        <Icon name="history" size={12}/> {verHistorico[fin.id]?'Ocultar Histórico':`Ver Histórico (${fin.historico.length})`}
+                      </button>
+                      {verHistorico[fin.id]&&(
+                        <div style={{marginTop:8,display:'flex',flexDirection:'column',gap:5,background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:10,padding:10,maxHeight:220,overflowY:'auto'}} className="scroll-y">
+                          {[...fin.historico].sort((a,b)=>b.timestamp-a.timestamp).map((h,i)=>(
+                            <div key={i} style={{fontSize:9,display:'flex',gap:8,flexWrap:'wrap'}}>
+                              <span style={{fontWeight:700,color:'var(--ink)'}}>{h.acao}</span>
+                              <span style={{color:'var(--muted)'}}>— {h.usuario}, {h.timestamp?new Date(h.timestamp).toLocaleString('pt-BR'):''}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -4700,7 +4742,7 @@ try{
           <LastUpdateBadge/>
         </div>
         <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)',width:'fit-content',flexWrap:'wrap'}}>
-          {[!isComercial&&{k:'nova',l:'Nova Inspeção'},{k:'meus',l:'Meus Carros'},isMaster&&{k:'historico',l:'Histórico'}].filter(Boolean).map(t=>(
+         {[!isComercial&&{k:'nova',l:'Nova Inspeção'},{k:'meus',l:'Carros'},isMaster&&{k:'historico',l:'Histórico'}].filter(Boolean).map(t=>(
             <button key={t.k} onClick={()=>setSub(t.k)} style={{padding:'8px 16px',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',border:'none',cursor:'pointer',letterSpacing:'.06em',fontFamily:'Plus Jakarta Sans,sans-serif',background:sub===t.k?'#fff':'transparent',color:sub===t.k?'var(--red)':'var(--muted)',boxShadow:sub===t.k?'0 2px 8px rgba(0,0,0,.08)':'none'}}>{t.l}</button>
           ))}
         </div>
@@ -5968,7 +6010,7 @@ const{data:requests,loading:reqLoad}=useFirestore('requests');
   const isAdminEspecial=ADMIN_ESPECIAL.includes(loggedIn?.user);
   const isAdmin=role==='admin'||isMaster||isAdminEspecial;
   const isSol=canDo(role,'newReq')||isAdminEspecial;
-  const canAccessFinalizacao=isMaster||loggedIn?.acessoFinalizacao===true||isAdminEspecial;
+  const canAccessFinalizacao=isMaster||loggedIn?.acessoFinalizacao===true||isAdminEspecial||loggedIn?.user==='Isabelle.Oliveira';
 
   const addUser=async(u,p,r='solicitante')=>{
     // Só o Master 1 (Lucas.Sabino) pode criar masters
