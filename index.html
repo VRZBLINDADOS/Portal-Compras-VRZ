@@ -4238,14 +4238,17 @@ function EditarInspecaoModal({fin,loggedInUser,onClose}){
 function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
   const[search,setSearch]=useState('');
   const[subTab,setSubTab]=useState('pendentes');
- const[confirmDelFin,setConfirmDelFin]=useState(null);
+  const[confirmDelFin,setConfirmDelFin]=useState(null);
   const[confirmDelProb,setConfirmDelProb]=useState(null);
   const[pdfConfirmFin,setPdfConfirmFin]=useState(null);
- const baseVisiveis=useMemo(()=>{
-    let list=finalizacoes;
-    list=list.filter(f=>!f.arquivada);
+  const[editandoFin,setEditandoFin]=useState(null);
+  const[resolvendoPendencia,setResolvendoPendencia]=useState(null);
+  const[obsResolucao,setObsResolucao]=useState('');
+  const[salvandoResolucao,setSalvandoResolucao]=useState(false);
+  const[verHistorico,setVerHistorico]=useState({});
 
-   const podeVerTodos=isMaster||loggedInUser?.role==='comercial'||ADMIN_ESPECIAL.includes(loggedInUser?.user);
+  const podeVerTodos=isMaster||loggedInUser?.role==='comercial'||ADMIN_ESPECIAL.includes(loggedInUser?.user);
+
   const pecasByOS=useMemo(()=>{
     const acc={};
     requests.forEach(r=>{
@@ -4260,6 +4263,7 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
     Object.entries(acc).forEach(([k,v])=>{map[k]=v.items;});
     return map;
   },[requests]);
+
   const baseVisiveis=useMemo(()=>{
     let list=podeVerTodos?finalizacoes:finalizacoes.filter(f=>f.criadoPor===loggedInUser.user);
     list=list.filter(f=>!f.arquivada);
