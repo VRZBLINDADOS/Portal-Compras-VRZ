@@ -148,6 +148,7 @@ const FB={apiKey:"AIzaSyBT1N43mp6hoxXOj6bmTlqouQWSmfn32-E",authDomain:"portal-co
 if(!firebase.apps.length)firebase.initializeApp(FB);
 const db=firebase.firestore();const auth=firebase.auth();const storage=firebase.storage();
 const AID='portal-compras-vrz';
+const REFRESH_INTERVAL_MS=30000; // Intervalo de atualização automática (ms). Menor = mais "tempo real", porém mais leituras no Firestore.
 let refreshTimer=null;
 const dispatchRefresh=()=>{clearTimeout(refreshTimer);refreshTimer=setTimeout(()=>window.dispatchEvent(new Event('vrz-refresh')),800);};
 const col=(c)=>{
@@ -211,7 +212,7 @@ function __getStore(key){
         const parsed=JSON.parse(raw);
         entry.data=parsed.data||[];
         entry.lastFetch=parsed.t||0;
-        if(Date.now()-entry.lastFetch<5*60*1000)entry.loading=false;
+        if(Date.now()-entry.lastFetch<REFRESH_INTERVAL_MS)entry.loading=false;
       }
     }catch(e){}
     __vrzStore[key]=entry;
@@ -248,10 +249,10 @@ const useFirestore=(collectionName,opts)=>{
     return store.inFlight;
   },[collectionName,opts?.orderBy,opts?.direction,opts?.limit,cacheKey,store,notify]);
 
-  useEffect(()=>{
-    if(store.data.length===0||Date.now()-store.lastFetch>5*60*1000)fetchData();
-    const interval=setInterval(()=>{if(!document.hidden)fetchData();},5*60*1000);
-    const onVisible=()=>{if(!document.hidden&&Date.now()-store.lastFetch>5*60*1000)fetchData();};
+useEffect(()=>{
+    if(store.data.length===0||Date.now()-store.lastFetch>REFRESH_INTERVAL_MS)fetchData();
+    const interval=setInterval(()=>{if(!document.hidden)fetchData();},REFRESH_INTERVAL_MS);
+    const onVisible=()=>{if(!document.hidden&&Date.now()-store.lastFetch>REFRESH_INTERVAL_MS)fetchData();};
     document.addEventListener('visibilitychange',onVisible);
     window.addEventListener('vrz-refresh',fetchData);
     return()=>{clearInterval(interval);document.removeEventListener('visibilitychange',onVisible);window.removeEventListener('vrz-refresh',fetchData);};
@@ -1118,7 +1119,577 @@ function FeedbackFinalizacaoView({finalizacoes,requests,vehicles,loggedInUser}){
     </div>
   );
 }
+// ── Feedback Finalização Reunião ────────────────────────────────────────
+function FinalizacaoAnalyticsReuniaoView({finalizacoes,requests,vehicles,linhasFiltro,tituloPersonalizado}){
+  const CATS_VIS=[['ajuste','Ajuste','#F59E0B','wrench'],['martelinho','Martelinho','#DC1F1F','hammer'],['pintura','Pintura','#2563EB','paintbrush'],['vidro','Vidro','#0EA5E9','square']];
+  const TIPO_CATS=['pintura','vidro'];
+  const[periodo,setPeriodo]=useState('mensal');
+  const[offset,setOffset]=useState(0);
+  const[linhaSelecionada,setLinhaSelecionada]=useState(null);
+  const[drill,setDrill]=useState(null);
+  const[drillSearch,setDrillSearch]=useState('');
+  useEffect(()=>{setDrillSearch('');},[drill]);
 
+  const{inicioPeriodo,fimPeriodo}=useMemo(()=>{
+    const agora=new Date();
+    let ini,fim;
+    if(periodo==='diario'){
+      ini=new Date(agora);ini.setDate(agora.getDate()+offset);ini.setHours(0,0,0,0);
+      fim=new Date(ini);fim.setHours(23,59,59,999);
+    }else if(periodo==='semanal'){
+      const diaSem=agora.getDay();
+      ini=new Date(agora);ini.setDate(agora.getDate()-diaSem+(offset*7));ini.setHours(0,0,0,0);
+      fim=new Date(ini);fim.setDate(ini.getDate()+6);fim.setHours(23,59,59,999);
+    }else if(periodo==='quinzenal'){
+      const quinzenaAtual=agora.getDate()<=15?0:1;
+      const totalQuinzenas=(agora.getFullYear()*24+agora.getMonth()*2+quinzenaAtual)+offset;
+      const year=Math.floor(totalQuinzenas/24);const month=Math.floor((totalQuinzenas%24)/2);
+      const isSecondHalf=totalQuinzenas%2!==0;
+      ini=new Date(year,month,isSecondHalf?16:1);ini.setHours(0,0,0,0);
+      fim=isSecondHalf?new Date(year,month+1,0):new Date(year,month,15);
+      fim.setHours(23,59,59,999);
+    }else{
+      const totalMonths=(agora.getFullYear()*12+agora.getMonth())+offset;
+      const year=Math.floor(totalMonths/12);const month=totalMonths%12;
+      ini=new Date(year,month,1);ini.setHours(0,0,0,0);
+      fim=new Date(year,month+1,0);fim.setHours(23,59,59,999);
+    }
+    return{inicioPeriodo:ini,fimPeriodo:fim};
+  },[periodo,offset]);
+  const isPeriodoAtual=offset===0;
+  const vehicleMap=useMemo(()=>{const m={};(vehicles||[]).forEach(v=>{m[String(v.os).trim()]=v;});return m;},[vehicles]);
+
+  const ativasFiltradas=useMemo(()=>{
+    return(finalizacoes||[]).filter(f=>!f.arquivada).filter(f=>{
+      if(!f.criadoEm)return false;
+      const dt=new Date(f.criadoEm);
+      return dt>=inicioPeriodo&&dt<=fimPeriodo;
+    }).filter(f=>{
+      if(!linhasFiltro||!linhasFiltro.length)return true;
+      const vInfo=vehicleMap[String(f.os).trim()];
+      const linha=vInfo?.linhaProducao||f.vehicleData?.linhaProducao||'N/D';
+      return linhasFiltro.some(l=>normEstoqueTxt(l)===normEstoqueTxt(linha));
+    });
+  },[finalizacoes,inicioPeriodo,fimPeriodo,linhasFiltro,vehicleMap]);
+
+  const finalizacoesPorLinha=useMemo(()=>{
+    if(!linhaSelecionada)return[];
+    return ativasFiltradas.filter(fin=>{
+      const vInfo=vehicleMap[String(fin.os).trim()];
+      const linha=vInfo?.linhaProducao||fin.vehicleData?.linhaProducao||'N/D';
+      return linha===linhaSelecionada;
+    });
+  },[ativasFiltradas,vehicleMap,linhaSelecionada]);
+
+  const finalizacoesDrill=useMemo(()=>{
+    if(!drill)return[];
+    return ativasFiltradas.filter(drill.predicate);
+  },[ativasFiltradas,drill]);
+  const finalizacoesDrillFiltered=useMemo(()=>{
+    if(!drillSearch.trim())return finalizacoesDrill;
+    const t=drillSearch.toLowerCase();
+    return finalizacoesDrill.filter(fin=>{
+      const vInfo=vehicleMap[String(fin.os).trim()];
+      const modelo=vInfo?.modelo||fin.vehicleData?.modelo||'';
+      return String(fin.os).toLowerCase().includes(t)||modelo.toLowerCase().includes(t);
+    });
+  },[finalizacoesDrill,drillSearch,vehicleMap]);
+  const drillTipoCounts=useMemo(()=>{
+    if(!drill||!drill.categoriaFiltro||drill.tipoFiltro||!TIPO_CATS.includes(drill.categoriaFiltro))return null;
+    let interno=0,externo=0;
+    finalizacoesDrill.forEach(fin=>{
+      (fin[drill.categoriaFiltro]||[]).forEach(p=>{
+        if(p.tipo==='Interno')interno++;
+        else if(p.tipo==='Externo')externo++;
+      });
+    });
+    return{interno,externo};
+  },[drill,finalizacoesDrill]);
+
+  const stats=useMemo(()=>{
+    const ativas=ativasFiltradas;
+    if(!ativas.length)return null;
+    let totalProblemas=0,totalSolucionados=0;
+    const porCategoria={ajuste:{total:0,solucionado:0,osComProblema:0},martelinho:{total:0,solucionado:0,osComProblema:0},pintura:{total:0,solucionado:0,osComProblema:0,porTipo:{Interno:0,Externo:0}},vidro:{total:0,solucionado:0,osComProblema:0,porTipo:{Interno:0,Externo:0}}};
+    const reclamacoesMap={};
+    const porModelo={};
+    const porLinha={};
+    const temposResolucaoInspecao=[];
+    let inspecoesSolucionadas=0,inspecoesAbertas=0;
+
+    const novoGrupo=()=>({
+      inspecoes:0,totalProblemas:0,
+      cat:{ajuste:{insp:0,total:0},martelinho:{insp:0,total:0},pintura:{insp:0,total:0,interno:0,externo:0},vidro:{insp:0,total:0,interno:0,externo:0}},
+    });
+
+    ativas.forEach(fin=>{
+      const vInfo=vehicleMap[String(fin.os).trim()];
+      const modelo=vInfo?.modelo||fin.vehicleData?.modelo||'N/D';
+      const linha=vInfo?.linhaProducao||fin.vehicleData?.linhaProducao||'N/D';
+      if(!porModelo[modelo])porModelo[modelo]=novoGrupo();
+      if(!porLinha[linha])porLinha[linha]=novoGrupo();
+      porModelo[modelo].inspecoes++;
+      porLinha[linha].inspecoes++;
+
+      let problemasDaInspecao=0,solucionadosDaInspecao=0,ultimaResolucao=null;
+      CATS_VIS.forEach(([key])=>{
+        const items=fin[key]||[];
+        problemasDaInspecao+=items.length;
+        porCategoria[key].total+=items.length;
+        if(items.length>0)porCategoria[key].osComProblema++;
+        totalProblemas+=items.length;
+        porModelo[modelo].totalProblemas+=items.length;
+        porLinha[linha].totalProblemas+=items.length;
+        porModelo[modelo].cat[key].total+=items.length;
+        porLinha[linha].cat[key].total+=items.length;
+        if(items.length>0){
+          porModelo[modelo].cat[key].insp++;
+          porLinha[linha].cat[key].insp++;
+        }
+        items.forEach(p=>{
+          if(TIPO_CATS.includes(key)){
+            const tipo=p.tipo==='Externo'?'Externo':'Interno';
+            porCategoria[key].porTipo[tipo]++;
+            if(tipo==='Externo'){porModelo[modelo].cat[key].externo++;porLinha[linha].cat[key].externo++;}
+            else{porModelo[modelo].cat[key].interno++;porLinha[linha].cat[key].interno++;}
+          }
+          if(p.status==='Solucionado'){
+            totalSolucionados++;solucionadosDaInspecao++;porCategoria[key].solucionado++;
+            if(p.resolvidoEm&&(!ultimaResolucao||p.resolvidoEm>ultimaResolucao))ultimaResolucao=p.resolvidoEm;
+          }
+          const desc=(p.descricao||'').trim().toUpperCase();
+          if(desc){
+            if(!reclamacoesMap[desc])reclamacoesMap[desc]={count:0,cat:key};
+            reclamacoesMap[desc].count++;
+          }
+        });
+      });
+      const pecasItems=requests?getPecasParaOS(fin.os,requests):[];
+      const pecasAtivas=pecasItems.filter(it=>!it.excedente);
+      const pecasSolucionadas=pecasAtivas.length===0||pecasAtivas.every(it=>it.status==='Concluído');
+      pecasAtivas.forEach(it=>{
+        if(it.actualDeliveryDate){
+          const t=new Date(it.actualDeliveryDate+'T00:00:00').getTime();
+          if(!ultimaResolucao||t>ultimaResolucao)ultimaResolucao=t;
+        }
+      });
+      const inspecaoConcluida=problemasDaInspecao===solucionadosDaInspecao&&pecasSolucionadas;
+      if(inspecaoConcluida){
+        inspecoesSolucionadas++;
+        if(fin.criadoEm&&ultimaResolucao)temposResolucaoInspecao.push((ultimaResolucao-fin.criadoEm)/86400000);
+      }else{
+        inspecoesAbertas++;
+      }
+    });
+
+    const rankReclamacoes=Object.entries(reclamacoesMap).sort((a,b)=>b[1].count-a[1].count).slice(0,8);
+    const rankModelos=Object.entries(porModelo).sort((a,b)=>b[1].totalProblemas-a[1].totalProblemas).slice(0,8);
+    const rankLinhas=Object.entries(porLinha).sort((a,b)=>b[1].inspecoes-a[1].inspecoes);
+    const taxaResolucaoGeral=totalProblemas>0?Math.round(totalSolucionados/totalProblemas*100):0;
+    const mediaProblemasPorInspecao=(totalProblemas/ativas.length).toFixed(1);
+    const tempoMedioResolucaoInspecao=temposResolucaoInspecao.length?(temposResolucaoInspecao.reduce((a,b)=>a+b,0)/temposResolucaoInspecao.length).toFixed(1):0;
+
+    return{totalInspecoes:ativas.length,inspecoesSolucionadas,inspecoesAbertas,totalProblemas,totalSolucionados,porCategoria,rankReclamacoes,rankModelos,rankLinhas,taxaResolucaoGeral,mediaProblemasPorInspecao,tempoMedioResolucaoInspecao};
+  },[ativasFiltradas,requests,vehicleMap]);
+
+  const fmtPeriodo=`${inicioPeriodo.toLocaleDateString('pt-BR')} – ${fimPeriodo.toLocaleDateString('pt-BR')}`;
+  const periodSelector=(
+    <div style={{marginBottom:20}}>
+      {tituloPersonalizado&&(
+        <div style={{marginBottom:16}}>
+          <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.15em',color:'var(--red)',marginBottom:4}}>Feedback de Finalização — Reunião</p>
+          <h2 style={{fontSize:28,fontWeight:800,margin:0,letterSpacing:'-.02em'}}>{tituloPersonalizado}</h2>
+        </div>
+      )}
+      <div style={{display:'flex',background:'var(--smoke)',padding:4,borderRadius:12,border:'1.5px solid var(--border)',width:'fit-content',marginBottom:12}}>
+        {['diario','semanal','quinzenal','mensal'].map(p=>(
+          <button key={p} onClick={()=>{setPeriodo(p);setOffset(0);}} style={{padding:'7px 16px',borderRadius:8,border:'none',fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',background:periodo===p?'#fff':'transparent',color:periodo===p?'var(--red)':'var(--muted)',boxShadow:periodo===p?'0 2px 8px rgba(0,0,0,.05)':'none',fontFamily:'Plus Jakarta Sans,sans-serif'}}>{p}</button>
+        ))}
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+        <div style={{display:'flex',alignItems:'center',background:'#fff',border:'1.5px solid var(--border)',borderRadius:12,overflow:'hidden'}}>
+          <button onClick={()=>setOffset(o=>o-1)} style={{padding:'9px 14px',background:'none',border:'none',cursor:'pointer',color:'var(--ink)',display:'flex',alignItems:'center',gap:5,fontFamily:'Plus Jakarta Sans,sans-serif',fontSize:10,fontWeight:700}}><Icon name="chevron-left" size={14}/> Anterior</button>
+          <div style={{padding:'9px 16px',borderLeft:'1px solid var(--border)',borderRight:'1px solid var(--border)',textAlign:'center',minWidth:180}}>
+            <p style={{fontSize:11,fontWeight:800,margin:0}}>{fmtPeriodo}</p>
+            {isPeriodoAtual&&<p style={{fontSize:7,fontWeight:800,textTransform:'uppercase',color:'var(--red)',margin:'2px 0 0'}}>Período atual</p>}
+          </div>
+          <button onClick={()=>setOffset(o=>o+1)} disabled={isPeriodoAtual} style={{padding:'9px 14px',background:'none',border:'none',cursor:isPeriodoAtual?'not-allowed':'pointer',color:isPeriodoAtual?'#D0C9C4':'var(--ink)',display:'flex',alignItems:'center',gap:5,fontFamily:'Plus Jakarta Sans,sans-serif',fontSize:10,fontWeight:700}}>Próxima <Icon name="chevron-right" size={14}/></button>
+        </div>
+        {!isPeriodoAtual&&(
+          <button onClick={()=>setOffset(0)} style={{display:'flex',alignItems:'center',gap:6,padding:'9px 14px',background:'var(--ink)',color:'#fff',border:'none',borderRadius:10,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
+            <Icon name="rotate-ccw" size={12}/> Atual
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
+  if(!stats)return(
+    <div className="fade-in">
+      {periodSelector}
+      <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'80px 20px',textAlign:'center'}}>
+        <div style={{width:64,height:64,background:'var(--smoke)',borderRadius:16,display:'flex',alignItems:'center',justifyContent:'center',marginBottom:16}}><Icon name="clipboard-check" size={26}/></div>
+        <p style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)'}}>Nenhuma inspeção neste período</p>
+      </div>
+    </div>
+  );
+
+  const maxCatOS=Math.max(...CATS_VIS.map(([key])=>stats.porCategoria[key].osComProblema),1);
+  const maxRecl=stats.rankReclamacoes[0]?.[1]?.count||1;
+  const maxMod=Math.max(...stats.rankModelos.map(([,d])=>d.totalProblemas),1);
+
+  const inspecaoConcluidaCheck=(fin)=>{
+    let problemasDaInspecao=0,solucionadosDaInspecao=0;
+    CATS_VIS.forEach(([key])=>{
+      const items=fin[key]||[];
+      problemasDaInspecao+=items.length;
+      solucionadosDaInspecao+=items.filter(p=>p.status==='Solucionado').length;
+    });
+    const pecasItems=requests?getPecasParaOS(fin.os,requests):[];
+    const pecasAtivas=pecasItems.filter(it=>!it.excedente);
+    const pecasSolucionadas=pecasAtivas.length===0||pecasAtivas.every(it=>it.status==='Concluído');
+    return problemasDaInspecao===solucionadosDaInspecao&&pecasSolucionadas;
+  };
+
+  return(
+    <div className="fade-in">
+      {periodSelector}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:12,marginBottom:16}}>
+        {[
+          {label:'Total de Inspeções',v:stats.totalInspecoes,sub:'inspeções ativas (não arquivadas)',icon:'clipboard-check',dark:true,predicate:()=>true},
+          {label:'Solucionadas',v:stats.inspecoesSolucionadas,sub:'100% dos problemas resolvidos',icon:'check-circle',green:true,predicate:(f)=>inspecaoConcluidaCheck(f)},
+          {label:'Em Aberto',v:stats.inspecoesAbertas,sub:'ainda com pendências',icon:'alert-triangle',red:true,predicate:(f)=>!inspecaoConcluidaCheck(f)},
+          {label:'Tempo Médio até Solução Total',v:stats.tempoMedioResolucaoInspecao+'d',sub:'da abertura até tudo resolvido',icon:'clock'},
+          {label:'Taxa de Resolução Geral',v:stats.taxaResolucaoGeral+'%',sub:'dos problemas já resolvidos',icon:'trending-up'},
+          {label:'Média por Veículo',v:stats.mediaProblemasPorInspecao,sub:'problemas / inspeção',icon:'car'},
+        ].map((k,i)=>(
+          <div key={i} onClick={()=>k.predicate&&setDrill({titulo:`${k.label} — Veículos`,predicate:k.predicate})} style={{cursor:k.predicate?'pointer':'default',background:k.dark?'var(--ink)':k.red?'var(--red)':k.green?'#059669':'var(--smoke)',color:k.dark||k.red||k.green?'#fff':'var(--ink)',borderRadius:14,padding:20,border:(!k.dark&&!k.red&&!k.green)?'1.5px solid var(--border)':'none'}}>
+            <div style={{width:32,height:32,borderRadius:8,background:k.dark||k.red||k.green?'rgba(255,255,255,.12)':'var(--border)',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:14}}><Icon name={k.icon} size={16}/></div>
+            <p style={{fontSize:32,fontWeight:800,lineHeight:1,margin:0,letterSpacing:'-.02em'}}>{k.v}</p>
+            <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.08em',marginTop:6,opacity:.7}}>{k.label}</p>
+            <p style={{fontSize:8,fontWeight:500,marginTop:2,opacity:.4}}>{k.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="card" style={{padding:20,marginBottom:16}}>
+        <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:4}}>Reclamações por Categoria</p>
+        <p style={{fontSize:9,color:'var(--muted)',marginBottom:16}}>Quantidade de OS's que tiveram cada tipo de problema. Clique para ver os detalhes.</p>
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          {CATS_VIS.map(([key,label,color,icon])=>{
+            const c=stats.porCategoria[key];
+            return(
+              <div key={key} onClick={()=>c.osComProblema>0&&setDrill({titulo:`${label} — Veículos com problema`,predicate:(f)=>(f[key]||[]).length>0,categoriaFiltro:key})} style={{cursor:c.osComProblema>0?'pointer':'default'}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <div style={{width:22,height:22,borderRadius:6,background:color,display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name={icon} size={12} style={{color:'#fff'}}/></div>
+                    <span style={{fontSize:11,fontWeight:700,textTransform:'uppercase'}}>{label}</span>
+                  </div>
+                  <span style={{fontSize:11,fontWeight:800}}>{c.osComProblema} OS{c.osComProblema!==1?"'s":''} <span style={{fontSize:9,fontWeight:600,color:'var(--muted)'}}>({c.total} problema{c.total!==1?'s':''})</span></span>
+                </div>
+                <div className="progress-track"><div className="progress-fill" style={{width:`${c.osComProblema/maxCatOS*100}%`,background:color}}/></div>
+                {TIPO_CATS.includes(key)&&c.total>0&&(
+                  <div style={{display:'flex',gap:10,marginTop:6}}>
+                    <span onClick={e=>{e.stopPropagation();setDrill({titulo:`${label} — Internos`,predicate:(f)=>(f[key]||[]).some(p=>p.tipo==='Interno'),categoriaFiltro:key,tipoFiltro:'Interno'});}} style={{cursor:'pointer',fontSize:8,fontWeight:800,color:'#1A4EC2',background:'#EAF0FF',border:'1px solid #C0D0F5',padding:'2px 8px',borderRadius:999}}>Interno: {c.porTipo.Interno}</span>
+                    <span onClick={e=>{e.stopPropagation();setDrill({titulo:`${label} — Externos`,predicate:(f)=>(f[key]||[]).some(p=>p.tipo==='Externo'),categoriaFiltro:key,tipoFiltro:'Externo'});}} style={{cursor:'pointer',fontSize:8,fontWeight:800,color:'#C45E00',background:'#FFF4E6',border:'1px solid #FFD9A8',padding:'2px 8px',borderRadius:999}}>Externo: {c.porTipo.Externo}</span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="card" style={{padding:20,marginBottom:16}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8,marginBottom:4}}>
+          <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',margin:0}}>Frequência de Problemas por Carro</p>
+          <span className="pill" style={{fontSize:8}}>{stats.totalInspecoes} {stats.totalInspecoes===1?'inspeção no período':'inspeções no período'}</span>
+        </div>
+        <p style={{fontSize:9,color:'var(--muted)',marginBottom:16}}>Quantas OS's diferentes tiveram cada problema, quantas vezes ele apareceu no total, e a média por inspeção</p>
+        <div style={{display:'flex',flexDirection:'column',gap:18}}>
+          {CATS_VIS.map(([key,label,color,icon])=>{
+            const c=stats.porCategoria[key];
+            const maxTotal=Math.max(...CATS_VIS.map(([k])=>stats.porCategoria[k].total),1);
+            const maxOS=Math.max(...CATS_VIS.map(([k])=>stats.porCategoria[k].osComProblema),1);
+            const mediaGeral=stats.totalInspecoes>0?c.total/stats.totalInspecoes:0;
+            return(
+              <div key={key} onClick={()=>c.total>0&&setDrill({titulo:`${label} — Veículos com problema`,predicate:(f)=>(f[key]||[]).length>0,categoriaFiltro:key})} style={{cursor:c.total>0?'pointer':'default'}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6,flexWrap:'wrap',gap:6}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <div style={{width:22,height:22,borderRadius:6,background:color,display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name={icon} size={12} style={{color:'#fff'}}/></div>
+                    <span style={{fontSize:11,fontWeight:700,textTransform:'uppercase'}}>{label}</span>
+                  </div>
+                  <span style={{fontSize:11,fontWeight:800,color:'var(--red)'}}>Média: {mediaGeral.toFixed(2)} por inspeção</span>
+                </div>
+                <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{fontSize:8,fontWeight:700,color:'var(--muted)',width:120,flexShrink:0}}>OS's afetadas</span>
+                    <div className="progress-track" style={{flex:1}}><div className="progress-fill" style={{width:`${c.osComProblema/maxOS*100}%`,background:'var(--ink)'}}/></div>
+                    <span style={{fontSize:10,fontWeight:800,width:28,textAlign:'right',flexShrink:0}}>{c.osComProblema}</span>
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <span style={{fontSize:8,fontWeight:700,color:'var(--muted)',width:120,flexShrink:0}}>Vezes que apareceu</span>
+                    <div className="progress-track" style={{flex:1}}><div className="progress-fill" style={{width:`${c.total/maxTotal*100}%`,background:color}}/></div>
+                    <span style={{fontSize:10,fontWeight:800,width:28,textAlign:'right',flexShrink:0}}>{c.total}</span>
+                  </div>
+                </div>
+                {TIPO_CATS.includes(key)&&c.total>0&&(
+                  <div style={{display:'flex',gap:10,marginTop:6}}>
+                    <span onClick={e=>{e.stopPropagation();setDrill({titulo:`${label} — Internos`,predicate:(f)=>(f[key]||[]).some(p=>p.tipo==='Interno'),categoriaFiltro:key,tipoFiltro:'Interno'});}} style={{cursor:'pointer',fontSize:8,fontWeight:800,color:'#1A4EC2',background:'#EAF0FF',border:'1px solid #C0D0F5',padding:'2px 8px',borderRadius:999}}>Interno: {c.porTipo.Interno}</span>
+                    <span onClick={e=>{e.stopPropagation();setDrill({titulo:`${label} — Externos`,predicate:(f)=>(f[key]||[]).some(p=>p.tipo==='Externo'),categoriaFiltro:key,tipoFiltro:'Externo'});}} style={{cursor:'pointer',fontSize:8,fontWeight:800,color:'#C45E00',background:'#FFF4E6',border:'1px solid #FFD9A8',padding:'2px 8px',borderRadius:999}}>Externo: {c.porTipo.Externo}</span>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="grid-2col" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
+        <div className="card" style={{padding:20}}>
+          <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:16}}>Reclamações Mais Comuns</p>
+          {stats.rankReclamacoes.length===0?<p style={{fontSize:10,color:'var(--muted)'}}>Nenhuma reclamação registrada</p>:stats.rankReclamacoes.map(([desc,info],i)=>(
+            <div key={i} onClick={()=>setDrill({titulo:`"${desc}" — Veículos afetados`,predicate:(f)=>CATS_VIS.some(([k])=>(f[k]||[]).some(p=>(p.descricao||'').trim().toUpperCase()===desc))})} style={{display:'flex',alignItems:'center',gap:10,marginBottom:10,cursor:'pointer'}}>
+              <div style={{width:22,height:22,borderRadius:7,background:i===0?'var(--red)':i===1?'var(--ink)':'var(--smoke)',color:i<2?'#fff':'var(--muted)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:800,flexShrink:0}}>{i+1}</div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:3,gap:8}}>
+                  <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{desc}</span>
+                  <span style={{fontSize:10,fontWeight:800,color:'var(--muted)',flexShrink:0}}>{info.count}×</span>
+                </div>
+                <div className="progress-track"><div className="progress-fill" style={{width:`${info.count/maxRecl*100}%`,background:i===0?'var(--red)':'var(--ink)'}}/></div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="card" style={{padding:20,overflow:'hidden'}}>
+          <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:16}}>Veículos com Mais Problemas</p>
+          {stats.rankModelos.map(([mod,d],i)=>(
+            <div key={i} onClick={()=>setDrill({titulo:`${mod} — Veículos com problema`,predicate:(f)=>{const vInfo=vehicleMap[String(f.os).trim()];const modelo=vInfo?.modelo||f.vehicleData?.modelo||'N/D';return modelo===mod;}})} style={{marginBottom:12,cursor:'pointer'}}>
+              <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
+                <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase'}}>{mod}</span>
+                <span style={{fontSize:10,fontWeight:800,color:'var(--muted)'}}>{d.totalProblemas} ({d.inspecoes} insp.)</span>
+              </div>
+              <div className="progress-track" style={{marginBottom:5}}><div className="progress-fill" style={{width:`${d.totalProblemas/maxMod*100}%`,background:i===0?'var(--red)':'var(--ink)'}}/></div>
+              <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                {CATS_VIS.map(([key,label,color])=>{
+                  const c=d.cat[key];
+                  if(c.insp===0)return null;
+                  const tipoStr=TIPO_CATS.includes(key)?` · Int:${c.interno}/Ext:${c.externo}`:'';
+                  return(
+                    <span key={key} onClick={e=>{e.stopPropagation();setDrill({titulo:`${label} — ${mod}`,predicate:(f)=>{const vInfo=vehicleMap[String(f.os).trim()];const modelo=vInfo?.modelo||f.vehicleData?.modelo||'N/D';return modelo===mod&&(f[key]||[]).length>0;},categoriaFiltro:key});}} style={{cursor:'pointer',fontSize:8,fontWeight:700,padding:'2px 7px',borderRadius:5,background:color+'18',color,border:`1px solid ${color}55`}}>{label}: {c.insp} insp.{tipoStr}</span>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="card" style={{padding:20}}>
+        <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:4}}>Problemas por Linha de Produção</p>
+        <p style={{fontSize:9,color:'var(--muted)',marginBottom:16}}>Total de inspeções de cada linha e quantas delas tiveram cada categoria de problema. Clique em uma linha para ver os carros.</p>
+        <div style={{display:'flex',flexDirection:'column',gap:18}}>
+          {stats.rankLinhas.map(([linha,d])=>{
+            const maxLinhaInsp=Math.max(...stats.rankLinhas.map(([,x])=>x.inspecoes),1);
+            return(
+              <div key={linha} onClick={()=>setLinhaSelecionada(linha)} style={{cursor:'pointer',borderRadius:12,padding:10,margin:-10,transition:'background .15s'}} onMouseEnter={e=>e.currentTarget.style.background='var(--smoke)'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6,flexWrap:'wrap',gap:6}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8}}>
+                    <div style={{width:22,height:22,borderRadius:6,background:'var(--ink)',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="factory" size={12} style={{color:'#fff'}}/></div>
+                    <span style={{fontSize:11,fontWeight:700,textTransform:'uppercase'}}>{linha}</span>
+                    <span className="pill" style={{fontSize:8}}>{d.totalProblemas} problema{d.totalProblemas!==1?'s':''}</span>
+                    <Icon name="chevron-right" size={13} style={{color:'var(--muted)'}}/>
+                  </div>
+                  <span style={{fontSize:11,fontWeight:800,color:'var(--red)'}}>{d.inspecoes} {d.inspecoes===1?'Inspeção':'Inspeções'}</span>
+                </div>
+                <div className="progress-track" style={{marginBottom:8}}><div className="progress-fill" style={{width:`${d.inspecoes/maxLinhaInsp*100}%`,background:'var(--ink)'}}/></div>
+                <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                  {CATS_VIS.map(([key,label,color])=>{
+                    const c=d.cat[key];
+                    if(c.insp===0)return null;
+                    const tipoStr=TIPO_CATS.includes(key)?` · Int:${c.interno}/Ext:${c.externo}`:'';
+                    return(
+                      <span key={key} onClick={e=>{e.stopPropagation();setDrill({titulo:`${label} — ${linha}`,predicate:(f)=>{const vInfo=vehicleMap[String(f.os).trim()];const l=vInfo?.linhaProducao||f.vehicleData?.linhaProducao||'N/D';return l===linha&&(f[key]||[]).length>0;},categoriaFiltro:key});}} style={{cursor:'pointer',fontSize:8,fontWeight:700,padding:'2px 7px',borderRadius:5,background:color+'18',color,border:`1px solid ${color}55`}}>{label}: {c.insp} insp.{tipoStr}</span>
+                    );
+                  })}
+                  {d.totalProblemas===0&&<span style={{fontSize:8,color:'var(--muted)',fontWeight:600}}>Nenhum problema registrado nesta linha</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {linhaSelecionada&&ReactDOM.createPortal((
+        <div style={{position:'fixed',inset:0,zIndex:900,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}} className="fade-in">
+          <div style={{background:'#fff',borderRadius:24,overflow:'hidden',maxWidth:640,width:'100%',maxHeight:'88vh',display:'flex',flexDirection:'column',boxShadow:'0 40px 80px rgba(0,0,0,.4)'}}>
+            <div style={{background:'var(--ink)',padding:'20px 24px',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0,borderBottom:'4px solid var(--red)'}}>
+              <div style={{display:'flex',alignItems:'center',gap:12}}>
+                <div style={{width:40,height:40,background:'var(--red)',borderRadius:11,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="factory" size={18} style={{color:'#fff'}}/></div>
+                <div>
+                  <h3 style={{margin:0,fontSize:17,fontWeight:800,color:'#fff',textTransform:'uppercase'}}>{linhaSelecionada}</h3>
+                  <p style={{margin:0,fontSize:9,color:'rgba(255,255,255,.4)',textTransform:'uppercase',letterSpacing:'.08em',marginTop:2}}>{finalizacoesPorLinha.length} {finalizacoesPorLinha.length===1?'inspeção':'inspeções'} nesta linha</p>
+                </div>
+              </div>
+              <button onClick={()=>setLinhaSelecionada(null)} style={{width:36,height:36,background:'rgba(255,255,255,.08)',border:'none',borderRadius:10,cursor:'pointer',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="x" size={18}/></button>
+            </div>
+            <div className="scroll-y" style={{padding:20,overflowY:'auto',flex:1}}>
+              {finalizacoesPorLinha.length===0?(
+                <p style={{fontSize:10,color:'var(--muted)',textAlign:'center',padding:'30px 0'}}>Nenhum carro encontrado para esta linha no período selecionado.</p>
+              ):(
+                <div style={{display:'flex',flexDirection:'column',gap:14}}>
+                  {finalizacoesPorLinha.map(fin=>{
+                    const vInfo=vehicleMap[String(fin.os).trim()];
+                    const modelo=vInfo?.modelo||fin.vehicleData?.modelo||'N/D';
+                    const problemasDoCarro=[];
+                    CATS_VIS.forEach(([key,label,color,icon])=>{
+                      (fin[key]||[]).forEach(p=>problemasDoCarro.push({categoria:label,color,icon,...p}));
+                    });
+                    return(
+                      <div key={fin.id} className="card" style={{padding:14}}>
+                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:problemasDoCarro.length?10:0,flexWrap:'wrap',gap:6}}>
+                          <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                            <span style={{fontSize:13,fontWeight:800}}>OS #{fin.os}</span>
+                            <span style={{fontSize:9,color:'var(--muted)',fontWeight:700,textTransform:'uppercase'}}>{modelo}</span>
+                          </div>
+                          <span style={{fontSize:9,fontWeight:800,padding:'2px 9px',borderRadius:999,background:problemasDoCarro.length===0?'#EDFAF3':'var(--red-light)',color:problemasDoCarro.length===0?'#059669':'var(--red)',border:`1px solid ${problemasDoCarro.length===0?'#AAE6C5':'#FFBDBD'}`}}>{problemasDoCarro.length} problema{problemasDoCarro.length!==1?'s':''}</span>
+                        </div>
+                        {problemasDoCarro.length>0&&(
+                          <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                            {problemasDoCarro.map((p,i)=>(
+                              <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',background:p.status==='Solucionado'?'#F0FBF5':'var(--smoke)',border:`1px solid ${p.status==='Solucionado'?'#AAE6C5':'var(--border)'}`,borderRadius:8}}>
+                                <span style={{fontSize:8,fontWeight:800,padding:'2px 7px',borderRadius:5,background:p.color+'18',color:p.color,border:`1px solid ${p.color}55`,flexShrink:0}}>{p.categoria}</span>
+                                {p.tipo&&<span style={{fontSize:8,fontWeight:800,padding:'2px 7px',borderRadius:5,background:p.tipo==='Interno'?'#EAF0FF':'#FFF4E6',color:p.tipo==='Interno'?'#1A4EC2':'#C45E00',border:`1px solid ${p.tipo==='Interno'?'#C0D0F5':'#FFD9A8'}`,flexShrink:0}}>{p.tipo}</span>}
+                                <span style={{fontSize:10,fontWeight:600,color:'var(--ink)',flex:1,minWidth:0}}>{p.descricao||'(sem descrição)'}</span>
+                                {p.status==='Solucionado'&&<Icon name="check-circle" size={13} style={{color:'#059669',flexShrink:0}}/>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div style={{padding:'14px 20px',background:'var(--smoke)',borderTop:'1px solid var(--border)',flexShrink:0}}>
+              <button onClick={()=>setLinhaSelecionada(null)} className="btn-primary" style={{width:'100%'}}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      ), document.body)}
+
+      {drill&&ReactDOM.createPortal((
+        <div style={{position:'fixed',inset:0,zIndex:900,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}} className="fade-in">
+          <div style={{background:'#fff',borderRadius:24,overflow:'hidden',maxWidth:640,width:'100%',maxHeight:'88vh',display:'flex',flexDirection:'column',boxShadow:'0 40px 80px rgba(0,0,0,.4)'}}>
+            <div style={{background:'var(--ink)',padding:'20px 24px',display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12,flexShrink:0,borderBottom:'4px solid var(--red)'}}>
+              <div style={{flex:1,minWidth:0}}>
+                <h3 style={{margin:0,fontSize:16,fontWeight:800,color:'#fff',wordBreak:'break-word'}}>{drill.titulo}</h3>
+                <p style={{margin:0,fontSize:9,color:'rgba(255,255,255,.4)',textTransform:'uppercase',letterSpacing:'.08em',marginTop:2}}>{finalizacoesDrillFiltered.length} {finalizacoesDrillFiltered.length===1?'OS encontrada':"OS's encontradas"}{drillSearch.trim()?` de ${finalizacoesDrill.length}`:''}</p>
+                {drillTipoCounts&&(
+                  <div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap'}}>
+                    <span style={{fontSize:8,fontWeight:800,color:'#8FB4FF',background:'rgba(234,240,255,.12)',border:'1px solid rgba(192,208,245,.35)',padding:'3px 9px',borderRadius:999}}>Interno: {drillTipoCounts.interno}</span>
+                    <span style={{fontSize:8,fontWeight:800,color:'#FFCE8A',background:'rgba(255,244,230,.1)',border:'1px solid rgba(255,217,168,.35)',padding:'3px 9px',borderRadius:999}}>Externo: {drillTipoCounts.externo}</span>
+                  </div>
+                )}
+              </div>
+              <button onClick={()=>{setDrill(null);setDrillSearch('');}} style={{width:36,height:36,background:'rgba(255,255,255,.08)',border:'none',borderRadius:10,cursor:'pointer',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="x" size={18}/></button>
+            </div>
+            {finalizacoesDrill.length>5&&(
+              <div style={{padding:'12px 20px 0',flexShrink:0}}>
+                <div style={{position:'relative'}}>
+                  <input type="text" placeholder="Buscar por OS ou modelo..." value={drillSearch} onChange={e=>setDrillSearch(e.target.value)} className="input" style={{paddingLeft:34,fontSize:11}}/>
+                  <div style={{position:'absolute',left:10,top:'50%',transform:'translateY(-50%)',color:'var(--muted)'}}><Icon name="search" size={13}/></div>
+                </div>
+              </div>
+            )}
+            <div className="scroll-y" style={{padding:20,overflowY:'auto',flex:1}}>
+              {finalizacoesDrillFiltered.length===0?(
+                <p style={{fontSize:10,color:'var(--muted)',textAlign:'center',padding:'30px 0'}}>{drillSearch.trim()?'Nenhum resultado para essa busca.':'Nenhum veículo encontrado para este filtro no período selecionado.'}</p>
+              ):(
+                <div style={{display:'flex',flexDirection:'column',gap:14}}>
+                  {finalizacoesDrillFiltered.map(fin=>{
+                    const vInfo=vehicleMap[String(fin.os).trim()];
+                    const modelo=vInfo?.modelo||fin.vehicleData?.modelo||'N/D';
+                    const problemasDoCarro=[];
+                    CATS_VIS.filter(([key])=>!drill.categoriaFiltro||key===drill.categoriaFiltro).forEach(([key,label,color,icon])=>{
+                      (fin[key]||[]).filter(p=>!drill.tipoFiltro||p.tipo===drill.tipoFiltro).forEach(p=>problemasDoCarro.push({categoria:label,color,icon,...p}));
+                    });
+                    return(
+                      <div key={fin.id} className="card" style={{padding:14}}>
+                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:problemasDoCarro.length?10:0,flexWrap:'wrap',gap:6}}>
+                          <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                            <span style={{fontSize:13,fontWeight:800}}>OS #{fin.os}</span>
+                            <span style={{fontSize:9,color:'var(--muted)',fontWeight:700,textTransform:'uppercase'}}>{modelo}</span>
+                          </div>
+                          <span style={{fontSize:9,fontWeight:800,padding:'2px 9px',borderRadius:999,background:problemasDoCarro.length===0?'#EDFAF3':'var(--red-light)',color:problemasDoCarro.length===0?'#059669':'var(--red)',border:`1px solid ${problemasDoCarro.length===0?'#AAE6C5':'#FFBDBD'}`}}>{problemasDoCarro.length} problema{problemasDoCarro.length!==1?'s':''}</span>
+                        </div>
+                        {problemasDoCarro.length>0&&(
+                          <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                            {problemasDoCarro.map((p,i)=>(
+                              <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',background:p.status==='Solucionado'?'#F0FBF5':'var(--smoke)',border:`1px solid ${p.status==='Solucionado'?'#AAE6C5':'var(--border)'}`,borderRadius:8}}>
+                                <span style={{fontSize:8,fontWeight:800,padding:'2px 7px',borderRadius:5,background:p.color+'18',color:p.color,border:`1px solid ${p.color}55`,flexShrink:0}}>{p.categoria}</span>
+                                {p.tipo&&<span style={{fontSize:8,fontWeight:800,padding:'2px 7px',borderRadius:5,background:p.tipo==='Interno'?'#EAF0FF':'#FFF4E6',color:p.tipo==='Interno'?'#1A4EC2':'#C45E00',border:`1px solid ${p.tipo==='Interno'?'#C0D0F5':'#FFD9A8'}`,flexShrink:0}}>{p.tipo}</span>}
+                                <span style={{fontSize:10,fontWeight:600,color:'var(--ink)',flex:1,minWidth:0}}>{p.descricao||'(sem descrição)'}</span>
+                                {p.status==='Solucionado'&&<Icon name="check-circle" size={13} style={{color:'#059669',flexShrink:0}}/>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div style={{padding:'14px 20px',background:'var(--smoke)',borderTop:'1px solid var(--border)',flexShrink:0}}>
+              <button onClick={()=>setDrill(null)} className="btn-primary" style={{width:'100%'}}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      ), document.body)}
+    </div>
+  );
+}
+
+function FeedbackFinalizacaoReuniaoView({finalizacoes,requests,vehicles,loggedInUser}){
+  const isAdminView=loggedInUser?.user===MASTER_USER||loggedInUser?.user==='Cleber.Zonta'||loggedInUser?.user==='Leonardo.Teixeira';
+  const[subTab,setSubTab]=useState('geral');
+
+  if(!isAdminView){
+    const souIsabelle=loggedInUser?.user==='Isabelle.Oliveira';
+    const linhas=souIsabelle?LINHAS_ISABELLE:LINHAS_SOARES;
+    return(
+      <FinalizacaoAnalyticsReuniaoView
+        finalizacoes={finalizacoes}
+        requests={requests}
+        vehicles={vehicles}
+        linhasFiltro={linhas}
+        tituloPersonalizado={souIsabelle?'Linhas 1, 2 e 3':'Linhas 4, 5, 6 e 7'}
+      />
+    );
+  }
+
+  const linhasFiltro=subTab==='isabelle'?LINHAS_ISABELLE:subTab==='soares'?LINHAS_SOARES:null;
+  const titulo=subTab==='isabelle'?'Linhas 1, 2 e 3 (Isabelle)':subTab==='soares'?'Linhas 4, 5, 6 e 7 (Soares)':'Visão Geral';
+
+  return(
+    <div className="fade-up">
+      <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)',width:'fit-content',marginBottom:20}}>
+        {[{k:'geral',l:'Geral'},{k:'isabelle',l:'Isabelle'},{k:'soares',l:'Soares'}].map(t=>(
+          <button key={t.k} onClick={()=>setSubTab(t.k)} style={{padding:'8px 18px',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',border:'none',cursor:'pointer',letterSpacing:'.06em',transition:'all .15s',fontFamily:'Plus Jakarta Sans,sans-serif',background:subTab===t.k?'#fff':'transparent',color:subTab===t.k?'var(--red)':'var(--muted)',boxShadow:subTab===t.k?'0 2px 8px rgba(0,0,0,.08)':'none'}}>{t.l}</button>
+        ))}
+      </div>
+      <FinalizacaoAnalyticsReuniaoView
+        finalizacoes={finalizacoes}
+        requests={requests}
+        vehicles={vehicles}
+        linhasFiltro={linhasFiltro}
+        tituloPersonalizado={titulo}
+      />
+    </div>
+  );
+}
 // ── Dashboard ─────────────────────────────────────────────────────────────
 function DashboardView({requests,vehicles}){
   const[tab,setTab]=useState('pecas');
@@ -1806,21 +2377,31 @@ const compressImageToBlob=async(file)=>{
       const r=new FileReader();r.onload=e=>{const img=new Image();img.onload=()=>{const c=document.createElement('canvas');const ctx=c.getContext('2d');let w=img.width,h=img.height;const mx=1024;if(w>h&&w>mx){h*=mx/w;w=mx;}else if(h>mx){w*=mx/h;h=mx;}c.width=w;c.height=h;ctx.drawImage(img,0,0,w,h);c.toBlob(b=>resolve(b),'image/jpeg',.7);};img.src=e.target.result;};r.readAsDataURL(file);
     });
   };
- const handleImageUpload=async(itemId,file)=>{
+const handleImageUpload=async(itemId,file)=>{
     setCompressing(true);
     try{
-      const c=await new Promise(resolve=>{
-        const r=new FileReader();r.onload=e=>{const img=new Image();img.onload=()=>{
-          const c=document.createElement('canvas');const ctx=c.getContext('2d');
-          let w=img.width,h=img.height;const mx=700;
-          if(w>h&&w>mx){h*=mx/w;w=mx;}else if(h>mx){w*=mx/h;h=mx;}
-          c.width=w;c.height=h;ctx.drawImage(img,0,0,w,h);
-          resolve(c.toDataURL('image/jpeg',.55));
-        };img.src=e.target.result;};r.readAsDataURL(file);
+      const c=await new Promise((resolve,reject)=>{
+        const timeoutId=setTimeout(()=>reject(new Error('Tempo esgotado ao processar a imagem.')),15000);
+        const r=new FileReader();
+        r.onerror=()=>{clearTimeout(timeoutId);reject(new Error('Falha ao ler o arquivo.'));};
+        r.onload=e=>{
+          const img=new Image();
+          img.onerror=()=>{clearTimeout(timeoutId);reject(new Error('Formato de imagem não suportado.'));};
+          img.onload=()=>{
+            clearTimeout(timeoutId);
+            const c=document.createElement('canvas');const ctx=c.getContext('2d');
+            let w=img.width,h=img.height;const mx=700;
+            if(w>h&&w>mx){h*=mx/w;w=mx;}else if(h>mx){w*=mx/h;h=mx;}
+            c.width=w;c.height=h;ctx.drawImage(img,0,0,w,h);
+            resolve(c.toDataURL('image/jpeg',.55));
+          };
+          img.src=e.target.result;
+        };
+        r.readAsDataURL(file);
       });
       setItems(p=>p.map(i=>i.id===itemId?{...i,photo:c}:i));
       setSemFoto(p=>p.filter(id=>id!==itemId));
-    }catch{alert('Erro ao processar imagem.');}
+    }catch(err){alert('Não foi possível processar essa imagem: '+(err?.message||'erro desconhecido')+'. Tente tirar a foto novamente ou escolher outra da galeria.');}
     setCompressing(false);
   };
 const salvar=async()=>{
@@ -6278,6 +6859,7 @@ const navItems=[
     {key:'estoque',icon:'boxes',label:'Estoque'},
     canAccessFinalizacao&&{key:'finalizacao',icon:'clipboard-check',label:'Finalização'},
     canAccessFeedbackFinalizacao&&{key:'feedbackFinalizacao',icon:'message-square',label:'Feedback Finalização'},
+    canAccessFeedbackFinalizacao&&{key:'feedbackFinalizacaoReuniao',icon:'presentation',label:'Feedback Finalização Reunião'},
     loggedIn?.user===MASTER_USER&&{key:'donor',icon:'git-merge',label:'Doações'},
     canDo(role,'manage')&&{key:'admin',icon:'settings',label:'Gestão'},
     (isMaster||isAdmin)&&{key:'dashboard',icon:'bar-chart-2',label:'Análises'},
@@ -6379,7 +6961,8 @@ const navItems=[
                 {view==='estoque'&&<EstoqueView estoque={estoque} movimentos={estoqueMovimentos} requests={requests} loggedInUser={loggedIn} isMaster={isMaster}/>}
                {view==='donor'&&canDo(role,'donor')&&<DonorSystem requests={requests} vehicles={vehicles} loggedInUser={loggedIn}/>}
                 {view==='finalizacao'&&canAccessFinalizacao&&<FinalizacaoView vehiclesDB={vehicles} requests={requests} loggedInUser={loggedIn} isMaster={isMaster}/>}
-                {view==='feedbackFinalizacao'&&canAccessFeedbackFinalizacao&&<FeedbackFinalizacaoView finalizacoes={finalizacoesApp} requests={requests} vehicles={vehicles} loggedInUser={loggedIn}/>}
+               {view==='feedbackFinalizacao'&&canAccessFeedbackFinalizacao&&<FeedbackFinalizacaoView finalizacoes={finalizacoesApp} requests={requests} vehicles={vehicles} loggedInUser={loggedIn}/>}
+                {view==='feedbackFinalizacaoReuniao'&&canAccessFeedbackFinalizacao&&<FeedbackFinalizacaoReuniaoView finalizacoes={finalizacoesApp} requests={requests} vehicles={vehicles} loggedInUser={loggedIn}/>}
                 {view==='admin'&&canDo(role,'manage')&&(
                   <div className="fade-up" style={{paddingBottom:40}}>
                     <div style={{marginBottom:16}}>
