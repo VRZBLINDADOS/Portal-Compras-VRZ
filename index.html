@@ -148,7 +148,6 @@ const FB={apiKey:"AIzaSyBT1N43mp6hoxXOj6bmTlqouQWSmfn32-E",authDomain:"portal-co
 if(!firebase.apps.length)firebase.initializeApp(FB);
 const db=firebase.firestore();const auth=firebase.auth();const storage=firebase.storage();
 const AID='portal-compras-vrz';
-const REFRESH_INTERVAL_MS=30000; // Intervalo de atualização automática (ms). Menor = mais "tempo real", porém mais leituras no Firestore.
 let refreshTimer=null;
 const dispatchRefresh=()=>{clearTimeout(refreshTimer);refreshTimer=setTimeout(()=>window.dispatchEvent(new Event('vrz-refresh')),800);};
 const col=(c)=>{
@@ -200,22 +199,12 @@ const parsePrice = (v) => {
 };
 
 // Cache compartilhado em memória entre TODAS as instâncias do useFirestore
-// que apontam pra mesma coleção — evita buscas duplicadas e evita que trocar
-// de aba/tela "zere" os dados enquanto uma nova busca acontece.
+// que apontam pra mesma coleção — garante um único listener onSnapshot por
+// coleção mesmo com várias telas abertas ao mesmo tempo.
 const __vrzStore={};
 function __getStore(key){
   if(!__vrzStore[key]){
-    const entry={data:[],loading:true,lastFetch:0,inFlight:null,listeners:new Set()};
-    try{
-      const raw=localStorage.getItem(key);
-      if(raw){
-        const parsed=JSON.parse(raw);
-        entry.data=parsed.data||[];
-        entry.lastFetch=parsed.t||0;
-        if(Date.now()-entry.lastFetch<REFRESH_INTERVAL_MS)entry.loading=false;
-      }
-    }catch(e){}
-    __vrzStore[key]=entry;
+    __vrzStore[key]={data:[],loading:true,listeners:new Set(),unsub:null,refCount:0};
   }
   return __vrzStore[key];
 }
@@ -228,37 +217,36 @@ const useFirestore=(collectionName,opts)=>{
   useEffect(()=>{
     const listener=()=>forceRender(n=>n+1);
     store.listeners.add(listener);
-    return()=>store.listeners.delete(listener);
-  },[store]);
+    store.refCount++;
 
-  const notify=useCallback(()=>{store.listeners.forEach(l=>l());},[store]);
+    if(!store.unsub){
+      let q=col(collectionName);
+      if(opts?.orderBy)q=q.orderBy(opts.orderBy,opts.direction||'desc');
+      if(opts?.limit)q=q.limit(opts.limit);
+      store.unsub=q.onSnapshot(s=>{
+        store.data=s.docs.map(d=>({id:d.id,...d.data()}));
+        store.loading=false;
+        window.dispatchEvent(new Event('vrz-updated'));
+        store.listeners.forEach(l=>l());
+      },err=>{
+        console.error('onSnapshot('+collectionName+'):',err);
+        store.loading=false;
+        store.listeners.forEach(l=>l());
+      });
+    }
 
-  const fetchData=useCallback(()=>{
-    if(store.inFlight)return store.inFlight; // já tem uma busca desta coleção em andamento — não duplica
-    store.lastFetch=Date.now();
-    let q=col(collectionName);
-    if(opts?.orderBy)q=q.orderBy(opts.orderBy,opts.direction||'desc');
-    if(opts?.limit)q=q.limit(opts.limit);
-    store.inFlight=q.get().then(s=>{
-      const arr=s.docs.map(d=>({id:d.id,...d.data()}));
-      store.data=arr;store.loading=false;store.inFlight=null;
-      try{localStorage.setItem(cacheKey,JSON.stringify({t:Date.now(),data:arr}));}catch(e){/* coleção grande demais pra cache local — segue sem cachear, mas o estado em memória continua valendo */}
-      window.dispatchEvent(new Event('vrz-updated'));
-      notify();
-    }).catch(e=>{console.error(e);store.loading=false;store.inFlight=null;notify();});
-    return store.inFlight;
-  },[collectionName,opts?.orderBy,opts?.direction,opts?.limit,cacheKey,store,notify]);
+    return()=>{
+      store.listeners.delete(listener);
+      store.refCount--;
+      if(store.refCount<=0&&store.unsub){
+        store.unsub();
+        store.unsub=null;
+      }
+    };
+    // eslint-disable-next-line
+  },[collectionName,opts?.orderBy,opts?.direction,opts?.limit,cacheKey]);
 
-useEffect(()=>{
-    if(store.data.length===0||Date.now()-store.lastFetch>REFRESH_INTERVAL_MS)fetchData();
-    const interval=setInterval(()=>{if(!document.hidden)fetchData();},REFRESH_INTERVAL_MS);
-    const onVisible=()=>{if(!document.hidden&&Date.now()-store.lastFetch>REFRESH_INTERVAL_MS)fetchData();};
-    document.addEventListener('visibilitychange',onVisible);
-    window.addEventListener('vrz-refresh',fetchData);
-    return()=>{clearInterval(interval);document.removeEventListener('visibilitychange',onVisible);window.removeEventListener('vrz-refresh',fetchData);};
-  },[fetchData]);
-
-  return{data:store.data,loading:store.loading,refetch:fetchData};
+  return{data:store.data,loading:store.loading,refetch:()=>{}};
 };
 
 const sanitize=(v)=>typeof v!=='string'?v:DOMPurify.sanitize(v);
