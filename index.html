@@ -689,22 +689,23 @@ const stats=useMemo(()=>{
     </div>
   );
 
-  if(!stats)return(
+ if(!stats)return(
     <div className="fade-in">
       {periodSelector}
       <div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'80px 20px',textAlign:'center'}}>
         <div style={{width:64,height:64,background:'var(--smoke)',borderRadius:16,display:'flex',alignItems:'center',justifyContent:'center',marginBottom:16}}><Icon name="clipboard-check" size={26}/></div>
-        <p style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)'}}>Nenhuma inspeção neste período</p>
+        <p style={{fontSize:11,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)'}}>Nenhuma OS neste período</p>
       </div>
     </div>
   );
 
- const maxCat=Math.max(...CATS_VIS.map(([key])=>stats.porCategoria[key].total),1);
+  const maxCatOS=Math.max(...CATS_VIS.map(([key])=>stats.porCategoria[key].osComProblema),1);
   const maxRecl=stats.rankReclamacoes[0]?.[1]?.count||1;
-  const maxMod=stats.rankModelos[0]?.[1]?.total||1;
-const inspecaoConcluidaCheck=(fin)=>{
+  const maxMod=Math.max(...stats.rankModelos.map(([,d])=>d.totalProblemas),1);
+
+  const inspecaoConcluidaCheck=(fin)=>{
     let problemasDaInspecao=0,solucionadosDaInspecao=0;
-    CATS.forEach(([key])=>{
+    CATS_VIS.forEach(([key])=>{
       const items=fin[key]||[];
       problemasDaInspecao+=items.length;
       solucionadosDaInspecao+=items.filter(p=>p.status==='Solucionado').length;
@@ -715,71 +716,17 @@ const inspecaoConcluidaCheck=(fin)=>{
     return problemasDaInspecao===solucionadosDaInspecao&&pecasSolucionadas;
   };
 
-  // ── Impressão das caixas de detalhamento ──────────────────────────────
-  const buildPrintList=(items,categoriaFiltroLocal,tipoFiltroLocal)=>{
-    return items.map(fin=>{
-      const vInfo=vehicleMap[String(fin.os).trim()];
-      const modelo=vInfo?.modelo||fin.vehicleData?.modelo||'N/D';
-      const problemas=[];
-      CATS.filter(([key])=>!categoriaFiltroLocal||key===categoriaFiltroLocal).forEach(([key,label])=>{
-        (fin[key]||[]).filter(p=>!tipoFiltroLocal||p.tipo===tipoFiltroLocal).forEach(p=>problemas.push({categoria:label,tipo:p.tipo,descricao:p.descricao,status:p.status}));
-      });
-      return{os:fin.os,modelo,problemas};
-    });
-  };
-
-  const imprimirLista=(titulo,subtitulo,lista)=>{
-    const win=window.open('','_blank','width=900,height=700');
-    if(!win){alert('Seu navegador bloqueou a janela de impressão. Permita pop-ups para este site e tente novamente.');return;}
-    const corpo=lista.map(item=>`
-      <div style="margin-bottom:14px;padding:12px 14px;border:1px solid #ddd;border-radius:8px;page-break-inside:avoid;">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-          <strong style="font-size:13px;">OS #${item.os} — ${item.modelo}</strong>
-          <span style="font-size:10px;color:#666;font-weight:700;">${item.problemas.length} problema${item.problemas.length!==1?'s':''}</span>
-        </div>
-        ${item.problemas.length?item.problemas.map(p=>`
-          <div style="display:flex;gap:8px;align-items:center;padding:5px 0;border-top:1px solid #eee;font-size:11px;">
-            <span style="font-weight:700;color:#DC1F1F;min-width:90px;">${p.categoria}</span>
-            ${p.tipo?`<span style="font-weight:700;color:#1A4EC2;">[${p.tipo}]</span>`:''}
-            <span style="flex:1;">${(p.descricao||'(sem descrição)').replace(/</g,'&lt;')}</span>
-            <span style="font-weight:700;color:${p.status==='Solucionado'?'#059669':'#999'};">${p.status==='Solucionado'?'✓ Solucionado':'Pendente'}</span>
-          </div>
-        `).join(''):'<p style="font-size:10px;color:#999;margin:0;">Sem problemas registrados.</p>'}
-      </div>
-    `).join('');
-    win.document.write(`
-      <html><head><title>${titulo}</title>
-      <meta charset="utf-8">
-      <style>
-        body{font-family:Arial,sans-serif;padding:24px;color:#111;}
-        h1{font-size:19px;margin:0 0 4px;}
-        p.sub{font-size:10px;color:#666;margin:0 0 18px;text-transform:uppercase;letter-spacing:.05em;}
-        p.gerado{font-size:9px;color:#999;margin:0 0 18px;}
-        @media print{ body{padding:0;} }
-      </style>
-      </head><body>
-        <h1>${titulo}</h1>
-        <p class="sub">${subtitulo}</p>
-        <p class="gerado">Gerado em ${new Date().toLocaleString('pt-BR')} — VRZ Compras</p>
-        ${corpo||'<p style="font-size:11px;color:#999;">Nenhum registro encontrado.</p>'}
-      </body></html>
-    `);
-    win.document.close();
-    win.focus();
-    setTimeout(()=>{win.print();},400);
-  };
-
   return(
     <div className="fade-in">
       {periodSelector}
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:12,marginBottom:16}}>
         {[
-          {label:'Total de Inspeções',v:stats.totalInspecoes,sub:'inspeções ativas (não arquivadas)',icon:'clipboard-check',dark:true,predicate:()=>true},
+          {label:"Total de OS's",v:stats.totalInspecoes,sub:"OS's ativas (não arquivadas)",icon:'clipboard-check',dark:true,predicate:()=>true},
           {label:'Solucionadas',v:stats.inspecoesSolucionadas,sub:'100% dos problemas resolvidos',icon:'check-circle',green:true,predicate:(f)=>inspecaoConcluidaCheck(f)},
           {label:'Em Aberto',v:stats.inspecoesAbertas,sub:'ainda com pendências',icon:'alert-triangle',red:true,predicate:(f)=>!inspecaoConcluidaCheck(f)},
           {label:'Tempo Médio até Solução Total',v:stats.tempoMedioResolucaoInspecao+'d',sub:'da abertura até tudo resolvido',icon:'clock'},
-          {label:'Taxa de Resolução (Abertas)',v:stats.taxaResolucaoAbertas+'%',sub:'dos problemas já resolvidos',icon:'trending-up'},
-          {label:'Média por Veículo',v:stats.mediaProblemasPorInspecao,sub:'problemas / inspeção',icon:'car'},
+          {label:'Taxa de Resolução Geral',v:stats.taxaResolucaoGeral+'%',sub:'dos problemas já resolvidos',icon:'trending-up'},
+          {label:'Média por Veículo',v:stats.mediaProblemasPorInspecao,sub:'problemas / OS',icon:'car'},
         ].map((k,i)=>(
           <div key={i} onClick={()=>k.predicate&&setDrill({titulo:`${k.label} — Veículos`,predicate:k.predicate})} style={{cursor:k.predicate?'pointer':'default',background:k.dark?'var(--ink)':k.red?'var(--red)':k.green?'#059669':'var(--smoke)',color:k.dark||k.red||k.green?'#fff':'var(--ink)',borderRadius:14,padding:20,border:(!k.dark&&!k.red&&!k.green)?'1.5px solid var(--border)':'none'}}>
             <div style={{width:32,height:32,borderRadius:8,background:k.dark||k.red||k.green?'rgba(255,255,255,.12)':'var(--border)',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:14}}><Icon name={k.icon} size={16}/></div>
@@ -1063,8 +1010,7 @@ const inspecaoConcluidaCheck=(fin)=>{
     </div>
   );
 }
-
-const LINHAS_ISABELLE=['Linha 1','Linha 2','Linha 3'];
+const LINHAS_ROGERIO=['Linha 1','Linha 2','Linha 3'];
 const LINHAS_SOARES=['Linha 4','Linha 5','Linha 6','Linha 7'];
 
 function FeedbackFinalizacaoView({finalizacoes,requests,vehicles,loggedInUser}){
@@ -1072,27 +1018,27 @@ function FeedbackFinalizacaoView({finalizacoes,requests,vehicles,loggedInUser}){
   const[subTab,setSubTab]=useState('geral');
 
   if(!isAdminView){
-    const souIsabelle=loggedInUser?.user==='Isabelle.Oliveira';
-    const linhas=souIsabelle?LINHAS_ISABELLE:LINHAS_SOARES;
+    const souRogerio=loggedInUser?.user==='Rogerio.Arruda';
+    const linhas=souRogerio?LINHAS_ROGERIO:LINHAS_SOARES;
    return(
       <FinalizacaoAnalyticsView
         finalizacoes={finalizacoes}
         requests={requests}
         vehicles={vehicles}
         linhasFiltro={linhas}
-        tituloPersonalizado={souIsabelle?'Linhas 1, 2 e 3':'Linhas 4, 5, 6 e 7'}
+        tituloPersonalizado={souRogerio?'Linhas 1, 2 e 3':'Linhas 4, 5, 6 e 7'}
         categoriasVisiveis={['ajuste','martelinho','pintura','vidro']}
       />
     );
   }
 
-  const linhasFiltro=subTab==='isabelle'?LINHAS_ISABELLE:subTab==='soares'?LINHAS_SOARES:null;
-  const titulo=subTab==='isabelle'?'Linhas 1, 2 e 3 (Isabelle)':subTab==='soares'?'Linhas 4, 5, 6 e 7 (Soares)':'Visão Geral';
+  const linhasFiltro=subTab==='rogerio'?LINHAS_ROGERIO:subTab==='soares'?LINHAS_SOARES:null;
+  const titulo=subTab==='rogerio'?'Linhas 1, 2 e 3 (Rogério)':subTab==='soares'?'Linhas 4, 5, 6 e 7 (Soares)':'Visão Geral';
 
   return(
     <div className="fade-up">
       <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)',width:'fit-content',marginBottom:20}}>
-        {[{k:'geral',l:'Geral'},{k:'isabelle',l:'Isabelle'},{k:'soares',l:'Soares'}].map(t=>(
+        {[{k:'geral',l:'Geral'},{k:'rogerio',l:'Rogério'},{k:'soares',l:'Soares'}].map(t=>(
           <button key={t.k} onClick={()=>setSubTab(t.k)} style={{padding:'8px 18px',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',border:'none',cursor:'pointer',letterSpacing:'.06em',transition:'all .15s',fontFamily:'Plus Jakarta Sans,sans-serif',background:subTab===t.k?'#fff':'transparent',color:subTab===t.k?'var(--red)':'var(--muted)',boxShadow:subTab===t.k?'0 2px 8px rgba(0,0,0,.08)':'none'}}>{t.l}</button>
         ))}
       </div>
@@ -1388,12 +1334,12 @@ function FinalizacaoAnalyticsReuniaoView({finalizacoes,requests,vehicles,linhasF
         </div>
       </div>
 
-      <div className="card" style={{padding:20,marginBottom:16}}>
+     <div className="card" style={{padding:20,marginBottom:16}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8,marginBottom:4}}>
           <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',margin:0}}>Frequência de Problemas por Carro</p>
-          <span className="pill" style={{fontSize:8}}>{stats.totalInspecoes} {stats.totalInspecoes===1?'inspeção no período':'inspeções no período'}</span>
+          <span className="pill" style={{fontSize:8}}>{stats.totalInspecoes} {stats.totalInspecoes===1?'OS no período':"OS's no período"}</span>
         </div>
-        <p style={{fontSize:9,color:'var(--muted)',marginBottom:16}}>Quantas OS's diferentes tiveram cada problema, quantas vezes ele apareceu no total, e a média por inspeção</p>
+        <p style={{fontSize:9,color:'var(--muted)',marginBottom:16}}>Quantas OS's diferentes tiveram cada problema, quantas vezes ele apareceu no total, e a média por OS</p>
         <div style={{display:'flex',flexDirection:'column',gap:18}}>
           {CATS_VIS.map(([key,label,color,icon])=>{
             const c=stats.porCategoria[key];
@@ -1407,6 +1353,8 @@ function FinalizacaoAnalyticsReuniaoView({finalizacoes,requests,vehicles,linhasF
                     <div style={{width:22,height:22,borderRadius:6,background:color,display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name={icon} size={12} style={{color:'#fff'}}/></div>
                     <span style={{fontSize:11,fontWeight:700,textTransform:'uppercase'}}>{label}</span>
                   </div>
+                  <span style={{fontSize:11,fontWeight:800,color:'var(--red)'}}>Média: {mediaGeral.toFixed(2)} por OS</span>
+                </div>
                   <span style={{fontSize:11,fontWeight:800,color:'var(--red)'}}>Média: {mediaGeral.toFixed(2)} por inspeção</span>
                 </div>
                 <div style={{display:'flex',flexDirection:'column',gap:5}}>
@@ -1449,13 +1397,13 @@ function FinalizacaoAnalyticsReuniaoView({finalizacoes,requests,vehicles,linhasF
             </div>
           ))}
         </div>
-        <div className="card" style={{padding:20,overflow:'hidden'}}>
+       <div className="card" style={{padding:20,overflow:'hidden'}}>
           <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:16}}>Veículos com Mais Problemas</p>
           {stats.rankModelos.map(([mod,d],i)=>(
             <div key={i} onClick={()=>setDrill({titulo:`${mod} — Veículos com problema`,predicate:(f)=>{const vInfo=vehicleMap[String(f.os).trim()];const modelo=vInfo?.modelo||f.vehicleData?.modelo||'N/D';return modelo===mod;}})} style={{marginBottom:12,cursor:'pointer'}}>
               <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}>
                 <span style={{fontSize:10,fontWeight:700,textTransform:'uppercase'}}>{mod}</span>
-                <span style={{fontSize:10,fontWeight:800,color:'var(--muted)'}}>{d.totalProblemas} ({d.inspecoes} insp.)</span>
+                <span style={{fontSize:10,fontWeight:800,color:'var(--muted)'}}>{d.totalProblemas} ({d.inspecoes} OS's)</span>
               </div>
               <div className="progress-track" style={{marginBottom:5}}><div className="progress-fill" style={{width:`${d.totalProblemas/maxMod*100}%`,background:i===0?'var(--red)':'var(--ink)'}}/></div>
               <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
@@ -1464,7 +1412,7 @@ function FinalizacaoAnalyticsReuniaoView({finalizacoes,requests,vehicles,linhasF
                   if(c.insp===0)return null;
                   const tipoStr=TIPO_CATS.includes(key)?` · Int:${c.interno}/Ext:${c.externo}`:'';
                   return(
-                    <span key={key} onClick={e=>{e.stopPropagation();setDrill({titulo:`${label} — ${mod}`,predicate:(f)=>{const vInfo=vehicleMap[String(f.os).trim()];const modelo=vInfo?.modelo||f.vehicleData?.modelo||'N/D';return modelo===mod&&(f[key]||[]).length>0;},categoriaFiltro:key});}} style={{cursor:'pointer',fontSize:8,fontWeight:700,padding:'2px 7px',borderRadius:5,background:color+'18',color,border:`1px solid ${color}55`}}>{label}: {c.insp} insp.{tipoStr}</span>
+                    <span key={key} onClick={e=>{e.stopPropagation();setDrill({titulo:`${label} — ${mod}`,predicate:(f)=>{const vInfo=vehicleMap[String(f.os).trim()];const modelo=vInfo?.modelo||f.vehicleData?.modelo||'N/D';return modelo===mod&&(f[key]||[]).length>0;},categoriaFiltro:key});}} style={{cursor:'pointer',fontSize:8,fontWeight:700,padding:'2px 7px',borderRadius:5,background:color+'18',color,border:`1px solid ${color}55`}}>{label}: {c.insp} OS's{tipoStr}</span>
                   );
                 })}
               </div>
@@ -1473,9 +1421,9 @@ function FinalizacaoAnalyticsReuniaoView({finalizacoes,requests,vehicles,linhasF
         </div>
       </div>
 
-      <div className="card" style={{padding:20}}>
+     <div className="card" style={{padding:20}}>
         <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:4}}>Problemas por Linha de Produção</p>
-        <p style={{fontSize:9,color:'var(--muted)',marginBottom:16}}>Total de inspeções de cada linha e quantas delas tiveram cada categoria de problema. Clique em uma linha para ver os carros.</p>
+        <p style={{fontSize:9,color:'var(--muted)',marginBottom:16}}>Total de OS's de cada linha e quantas delas tiveram cada categoria de problema. Clique em uma linha para ver os carros.</p>
         <div style={{display:'flex',flexDirection:'column',gap:18}}>
           {stats.rankLinhas.map(([linha,d])=>{
             const maxLinhaInsp=Math.max(...stats.rankLinhas.map(([,x])=>x.inspecoes),1);
@@ -1488,7 +1436,7 @@ function FinalizacaoAnalyticsReuniaoView({finalizacoes,requests,vehicles,linhasF
                     <span className="pill" style={{fontSize:8}}>{d.totalProblemas} problema{d.totalProblemas!==1?'s':''}</span>
                     <Icon name="chevron-right" size={13} style={{color:'var(--muted)'}}/>
                   </div>
-                  <span style={{fontSize:11,fontWeight:800,color:'var(--red)'}}>{d.inspecoes} {d.inspecoes===1?'Inspeção':'Inspeções'}</span>
+                  <span style={{fontSize:11,fontWeight:800,color:'var(--red)'}}>{d.inspecoes} {d.inspecoes===1?'OS':"OS's"}</span>
                 </div>
                 <div className="progress-track" style={{marginBottom:8}}><div className="progress-fill" style={{width:`${d.inspecoes/maxLinhaInsp*100}%`,background:'var(--ink)'}}/></div>
                 <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
@@ -1497,7 +1445,7 @@ function FinalizacaoAnalyticsReuniaoView({finalizacoes,requests,vehicles,linhasF
                     if(c.insp===0)return null;
                     const tipoStr=TIPO_CATS.includes(key)?` · Int:${c.interno}/Ext:${c.externo}`:'';
                     return(
-                      <span key={key} onClick={e=>{e.stopPropagation();setDrill({titulo:`${label} — ${linha}`,predicate:(f)=>{const vInfo=vehicleMap[String(f.os).trim()];const l=vInfo?.linhaProducao||f.vehicleData?.linhaProducao||'N/D';return l===linha&&(f[key]||[]).length>0;},categoriaFiltro:key});}} style={{cursor:'pointer',fontSize:8,fontWeight:700,padding:'2px 7px',borderRadius:5,background:color+'18',color,border:`1px solid ${color}55`}}>{label}: {c.insp} insp.{tipoStr}</span>
+                      <span key={key} onClick={e=>{e.stopPropagation();setDrill({titulo:`${label} — ${linha}`,predicate:(f)=>{const vInfo=vehicleMap[String(f.os).trim()];const l=vInfo?.linhaProducao||f.vehicleData?.linhaProducao||'N/D';return l===linha&&(f[key]||[]).length>0;},categoriaFiltro:key});}} style={{cursor:'pointer',fontSize:8,fontWeight:700,padding:'2px 7px',borderRadius:5,background:color+'18',color,border:`1px solid ${color}55`}}>{label}: {c.insp} OS's{tipoStr}</span>
                     );
                   })}
                   {d.totalProblemas===0&&<span style={{fontSize:8,color:'var(--muted)',fontWeight:600}}>Nenhum problema registrado nesta linha</span>}
@@ -1516,7 +1464,7 @@ function FinalizacaoAnalyticsReuniaoView({finalizacoes,requests,vehicles,linhasF
                 <div style={{width:40,height:40,background:'var(--red)',borderRadius:11,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="factory" size={18} style={{color:'#fff'}}/></div>
                 <div>
                   <h3 style={{margin:0,fontSize:17,fontWeight:800,color:'#fff',textTransform:'uppercase'}}>{linhaSelecionada}</h3>
-                  <p style={{margin:0,fontSize:9,color:'rgba(255,255,255,.4)',textTransform:'uppercase',letterSpacing:'.08em',marginTop:2}}>{finalizacoesPorLinha.length} {finalizacoesPorLinha.length===1?'inspeção':'inspeções'} nesta linha</p>
+                  <p style={{margin:0,fontSize:9,color:'rgba(255,255,255,.4)',textTransform:'uppercase',letterSpacing:'.08em',marginTop:2}}>{finalizacoesPorLinha.length} {finalizacoesPorLinha.length===1?'OS':"OS's"} nesta linha</p>
                 </div>
               </div>
               <button onClick={()=>setLinhaSelecionada(null)} style={{width:36,height:36,background:'rgba(255,255,255,.08)',border:'none',borderRadius:10,cursor:'pointer',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="x" size={18}/></button>
@@ -1645,26 +1593,26 @@ function FeedbackFinalizacaoReuniaoView({finalizacoes,requests,vehicles,loggedIn
   const[subTab,setSubTab]=useState('geral');
 
   if(!isAdminView){
-    const souIsabelle=loggedInUser?.user==='Isabelle.Oliveira';
-    const linhas=souIsabelle?LINHAS_ISABELLE:LINHAS_SOARES;
+    const souRogerio=loggedInUser?.user==='Rogerio.Arruda';
+    const linhas=souRogerio?LINHAS_ROGERIO:LINHAS_SOARES;
     return(
       <FinalizacaoAnalyticsReuniaoView
         finalizacoes={finalizacoes}
         requests={requests}
         vehicles={vehicles}
         linhasFiltro={linhas}
-        tituloPersonalizado={souIsabelle?'Linhas 1, 2 e 3':'Linhas 4, 5, 6 e 7'}
+        tituloPersonalizado={souRogerio?'Linhas 1, 2 e 3':'Linhas 4, 5, 6 e 7'}
       />
     );
   }
 
-  const linhasFiltro=subTab==='isabelle'?LINHAS_ISABELLE:subTab==='soares'?LINHAS_SOARES:null;
-  const titulo=subTab==='isabelle'?'Linhas 1, 2 e 3 (Isabelle)':subTab==='soares'?'Linhas 4, 5, 6 e 7 (Soares)':'Visão Geral';
+  const linhasFiltro=subTab==='rogerio'?LINHAS_ROGERIO:subTab==='soares'?LINHAS_SOARES:null;
+  const titulo=subTab==='rogerio'?'Linhas 1, 2 e 3 (Rogério)':subTab==='soares'?'Linhas 4, 5, 6 e 7 (Soares)':'Visão Geral';
 
   return(
     <div className="fade-up">
       <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)',width:'fit-content',marginBottom:20}}>
-        {[{k:'geral',l:'Geral'},{k:'isabelle',l:'Isabelle'},{k:'soares',l:'Soares'}].map(t=>(
+        {[{k:'geral',l:'Geral'},{k:'rogerio',l:'Rogério'},{k:'soares',l:'Soares'}].map(t=>(
           <button key={t.k} onClick={()=>setSubTab(t.k)} style={{padding:'8px 18px',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',border:'none',cursor:'pointer',letterSpacing:'.06em',transition:'all .15s',fontFamily:'Plus Jakarta Sans,sans-serif',background:subTab===t.k?'#fff':'transparent',color:subTab===t.k?'var(--red)':'var(--muted)',boxShadow:subTab===t.k?'0 2px 8px rgba(0,0,0,.08)':'none'}}>{t.l}</button>
         ))}
       </div>
@@ -6660,7 +6608,7 @@ const{data:requests,loading:reqLoad}=useFirestore('requests');
   const isAdminEspecial=ADMIN_ESPECIAL.includes(loggedIn?.user);
   const isAdmin=role==='admin'||isMaster||isAdminEspecial;
   const isSol=canDo(role,'newReq')||isAdminEspecial;
-  const canAccessFinalizacao=isMaster||loggedIn?.acessoFinalizacao===true||isAdminEspecial||loggedIn?.user==='Isabelle.Oliveira';
+  const canAccessFinalizacao=isMaster||loggedIn?.acessoFinalizacao===true||isAdminEspecial||loggedIn?.user==='Rogerio.Arruda';
 
   const addUser=async(u,p,r='solicitante')=>{
     // Só o Master 1 (Lucas.Sabino) pode criar masters
@@ -6839,7 +6787,7 @@ const changeRole=async(u,r)=>{
     return count;
   },[requests,lidasNav]);
 
-const canAccessFeedbackFinalizacao=isMaster||loggedIn?.user==='Cleber.Zonta'||loggedIn?.user==='Leonardo.Teixeira'||loggedIn?.user==='Isabelle.Oliveira'||loggedIn?.user==='Rafael.Oliveira';
+const canAccessFeedbackFinalizacao=isMaster||loggedIn?.user==='Cleber.Zonta'||loggedIn?.user==='Leonardo.Teixeira'||loggedIn?.user==='Rogerio.Arruda'||loggedIn?.user==='Rafael.Oliveira';
 const navItems=[
     isSol&&{key:'request',icon:'plus-circle',label:'Nova Peça'},
     {key:'status',icon:'search',label:'Histórico'},
