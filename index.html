@@ -751,7 +751,7 @@ const stats=useMemo(()=>{
                   </div>
                   <span style={{fontSize:11,fontWeight:800}}>{c.total} <span style={{fontSize:9,fontWeight:600,color:'var(--muted)'}}>({c.solucionado} solucionado{c.solucionado!==1?'s':''})</span></span>
                 </div>
-                <div className="progress-track"><div className="progress-fill" style={{width:`${c.total/maxCat*100}%`,background:color}}/></div>
+                <div className="progress-track"><div className="progress-fill" style={{width:`${c.total/maxCatOS*100}%`,background:color}}/></div>
                 {TIPO_CATS.includes(key)&&c.total>0&&(
                   <div style={{display:'flex',gap:10,marginTop:6}}>
                     <span onClick={e=>{e.stopPropagation();setDrill({titulo:`${label} — Internos`,predicate:(f)=>(f[key]||[]).some(p=>p.tipo==='Interno'),categoriaFiltro:key,tipoFiltro:'Interno'});}} style={{cursor:'pointer',fontSize:8,fontWeight:800,color:'#1A4EC2',background:'#EAF0FF',border:'1px solid #C0D0F5',padding:'2px 8px',borderRadius:999}}>Interno: {c.porTipo.Interno}</span>
