@@ -5586,9 +5586,10 @@ const dadosCompra = useMemo(() => {
    const resolvidoFabricaOS = new Set(), estoqueOS = new Set();
     requests.forEach(r => {
       (r.items || []).forEach(it => {
-        if (!it.boughtAt) return;
+        const dataBaseCompra = it.boughtAt || it.actualDeliveryDate;
+        if (!dataBaseCompra) return;
        if (it.duplicataDeDoacao) return; // só exclui se a compra já existia ANTES da doação (duplicata real)
-        const dateKey = String(it.boughtAt).trim().slice(0, 10);
+        const dateKey = String(dataBaseCompra).trim().slice(0, 10);
         if (map[dateKey]) {
           const preco = parsePrice(it.price);
           map[dateKey].itens.push({ ...it, os: r.os, _preco: preco });
@@ -5621,8 +5622,9 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
     const rows = [[csvCellRR('OS'), csvCellRR('Peça'), csvCellRR('Qtd'), csvCellRR('Valor'), csvCellRR('Fornecedor'), csvCellRR('Data Compra'), csvCellRR('Incluído no Gráfico?'), csvCellRR('Motivo')].join(';')];
     requests.forEach(r => {
       (r.items || []).forEach(it => {
-        if (!it.boughtAt) return;
-        const dt = new Date(String(it.boughtAt).trim().slice(0, 10) + 'T00:00:00');
+        const dataBaseCompra = it.boughtAt || it.actualDeliveryDate;
+        if (!dataBaseCompra) return;
+        const dt = new Date(String(dataBaseCompra).trim().slice(0, 10) + 'T00:00:00');
         if (dt < inicioPeriodo || dt > fimPeriodo) return;
         const excluido = !!it.duplicataDeDoacao;
         rows.push([
@@ -5631,7 +5633,7 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
           csvCellRR(it.quantity || 1),
           csvCellRR(parsePrice(it.price).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })),
           csvCellRR(it.supplier || '-'),
-          csvCellRR(it.boughtAt),
+          csvCellRR(it.boughtAt || ('(sem boughtAt — usando entrega ' + it.actualDeliveryDate + ')')),
           csvCellRR(excluido ? 'NÃO' : 'SIM'),
           csvCellRR(excluido ? `Cópia de doação (transferido para OS ${it.donatedTo})` : '-'),
         ].join(';'));
