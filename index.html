@@ -5426,6 +5426,7 @@ function ResumoReuniaoView({requests}){
   const [periodo, setPeriodo] = useState('semanal'); // 'semanal', 'quinzenal', 'mensal'
   const [offset, setOffset] = useState(0);
   const [diaSelecionado, setDiaSelecionado] = useState(null);
+  const [osMultiDiaAberto, setOsMultiDiaAberto] = useState(false);
 
   const { inicioPeriodo, fimPeriodo, numDias } = useMemo(() => {
     const agora = new Date();
@@ -5488,7 +5489,7 @@ function ResumoReuniaoView({requests}){
   }, [inicioPeriodo, numDias]);
 
 
-  const dadosDia = useMemo(() => {
+ const dadosDia = useMemo(() => {
     const map = {};
     diasDoPeriodo.forEach(d => { map[d.date] = { ...d, pedidos: [], osSet: new Set() }; });
 
@@ -5506,6 +5507,35 @@ function ResumoReuniaoView({requests}){
     });
     return Object.values(map);
   }, [requests, diasDoPeriodo]);
+
+  // OS's que tiveram pedidos de peças em mais de um dia dentro do período selecionado
+  const osComPedidosEmDiasDiferentes = useMemo(() => {
+    const pedidos = pedidosConsolidados(requests).filter(r => {
+      if (!r.timestamp) return false;
+      const dt = new Date(r.timestamp);
+      return dt >= inicioPeriodo && dt <= fimPeriodo;
+    });
+    const porOS = {};
+    pedidos.forEach(r => {
+      const os = String(r.os || '').trim();
+      if (!os) return;
+      const dt = new Date(r.timestamp);
+      const dayKey = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+      if (!porOS[os]) porOS[os] = { os, vehicleData: r.vehicleData, dias: {} };
+      if (!porOS[os].vehicleData && r.vehicleData) porOS[os].vehicleData = r.vehicleData;
+      if (!porOS[os].dias[dayKey]) porOS[os].dias[dayKey] = [];
+      porOS[os].dias[dayKey].push(r);
+    });
+    return Object.values(porOS)
+      .filter(g => Object.keys(g.dias).length > 1)
+      .map(g => ({
+        ...g,
+        diasOrdenados: Object.entries(g.dias).sort((a, b) => a[0].localeCompare(b[0])),
+        totalDias: Object.keys(g.dias).length,
+        totalPedidos: Object.values(g.dias).reduce((a, arr) => a + arr.length, 0),
+      }))
+      .sort((a, b) => b.totalDias - a.totalDias);
+  }, [requests, inicioPeriodo, fimPeriodo]);
 
 // Estas duas métricas usam a MESMA fórmula das barras/rótulos abaixo — garante 100% de
   // fidelidade entre os cartões do topo e o que está desenhado no gráfico, sempre.
@@ -5838,7 +5868,7 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
         </div>
       </div>
 
-      {/* KPIs */}
+     {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10, marginBottom: 24 }}>
         {[
          { label: 'Peças no período', v: totalPecasPeriodo, sub: `${osUnicasPeriodo} OS's no período`, icon: 'clipboard-list', dark: true },
@@ -5846,8 +5876,9 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
           { label: 'Itens comprados', v: dadosCompra.totalItens, sub: `${dadosCompra.osUnicas} OS com compra`, icon: 'shopping-bag' },
           { label: 'Valor médio / OS', v: dadosCompra.mediaValorOS > 0 ? fmtBRL(dadosCompra.mediaValorOS) : '—', sub: 'no período', icon: 'trending-up' },
           { label: 'Total gasto', v: dadosCompra.totalValor > 0 ? fmtBRL(dadosCompra.totalValor) : '—', sub: 'em compras', icon: 'banknote' },
+          { label: "OS's c/ pedidos em dias diferentes", v: osComPedidosEmDiasDiferentes.length, sub: 'clique para ver detalhes', icon: 'calendar-clock', dark: true, onClick: () => setOsMultiDiaAberto(true) },
         ].map((k, i) => (
-          <div key={i} style={{ background: k.dark ? '#0D0D0D' : k.red ? 'var(--red)' : 'var(--smoke)', color: k.dark || k.red ? '#fff' : 'var(--ink)', borderRadius: 14, padding: '16px 18px', border: (!k.dark && !k.red) ? '1.5px solid var(--border)' : 'none' }}>
+          <div key={i} onClick={k.onClick} style={{ background: k.dark ? '#0D0D0D' : k.red ? 'var(--red)' : 'var(--smoke)', color: k.dark || k.red ? '#fff' : 'var(--ink)', borderRadius: 14, padding: '16px 18px', border: (!k.dark && !k.red) ? '1.5px solid var(--border)' : 'none', cursor: k.onClick ? 'pointer' : 'default' }}>
             <div style={{ width: 28, height: 28, borderRadius: 7, background: k.dark || k.red ? 'rgba(255,255,255,.12)' : 'var(--border)', display: 'flex', alignItems: 'center', justifySelf: 'center', marginBottom: 12 }}><Icon name={k.icon} size={14} /></div>
             <p style={{ fontSize: String(k.v).length > 7 ? 18 : 28, fontWeight: 800, lineHeight: 1, margin: 0 }}>{k.v}</p>
             <p style={{ fontSize: 8, fontWeight: 800, textTransform: 'uppercase', marginTop: 5, opacity: .65 }}>{k.label}</p>
@@ -5978,8 +6009,66 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
                 );
               })()}
             </div>
-            <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)', background: 'var(--smoke)' }}>
+           <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)', background: 'var(--smoke)' }}>
               <button onClick={() => setDiaSelecionado(null)} className="btn-primary" style={{ width: '100%' }}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal — OS's com pedidos em dias diferentes */}
+      {osMultiDiaAberto && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 800, background: 'rgba(0,0,0,.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} className="fade-in">
+          <div style={{ background: '#fff', borderRadius: 24, overflow: 'hidden', maxWidth: 640, width: '100%', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ background: 'var(--ink)', padding: '24px 28px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>OS's com pedidos em dias diferentes</h3>
+                <p style={{ margin: 0, fontSize: 10, color: 'rgba(255,255,255,.5)', textTransform: 'uppercase', letterSpacing: '.1em', marginTop: 4 }}>{osComPedidosEmDiasDiferentes.length} OS{osComPedidosEmDiasDiferentes.length !== 1 ? "'s" : ''} no período</p>
+              </div>
+              <button onClick={() => setOsMultiDiaAberto(false)} style={{ background: 'rgba(255,255,255,.1)', border: 'none', color: '#fff', width: 32, height: 32, borderRadius: 999, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="x" size={20} /></button>
+            </div>
+            <div className="scroll-y" style={{ padding: 24, flex: 1 }}>
+              {osComPedidosEmDiasDiferentes.length === 0 ? (
+                <p style={{ fontSize: 10, color: 'var(--muted)', textAlign: 'center', padding: '30px 0' }}>Nenhuma OS teve pedidos em dias diferentes neste período.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {osComPedidosEmDiasDiferentes.map((g, gi) => (
+                    <div key={gi} className="card" style={{ padding: 14 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 6 }}>
+                        <div>
+                          <span style={{ fontSize: 14, fontWeight: 800 }}>OS #{g.os}</span>
+                          <span style={{ fontSize: 9, color: 'var(--muted)', fontWeight: 700, textTransform: 'uppercase', marginLeft: 8 }}>{g.vehicleData?.modelo || '—'}</span>
+                        </div>
+                        <span className="pill" style={{ fontSize: 8 }}>{g.totalDias} dias · {g.totalPedidos} pedido{g.totalPedidos !== 1 ? 's' : ''}</span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {g.diasOrdenados.map(([dateKey, pedidosDia]) => (
+                          <div key={dateKey} style={{ background: 'var(--smoke)', border: '1px solid var(--border)', borderRadius: 10, padding: 10 }}>
+                            <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', color: 'var(--red)', margin: '0 0 6px' }}>{new Date(dateKey + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                              {pedidosDia.map((r, ri) => (
+                                <div key={ri} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                  <p style={{ fontSize: 9, fontWeight: 700, margin: 0 }}>{r.responsavel || '—'} · {r.items?.length || 0} item(ns)</p>
+                                  {r.items && r.items.length > 0 && (
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                                      {r.items.map((it, ii) => (
+                                        <span key={ii} style={{ fontSize: 8, fontWeight: 700, textTransform: 'uppercase', background: '#fff', border: '1px solid var(--border)', borderRadius: 6, padding: '2px 7px', color: 'var(--ink)' }}>{it.quantity}× {it.description || '(sem descrição)'}</span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)', background: 'var(--smoke)' }}>
+              <button onClick={() => setOsMultiDiaAberto(false)} className="btn-primary" style={{ width: '100%' }}>Fechar</button>
             </div>
           </div>
         </div>
