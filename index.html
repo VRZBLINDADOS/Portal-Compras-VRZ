@@ -5582,6 +5582,8 @@ const dadosCompra = useMemo(() => {
     const map = {};
     diasDoPeriodo.forEach(d => { map[d.date] = { ...d, itens: [], valor: 0, osSet: new Set() }; });
    const osComCompra = new Set();
+   let resolvidoFabricaCount = 0, estoqueCount = 0;
+   const resolvidoFabricaOS = new Set(), estoqueOS = new Set();
     requests.forEach(r => {
       (r.items || []).forEach(it => {
         if (!it.boughtAt) return;
@@ -5592,6 +5594,14 @@ const dadosCompra = useMemo(() => {
           map[dateKey].itens.push({ ...it, os: r.os, _preco: preco });
           map[dateKey].valor += preco;
           if (r.os) { map[dateKey].osSet.add(String(r.os).trim()); osComCompra.add(String(r.os).trim()); }
+         const fornecedorNorm = String(it.supplier || '').trim().toUpperCase();
+          if (fornecedorNorm === 'RESOLVIDO NA FABRICA' || fornecedorNorm === 'RESOLVIDO NA FÁBRICA') {
+            resolvidoFabricaCount++;
+            if (r.os) resolvidoFabricaOS.add(String(r.os).trim());
+          } else if (fornecedorNorm === 'ESTOQUE') {
+            estoqueCount++;
+            if (r.os) estoqueOS.add(String(r.os).trim());
+          }
         }
       });
     });
@@ -5599,7 +5609,11 @@ const dadosCompra = useMemo(() => {
     const totalValor = dias.reduce((a, d) => a + d.valor, 0);
     const totalItens = dias.reduce((a, d) => a + d.itens.length, 0);
     const mediaValorOS = osComCompra.size > 0 ? (totalValor / osComCompra.size) : 0;
-    return { dias, totalItens, osUnicas: osComCompra.size, totalValor, mediaValorOS };
+    return {
+      dias, totalItens, osUnicas: osComCompra.size, totalValor, mediaValorOS,
+      resolvidoFabricaCount, resolvidoFabricaOSCount: resolvidoFabricaOS.size,
+      estoqueCount, estoqueOSCount: estoqueOS.size,
+    };
   }, [requests, diasDoPeriodo]);
 
 const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
@@ -5713,8 +5727,8 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
       ctx.fillStyle = diaSelecionado?.date === d.date ? '#A81515' : '#DC1F1F';
       ctx.fill();
 
-      // Value on top - Mostrar sempre conforme solicitado
-      if (val > 0) {
+     // Value on top - Mostrar sempre, inclusive quando o valor for R$ 0,00 (RESOLVIDO NA FABRICA / ESTOQUE)
+      if (val > 0 || count > 0) {
         ctx.fillStyle = '#000';
         ctx.font = 'bold 10px Plus Jakarta Sans';
         ctx.textAlign = 'center';
@@ -5875,7 +5889,9 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
           { label: 'Média por veículo', v: mediaPorCarro, sub: 'peças / carro', icon: 'car', red: true },
           { label: 'Itens comprados', v: dadosCompra.totalItens, sub: `${dadosCompra.osUnicas} OS com compra`, icon: 'shopping-bag' },
           { label: 'Valor médio / OS', v: dadosCompra.mediaValorOS > 0 ? fmtBRL(dadosCompra.mediaValorOS) : '—', sub: 'no período', icon: 'trending-up' },
-          { label: 'Total gasto', v: dadosCompra.totalValor > 0 ? fmtBRL(dadosCompra.totalValor) : '—', sub: 'em compras', icon: 'banknote' },
+{ label: 'Total gasto', v: dadosCompra.totalValor > 0 ? fmtBRL(dadosCompra.totalValor) : '—', sub: 'em compras', icon: 'banknote' },
+          { label: 'Resolvido na Fábrica', v: dadosCompra.resolvidoFabricaCount, sub: `${dadosCompra.resolvidoFabricaOSCount} OS's no período`, icon: 'factory' },
+          { label: 'Retirado do Estoque', v: dadosCompra.estoqueCount, sub: `${dadosCompra.estoqueOSCount} OS's no período`, icon: 'boxes' },
           { label: "OS's c/ pedidos em dias diferentes", v: osComPedidosEmDiasDiferentes.length, sub: 'clique para ver detalhes', icon: 'calendar-clock', dark: true, onClick: () => setOsMultiDiaAberto(true) },
         ].map((k, i) => (
           <div key={i} onClick={k.onClick} style={{ background: k.dark ? '#0D0D0D' : k.red ? 'var(--red)' : 'var(--smoke)', color: k.dark || k.red ? '#fff' : 'var(--ink)', borderRadius: 14, padding: '16px 18px', border: (!k.dark && !k.red) ? '1.5px solid var(--border)' : 'none', cursor: k.onClick ? 'pointer' : 'default' }}>
