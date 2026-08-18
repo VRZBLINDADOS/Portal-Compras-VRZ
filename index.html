@@ -4174,8 +4174,7 @@ async function buildFinalizacaoPDF(fin, pecasItems, comFoto=true){
   doc.setFont('helvetica','bold');doc.setFontSize(11);doc.text('Dados do Veículo',10,y);y+=7;
   doc.setFont('helvetica','normal');doc.setFontSize(9);
   const vd=fin.vehicleData||{};
-  [['Modelo',vd.modelo],['Chassi',vd.chassi],['Cor',vd.cor],['Etapa',vd.etapa],['Criado por',fin.criadoPor],['Criado em',fin.criadoEm?new Date(fin.criadoEm).toLocaleString('pt-BR'):'—']].forEach(([l,v])=>{doc.text(`${l}: ${v||'—'}`,10,y);y+=6;});
-  y+=4;
+    [['Inspeção',etapaOf(fin)],['Modelo',vd.modelo],['Chassi',vd.chassi],['Cor',vd.cor],['Etapa Produção',vd.etapa],['Criado por',fin.criadoPor],['Criado em',fin.criadoEm?new Date(fin.criadoEm).toLocaleString('pt-BR'):'—']].forEach(([l,v])=>{doc.text(`${l}: ${v||'—'}`,10,y);y+=6;});
   const secao=async(titulo,items)=>{
     if(y>260){doc.addPage();y=15;}
     doc.setFont('helvetica','bold');doc.setFontSize(11);doc.text(titulo,10,y);y+=7;
@@ -4850,6 +4849,7 @@ function EditarInspecaoModal({fin,loggedInUser,onClose}){
 
 function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
   const[search,setSearch]=useState('');
+  const[etapaFiltro,setEtapaFiltro]=useState('todas');
   const[subTab,setSubTab]=useState('pendentes');
   const[confirmDelFin,setConfirmDelFin]=useState(null);
   const[confirmDelProb,setConfirmDelProb]=useState(null);
@@ -4880,12 +4880,13 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
   const baseVisiveis=useMemo(()=>{
     let list=podeVerTodos?finalizacoes:finalizacoes.filter(f=>f.criadoPor===loggedInUser.user);
     list=list.filter(f=>!f.arquivada);
+    if(etapaFiltro!=='todas')list=list.filter(f=>etapaOf(f)===etapaFiltro);
     if(search){
       const t=search.toLowerCase();
       list=list.filter(f=>String(f.os).toLowerCase().includes(t)||String(f.vehicleData?.modelo||'').toLowerCase().includes(t)||String(f.criadoPor||'').toLowerCase().includes(t));
     }
     return list.sort((a,b)=>b.criadoEm-a.criadoEm);
-  },[finalizacoes,loggedInUser,isMaster,search]);
+  },[finalizacoes,loggedInUser,isMaster,search,etapaFiltro]);
 
   // Calcula se a inspeção está 100% concluída (Ajuste + Pintura + Peças sem pendência)
 const comStatus=useMemo(()=>baseVisiveis.map(fin=>{
@@ -4965,13 +4966,14 @@ const exportarPDF=async(fin,comFoto=true)=>{
 
   const exportarExcel=()=>{
     const csvCell=(v)=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
-const rows=[[csvCell('OS'),csvCell('Chassi'),csvCell('Modelo'),csvCell('Ajustes'),csvCell('Martelinho'),csvCell('Pintura'),csvCell('Vidro'),csvCell('Estética'),csvCell('Instalação Peças'),csvCell('Peças'),csvCell('Responsável')].join(';')];
+const rows=[[csvCell('OS'),csvCell('Etapa Inspeção'),csvCell('Chassi'),csvCell('Modelo'),csvCell('Ajustes'),csvCell('Martelinho'),csvCell('Pintura'),csvCell('Vidro'),csvCell('Estética'),csvCell('Instalação Peças'),csvCell('Peças'),csvCell('Responsável')].join(';')];
   baseVisiveis.forEach(fin=>{
       const fmtProblemas=(items)=>(items||[]).map(p=>`${p.status==='Solucionado'?'[Solucionado]':'[Pendente]'} ${p.descricao||'(sem descrição)'}${p.tipo?' ('+p.tipo+')':''}`).join(' | ')||'—';
       const pecasItems=(pecasByOS[String(fin.os).trim()]||[]).filter(it=>!it.excedente);
       const fmtPecas=pecasItems.map(it=>`${it.quantity}x ${it.description} — ${it.statusOriginal||it.status||'Pendente'}`).join(' | ')||'—';
       rows.push([
         csvCell(fin.os),
+        csvCell(etapaOf(fin)),
         csvCell(fin.vehicleData?.chassi||'—'),
         csvCell(fin.vehicleData?.modelo||'—'),
         csvCell(fmtProblemas(fin.ajuste)),
@@ -4991,11 +4993,15 @@ const rows=[[csvCell('OS'),csvCell('Chassi'),csvCell('Modelo'),csvCell('Ajustes'
   return(
     <>
     <div className="fade-up" style={{paddingBottom:30}}>
-      <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center',marginBottom:16}}>
+           <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center',marginBottom:16}}>
         <div style={{position:'relative',flex:1,minWidth:200}}>
           <input type="text" placeholder="Buscar OS / Modelo / Usuário..." value={search} onChange={e=>setSearch(e.target.value)} className="input" style={{paddingLeft:36}}/>
           <div style={{position:'absolute',left:11,top:'50%',transform:'translateY(-50%)',color:'var(--muted)'}}><Icon name="search" size={14}/></div>
         </div>
+        <select value={etapaFiltro} onChange={e=>setEtapaFiltro(e.target.value)} className="input" style={{width:'auto',padding:'10px 14px',fontSize:10,fontWeight:700,appearance:'auto'}}>
+          <option value="todas">Todas as Etapas</option>
+          {ETAPAS_INSPECAO.map(et=><option key={et} value={et}>{et}</option>)}
+        </select>
         <button onClick={exportarExcel} style={{display:'flex',alignItems:'center',gap:6,padding:'10px 16px',background:'#059669',color:'#fff',border:'none',borderRadius:10,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif',whiteSpace:'nowrap'}}>
           <Icon name="file-spreadsheet" size={14}/> Exportar Excel
         </button>
@@ -5031,9 +5037,10 @@ const rows=[[csvCell('OS'),csvCell('Chassi'),csvCell('Modelo'),csvCell('Ajustes'
             return(
               <div key={fin.id} className="card" style={{borderLeft:`3px solid ${totalPend>0?'var(--red)':'#059669'}`}}>
                 <div style={{padding:'14px 16px',borderBottom:'1px solid var(--border)',background:'var(--smoke)',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                                  <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
                     <span style={{fontSize:14,fontWeight:800}}>OS #{fin.os}</span>
                     <span className="pill">{fin.unidade||'Unidade 1'}</span>
+                    <span style={{fontSize:8,fontWeight:800,padding:'2px 9px',borderRadius:999,background:'var(--ink)',color:'#fff',textTransform:'uppercase',letterSpacing:'.04em'}}>{etapaOf(fin)}</span>
                     <span style={{fontSize:9,color:'var(--muted)',fontWeight:700,textTransform:'uppercase'}}>{fin.vehicleData?.modelo||'—'}</span>
                     <span style={{fontSize:8,fontWeight:700,color:'var(--muted)',display:'inline-flex',alignItems:'center',gap:3}}><Icon name="calendar" size={10}/> Aberto: {fin.criadoEm?new Date(fin.criadoEm).toLocaleDateString('pt-BR'):'—'}</span>
                     {inspecaoConcluida&&dataSolucao&&<span style={{fontSize:8,fontWeight:700,color:'#059669',display:'inline-flex',alignItems:'center',gap:3}}><Icon name="check-circle" size={10}/> Solucionado: {new Date(dataSolucao).toLocaleDateString('pt-BR')}</span>}
