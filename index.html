@@ -5628,17 +5628,26 @@ function PedidosExcedentesView({requests}){
 
 // ── App Principal
  // ── Resumo Reunião ────────────────────────────────────────────────────────
-function ResumoReuniaoView({requests}){
-  const [periodo, setPeriodo] = useState('semanal'); // 'semanal', 'quinzenal', 'mensal'
+function ResumoReuniaoView({requests, vehicles}){
+  const [periodo, setPeriodo] = useState('semanal'); // 'diario', 'semanal', 'quinzenal', 'mensal'
   const [offset, setOffset] = useState(0);
   const [diaSelecionado, setDiaSelecionado] = useState(null);
   const [osMultiDiaAberto, setOsMultiDiaAberto] = useState(false);
+
+  const vehicleMapLinha = useMemo(() => { const m = {}; (vehicles || []).forEach(v => { m[String(v.os).trim()] = v; }); return m; }, [vehicles]);
 
   const { inicioPeriodo, fimPeriodo, numDias } = useMemo(() => {
     const agora = new Date();
     let ini, fim, n;
 
-    if (periodo === 'semanal') {
+    if (periodo === 'diario') {
+      ini = new Date(agora);
+      ini.setDate(agora.getDate() + offset);
+      ini.setHours(0, 0, 0, 0);
+      fim = new Date(ini);
+      fim.setHours(23, 59, 59, 999);
+      n = 1;
+    } else if (periodo === 'semanal') {
       const diaSem = agora.getDay();
       ini = new Date(agora);
       ini.setDate(agora.getDate() - diaSem + (offset * 7));
@@ -5855,6 +5864,43 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
     a.download = `Auditoria_Compras_${inicioPeriodo.toLocaleDateString('pt-BR').replace(/\//g, '-')}_a_${fimPeriodo.toLocaleDateString('pt-BR').replace(/\//g, '-')}.csv`;
     a.click();
   };
+    const dadosPorLinha = useMemo(() => {
+    const map = {};
+    const getLinhaProd = (osVal, vehicleData) => {
+      const vInfo = vehicleMapLinha[String(osVal || '').trim()];
+      return (vInfo?.linhaProducao || vehicleData?.linhaProducao || 'N/D').trim() || 'N/D';
+    };
+    const ensure = (linha) => { if (!map[linha]) map[linha] = { linha, requisitadas: 0, compradas: 0, valor: 0 }; return map[linha]; };
+
+    pedidosConsolidados(requests).forEach(r => {
+      if (!r.timestamp) return;
+      const dt = new Date(r.timestamp);
+      if (dt < inicioPeriodo || dt > fimPeriodo) return;
+      const linha = getLinhaProd(r.os, r.vehicleData);
+      ensure(linha).requisitadas += (r.items?.length || 0);
+    });
+
+    requests.forEach(r => {
+      (r.items || []).forEach(it => {
+        const dataBaseCompra = it.boughtAt || it.actualDeliveryDate;
+        if (!dataBaseCompra) return;
+        if (it.duplicataDeDoacao) return;
+        const dt = new Date(String(dataBaseCompra).trim().slice(0, 10) + 'T00:00:00');
+        if (dt < inicioPeriodo || dt > fimPeriodo) return;
+        const linha = getLinhaProd(r.os, r.vehicleData);
+        const g = ensure(linha);
+        g.compradas += 1;
+        g.valor += parsePrice(it.price);
+      });
+    });
+
+    return Object.values(map).sort((a, b) => b.valor - a.valor);
+  }, [requests, vehicleMapLinha, inicioPeriodo, fimPeriodo]);
+
+  const maxReqLinha = Math.max(...dadosPorLinha.map(d => d.requisitadas), 1);
+  const maxValLinha2 = Math.max(...dadosPorLinha.map(d => d.valor), 1);
+  const totalValorLinhas = dadosPorLinha.reduce((a, d) => a + d.valor, 0);
+
   const maxValDia = Math.max(...dadosCompra.dias.map(d => d.valor), 1);
 
   // Helper para renderizar gráfico estilo "Diretoria"
@@ -6031,13 +6077,13 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
               <span className="pulse-beacon" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--red)', display: 'inline-block' }} />
               <span style={{ fontSize: 8, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.14em', color: 'rgba(255, 255, 255, .6)' }}>Relatório de Diretoria</span>
             </div>
-          <h2 style={{ fontSize: 34, fontWeight: 800, margin: '0', letterSpacing: '-.03em', lineHeight: 1 }}>Resumo {periodo === 'semanal' ? 'da Semana' : periodo === 'quinzenal' ? 'da Quinzena' : 'do Mês'}</h2>
+                    <h2 style={{ fontSize: 34, fontWeight: 800, margin: '0', letterSpacing: '-.03em', lineHeight: 1 }}>Resumo {periodo === 'diario' ? 'do Dia' : periodo === 'semanal' ? 'da Semana' : periodo === 'quinzenal' ? 'da Quinzena' : 'do Mês'}</h2>
             <div style={{marginTop:10}}><LastUpdateBadge/></div>
           </div>
 
           {/* Seletores de Período */}
-          <div style={{ display: 'flex', background: 'var(--smoke)', padding: 4, borderRadius: 12, border: '1.5px solid var(--border)' }}>
-            {['semanal', 'quinzenal', 'mensal'].map(p => (
+                  <div style={{ display: 'flex', background: 'var(--smoke)', padding: 4, borderRadius: 12, border: '1.5px solid var(--border)' }}>
+            {['diario', 'semanal', 'quinzenal', 'mensal'].map(p => (
               <button
                 key={p}
                 onClick={() => { setPeriodo(p); setOffset(0); }}
@@ -6150,9 +6196,57 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
             </div>
           </div>
         </div>
-        <div style={{ overflowX: 'auto' }}>
+                <div style={{ overflowX: 'auto' }}>
           <canvas ref={refBar2} width={periodo === 'mensal' ? 1200 : 840} height={300} style={{ width: '100%', height: 'auto', minWidth: periodo === 'mensal' ? 800 : 'auto' }} />
         </div>
+      </div>
+
+      {/* Compras por Linha de Produção */}
+      <div className="card" style={{ padding: 24, marginTop: 16 }}>
+        <div style={{ marginBottom: 20 }}>
+          <p style={{ fontSize: 8, fontWeight: 800, textTransform: 'uppercase', color: 'var(--red)', margin: '0 0 4px' }}>Comparativo por linha de produção</p>
+          <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Peças Requisitadas × Compradas por Linha</h3>
+          <p style={{ fontSize: 9, color: 'var(--muted)', marginTop: 6 }}>Período: {fmtPeriodo}</p>
+        </div>
+        {dadosPorLinha.length === 0 ? (
+          <p style={{ fontSize: 10, color: 'var(--muted)', textAlign: 'center', padding: '20px 0' }}>Nenhum dado de linha de produção encontrado no período.</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            {dadosPorLinha.map((d, i) => {
+              const prop = d.requisitadas > 0 ? Math.round((d.compradas / d.requisitadas) * 100) : 0;
+              const pctValor = totalValorLinhas > 0 ? Math.round((d.valor / totalValorLinhas) * 100) : 0;
+              return (
+                <div key={i} style={{ background: 'var(--smoke)', border: '1px solid var(--border)', borderRadius: 12, padding: 14 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 22, height: 22, borderRadius: 6, background: 'var(--ink)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="factory" size={12} style={{ color: '#fff' }} /></div>
+                      <span style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase' }}>{d.linha}</span>
+                    </div>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--red)' }}>{fmtBRL(d.valor)} <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--muted)' }}>({pctValor}% do gasto total)</span></span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 8, fontWeight: 700, color: 'var(--muted)', width: 130, flexShrink: 0 }}>Peças requisitadas</span>
+                      <div className="progress-track" style={{ flex: 1 }}><div className="progress-fill" style={{ width: `${d.requisitadas / maxReqLinha * 100}%`, background: '#1A4EC2' }} /></div>
+                      <span style={{ fontSize: 10, fontWeight: 800, width: 34, textAlign: 'right', flexShrink: 0 }}>{d.requisitadas}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 8, fontWeight: 700, color: 'var(--muted)', width: 130, flexShrink: 0 }}>Peças compradas</span>
+                      <div className="progress-track" style={{ flex: 1 }}><div className="progress-fill" style={{ width: `${d.compradas / maxReqLinha * 100}%`, background: '#059669' }} /></div>
+                      <span style={{ fontSize: 10, fontWeight: 800, width: 34, textAlign: 'right', flexShrink: 0 }}>{d.compradas}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 8, fontWeight: 700, color: 'var(--muted)', width: 130, flexShrink: 0 }}>Valor gasto</span>
+                      <div className="progress-track" style={{ flex: 1 }}><div className="progress-fill" style={{ width: `${d.valor / maxValLinha2 * 100}%`, background: 'var(--red)' }} /></div>
+                      <span style={{ fontSize: 9, fontWeight: 800, width: 70, textAlign: 'right', flexShrink: 0 }}>{fmtBRL(d.valor)}</span>
+                    </div>
+                  </div>
+                  <p style={{ fontSize: 8, fontWeight: 700, color: 'var(--muted)', marginTop: 8 }}>{prop}% das peças requisitadas nesta linha já foram compradas</p>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Modal de Detalhes do Dia */}
@@ -7104,7 +7198,7 @@ const navItems=[
     {key:'status',icon:'search',label:'Histórico'},
     {key:'chegadas',icon:'package-check',label:'Chegadas',badge:chegadasNaoLidas},
     {key:'estoque',icon:'boxes',label:'Estoque'},
-    canAccessFinalizacao&&{key:'finalizacao',icon:'clipboard-check',label:'Finalização'},
+        canAccessFinalizacao&&{key:'finalizacao',icon:'clipboard-check',label:'Inspeção'},
     canAccessFeedbackFinalizacao&&{key:'feedbackFinalizacao',icon:'message-square',label:'Feedback Finalização'},
     canAccessFeedbackFinalizacao&&{key:'feedbackFinalizacaoReuniao',icon:'presentation',label:'Feedback Finalização Reunião'},
     loggedIn?.user===MASTER_USER&&{key:'donor',icon:'git-merge',label:'Doações'},
@@ -7201,7 +7295,7 @@ const navItems=[
             {loading?<Skeleton/>:(
               <>
                 {view==='dashboard'&&(isMaster||isAdmin)&&<DashboardView requests={requests} vehicles={vehicles}/>}
-{view==='resumo'&&(loggedIn?.user===MASTER_USER||loggedIn?.user==='Matheus.Ransi')&&<ResumoReuniaoView requests={requests}/>}
+{view==='resumo'&&(loggedIn?.user===MASTER_USER||loggedIn?.user==='Matheus.Ransi')&&<ResumoReuniaoView requests={requests} vehicles={vehicles}/>}
                 {view==='request'&&isSol&&<RequestForm user={user} loggedInUser={loggedIn} vehiclesDB={vehicles} requests={requests}/>}
                 {view==='status'&&<StatusView requests={requests} loggedInUser={loggedIn} vehicles={vehicles}/>}
                 {view==='chegadas'&&<ChegadasView requests={requests} loggedInUser={loggedIn} vehicles={vehicles}/>}
