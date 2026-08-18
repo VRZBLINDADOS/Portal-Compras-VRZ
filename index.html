@@ -1012,6 +1012,8 @@ const stats=useMemo(()=>{
 }
 const LINHAS_ROGERIO=['Linha 1','Linha 2','Linha 3'];
 const LINHAS_SOARES=['Linha 4','Linha 5','Linha 6','Linha 7'];
+const ETAPAS_INSPECAO=['QA1','QA2','FN1','FN2'];
+const etapaOf=(fin)=>fin?.etapaInspecao||'QA1';
 
 function FeedbackFinalizacaoView({finalizacoes,requests,vehicles,loggedInUser}){
   const isAdminView=loggedInUser?.user===MASTER_USER||loggedInUser?.user==='Cleber.Zonta'||loggedInUser?.user==='Leonardo.Teixeira';
@@ -4430,6 +4432,7 @@ function NovaFinalizacaoForm({vehiclesDB,requests,loggedInUser,isMaster,finaliza
   const[os,setOs]=useState('');
   const[vehicle,setVehicle]=useState(null);
   const[unidade,setUnidade]=useState('Unidade 1');
+  const[etapaInspecao,setEtapaInspecao]=useState('');
 const[ajuste,setAjuste]=useState([]);
   const[martelinho,setMartelinho]=useState([]);
   const[pintura,setPintura]=useState([]);
@@ -4455,17 +4458,17 @@ const[ajuste,setAjuste]=useState([]);
   const[readOnly,setReadOnly]=useState(false);
 const[showFotoAlert,setShowFotoAlert]=useState(false);
 
-  const disabled=!vehicle||readOnly;
+    const disabled=!vehicle||readOnly||!etapaInspecao;
 
   // Rascunho automático em localStorage — protege contra perda de dados por erro/fechamento acidental
 useEffect(()=>{
-    if(!os.trim()||!vehicle||readOnly)return;
+    if(!os.trim()||!vehicle||readOnly||!etapaInspecao)return;
     const rascunho={ajuste,martelinho,pintura,vidro,outro,instalacaoPecas,pecasEscolha,mostrarNovas,mostrarExcedente,novasPecas,excedentes,salvoEm:Date.now()};
     const t=setTimeout(()=>{
-      try{localStorage.setItem('rascunho_finalizacao_'+os.trim(),JSON.stringify(rascunho));}catch(e){}
+      try{localStorage.setItem('rascunho_finalizacao_'+os.trim()+'_'+etapaInspecao,JSON.stringify(rascunho));}catch(e){}
     },800);
     return()=>clearTimeout(t);
-  },[ajuste,martelinho,pintura,vidro,outro,instalacaoPecas,pecasEscolha,mostrarNovas,mostrarExcedente,novasPecas,excedentes,os,vehicle,readOnly]);
+  },[ajuste,martelinho,pintura,vidro,outro,instalacaoPecas,pecasEscolha,mostrarNovas,mostrarExcedente,novasPecas,excedentes,os,vehicle,readOnly,etapaInspecao]);
   const onSetOpcao=(v)=>{
     setPecasEscolha(v);
     if(v==='novas'){setMostrarNovas(true);setMostrarExcedente(false);setPerguntaExcedenteFeita(false);}
@@ -4473,8 +4476,8 @@ useEffect(()=>{
     else{setMostrarNovas(false);setMostrarExcedente(false);}
   };
 
- const carregarFin=(t)=>{
-    const fin=finalizacoes.find(f=>String(f.os).trim()===t&&!f.arquivada);
+ const carregarFin=(t,etapa)=>{
+    const fin=finalizacoes.find(f=>String(f.os).trim()===t&&!f.arquivada&&etapaOf(f)===etapa);
   if(fin){
      setExistingFin(fin);
      setAjuste(fin.ajuste||[]);
@@ -4504,14 +4507,15 @@ useEffect(()=>{
   };
  const onOSBlur=()=>{
     const t=String(os).trim();if(!t)return;
+    if(!etapaInspecao){alert('Selecione a etapa de inspeção (QA1, QA2, FN1 ou FN2) antes de informar a OS.');return;}
     const f=vehiclesDB.find(v=>String(v.os).trim()===t);
     if(f){
       setVehicle(f);
       const req=requests.find(r=>String(r.os).trim()===t);
       if(req)setUnidade(req.unidade||'Unidade 1');
-      carregarFin(t);
+      carregarFin(t,etapaInspecao);
       try{
-        const raw=localStorage.getItem('rascunho_finalizacao_'+t);
+        const raw=localStorage.getItem('rascunho_finalizacao_'+t+'_'+etapaInspecao);
         if(raw){
           const rascunho=JSON.parse(raw);
         if(window.confirm('Encontramos um rascunho não salvo desta OS (de '+new Date(rascunho.salvoEm).toLocaleString('pt-BR')+'). Deseja restaurá-lo?')){
@@ -4527,12 +4531,18 @@ useEffect(()=>{
             setNovasPecas(rascunho.novasPecas||[]);
             setExcedentes(rascunho.excedentes||[]);
           }else{
-            localStorage.removeItem('rascunho_finalizacao_'+t);
+          localStorage.removeItem('rascunho_finalizacao_'+t+'_'+etapaInspecao);
           }
         }
       }catch(e){}
-    }else{setVehicle(null);setExistingFin(null);setReadOnly(false);alert('OS não cadastrada.');}
+      }else{setVehicle(null);setExistingFin(null);setReadOnly(false);alert('OS não cadastrada.');}
   };
+
+  useEffect(()=>{
+    if(vehicle&&os.trim()&&etapaInspecao)carregarFin(os.trim(),etapaInspecao);
+    // eslint-disable-next-line
+  },[etapaInspecao]);
+
 const reset=()=>{
     try{if(os.trim())localStorage.removeItem('rascunho_finalizacao_'+os.trim());}catch(e){}
     setOs('');setVehicle(null);setUnidade('Unidade 1');setAjuste([]);setMartelinho([]);setPintura([]);setVidro([]);setOutro([]);setInstalacaoPecas([]);
@@ -4598,9 +4608,9 @@ const executarSalvar=async()=>{
           pecasOpcao:opcaoFinal,
           historico:[...(existingFin.historico||[]),historicoEntry,...diffEntradasHist],
         }));
-      }else{
+           }else{
         await col('finalizacoes').add(stripUndefined({
-          os,unidade,vehicleData:vehicle,
+          os,unidade,vehicleData:vehicle,etapaInspecao,
           criadoPor:loggedInUser.user,criadoEm:now,
           ajuste:ajusteUp.map(p=>({...p})),
           martelinho:martelinhoUp.map(p=>({...p})),
@@ -4612,7 +4622,7 @@ const executarSalvar=async()=>{
           historico:[historicoEntry,...diffEntradasHist],
         }));
       }
-     try{localStorage.removeItem('rascunho_finalizacao_'+os.trim());}catch(e){}
+      try{localStorage.removeItem('rascunho_finalizacao_'+os.trim()+'_'+etapaInspecao);}catch(e){}
       clearTimeout(timeoutId);
       setDone(true);
     }catch(e){
@@ -4623,8 +4633,9 @@ const executarSalvar=async()=>{
     setSaving(false);
   };
 
-  const handleSalvarClick=()=>{
+   const handleSalvarClick=()=>{
     if(readOnly)return;
+    if(!etapaInspecao)return alert('Selecione a etapa de inspeção (QA1, QA2, FN1 ou FN2).');
     if(!os.trim())return alert('Informe a OS.');
     if(!vehicle)return alert('OS não cadastrada.');
     if(pecasEscolha==='novas'&&!perguntaExcedenteFeita){setPerguntaPendente('excedente');return;}
@@ -4693,17 +4704,27 @@ const executarSalvar=async()=>{
           </div>
         </div>
       )}
-      <div className="card" style={{marginBottom:16}}>
+          <div className="card" style={{marginBottom:16,padding:20}}>
+        <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:10}}>Etapa da Inspeção *</p>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+          {ETAPAS_INSPECAO.map(et=>(
+            <button key={et} type="button" onClick={()=>setEtapaInspecao(et)} style={{padding:'10px 22px',borderRadius:10,border:`2px solid ${etapaInspecao===et?'var(--red)':'var(--border)'}`,background:etapaInspecao===et?'var(--red)':'#fff',color:etapaInspecao===et?'#fff':'var(--ink)',fontSize:12,fontWeight:800,cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>{et}</button>
+          ))}
+        </div>
+        {!etapaInspecao&&<p style={{fontSize:9,color:'var(--red)',fontWeight:700,marginTop:10}}>Selecione a etapa antes de informar a OS.</p>}
+      </div>
+
+      <div className="card" style={{marginBottom:16,opacity:etapaInspecao?1:.5}}>
         <div style={{padding:20,display:'flex',flexDirection:'column',gap:16}}>
           <div>
             <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',display:'block',marginBottom:6}}>Número da OS</label>
-            <input type="text" inputMode="numeric" value={os} onChange={e=>setOs(sanitize(e.target.value))} onBlur={onOSBlur} placeholder="Nº da OS" className="input" style={{fontSize:22,fontWeight:800}}/>
+            <input type="text" inputMode="numeric" value={os} onChange={e=>setOs(sanitize(e.target.value))} onBlur={onOSBlur} placeholder="Nº da OS" className="input" style={{fontSize:22,fontWeight:800}} disabled={!etapaInspecao}/>
           </div>
-         {existingFin&&(
+                 {existingFin&&(
             <div style={{background:'#EAF0FF',border:'1px solid #C0D0F5',borderRadius:10,padding:'10px 14px',display:'flex',alignItems:'center',gap:10}}>
               <Icon name="info" size={16} style={{color:'#1A4EC2',flexShrink:0}}/>
               <p style={{fontSize:10,fontWeight:700,color:'#1A4EC2',margin:0}}>
-                Esta Ordem de Serviço já possui uma inspeção criada por <strong>{existingFin.criadoPor}</strong>. Qualquer inspetor pode continuar editando, adicionando ou removendo itens — todas as alterações ficam registradas no histórico.
+                Esta OS já possui uma inspeção <strong>{etapaOf(existingFin)}</strong> criada por <strong>{existingFin.criadoPor}</strong>. Qualquer inspetor pode continuar editando, adicionando ou removendo itens — todas as alterações ficam registradas no histórico.
               </p>
             </div>
           )}
@@ -4746,8 +4767,8 @@ const executarSalvar=async()=>{
         pecasEscolha={pecasEscolha} mostrarNovas={mostrarNovas} mostrarExcedente={mostrarExcedente}
         onSetOpcao={onSetOpcao} disabled={disabled}/>
 
-      {!readOnly&&(
-        <button onClick={handleSalvarClick} disabled={saving||!vehicle} className="btn-primary" style={{width:'100%',padding:16,fontSize:12}}>
+          {!readOnly&&(
+        <button onClick={handleSalvarClick} disabled={saving||!vehicle||!etapaInspecao} className="btn-primary" style={{width:'100%',padding:16,fontSize:12}}>
           {saving?<Icon name="refresh-cw" size={18} className="spin"/>:<><Icon name="save" size={16}/> Salvar Inspeção</>}
         </button>
       )}
