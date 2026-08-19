@@ -5666,6 +5666,7 @@ function ResumoReuniaoView({requests, vehicles}){
     const [diaSelecionado, setDiaSelecionado] = useState(null);
   const [osMultiDiaAberto, setOsMultiDiaAberto] = useState(false);
   const [linhaSelecionadaResumo, setLinhaSelecionadaResumo] = useState(null);
+  const [detalheKpi, setDetalheKpi] = useState(null);
 
   const vehicleMapLinha = useMemo(() => { const m = {}; (vehicles || []).forEach(v => { m[String(v.os).trim()] = v; }); return m; }, [vehicles]);
 
@@ -5856,12 +5857,37 @@ const dadosCompra = useMemo(() => {
     const totalValor = dias.reduce((a, d) => a + d.valor, 0);
     const totalItens = dias.reduce((a, d) => a + d.itens.reduce((s,it)=>s+(Number(it.quantity)||1),0), 0);
     const mediaValorOS = osComCompra.size > 0 ? (totalValor / osComCompra.size) : 0;
-    return {
+        return {
       dias, totalItens, osUnicas: osComCompra.size, totalValor, mediaValorOS,
       resolvidoFabricaCount, resolvidoFabricaOSCount: resolvidoFabricaOS.size,
       estoqueCount, estoqueOSCount: estoqueOS.size,
     };
   }, [requests, diasDoPeriodo]);
+
+  // Listas achatadas usadas pelos cards de KPI clicáveis — mesma origem de dadosDia/dadosCompra
+  const itensRequisitadosFlat = useMemo(() => dadosDia.flatMap(d => d.pedidos.flatMap(p => (p.items || []).map(it => ({
+    os: p.os, description: it.description, quantity: it.quantity || 1, responsavel: p.responsavel,
+  })))), [dadosDia]);
+  const itensCompradosFlat = useMemo(() => dadosCompra.dias.flatMap(d => d.itens), [dadosCompra]);
+
+  const agruparPorOS = (itens, valorField) => {
+    const map = {};
+    itens.forEach(it => {
+      const key = String(it.os || '—');
+      if (!map[key]) map[key] = { os: it.os, itens: [], totalQtd: 0, totalValor: 0 };
+      map[key].itens.push(it);
+      map[key].totalQtd += (it.quantity || 1);
+      if (valorField) map[key].totalValor += (it[valorField] || 0);
+    });
+    return Object.values(map).sort((a, b) => (b.totalValor || b.totalQtd) - (a.totalValor || a.totalQtd));
+  };
+  const porOSRequisitadas = useMemo(() => agruparPorOS(itensRequisitadosFlat), [itensRequisitadosFlat]);
+  const porOSCompradas = useMemo(() => agruparPorOS(itensCompradosFlat, '_preco'), [itensCompradosFlat]);
+  const itensResolvidoFabrica = useMemo(() => itensCompradosFlat.filter(it => {
+    const s = String(it.supplier || '').trim().toUpperCase();
+    return s === 'RESOLVIDO NA FABRICA' || s === 'RESOLVIDO NA FÁBRICA';
+  }), [itensCompradosFlat]);
+  const itensEstoque = useMemo(() => itensCompradosFlat.filter(it => String(it.supplier || '').trim().toUpperCase() === 'ESTOQUE'), [itensCompradosFlat]);
 
 const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
   const exportarAuditoriaCompras = () => {
@@ -5902,9 +5928,9 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
     return { linha: 'N/D', fonte: '—' };
   };
 
-  const dadosPorLinha = useMemo(() => {
+    const dadosPorLinha = useMemo(() => {
     const map = {};
-    const ensure = (linha) => { if (!map[linha]) map[linha] = { linha, requisitadas: 0, compradas: 0, valor: 0, requisitadasItens: [], compradasItens: [] }; return map[linha]; };
+    const ensure = (linha) => { if (!map[linha]) map[linha] = { linha, requisitadas: 0, compradas: 0, valor: 0, requisitadasItens: [], compradasItens: [], osSet: new Set() }; return map[linha]; };
 
     // Mesma fonte (pedidosConsolidados) e mesmo filtro de período usados no gráfico "Volume de Requisições"
     pedidosConsolidados(requests).forEach(r => {
@@ -5913,7 +5939,8 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
       if (dt < inicioPeriodo || dt > fimPeriodo) return;
       const { linha } = getLinhaProdResumo(r.os, r.vehicleData);
       const g = ensure(linha);
-     g.requisitadas += (r.items||[]).reduce((s,it)=>s+(Number(it.quantity)||1),0);
+      g.requisitadas += (r.items?.length || 0);
+      if (r.os) g.osSet.add(String(r.os).trim());
       (r.items || []).forEach(it => g.requisitadasItens.push({ os: r.os, description: it.description, quantity: it.quantity || 1, responsavel: r.responsavel }));
     });
 
@@ -5928,13 +5955,14 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
         const { linha } = getLinhaProdResumo(r.os, r.vehicleData);
         const g = ensure(linha);
         const preco = parsePrice(it.price);
-        g.compradas += (Number(it.quantity)||1);
+        g.compradas += 1;
         g.valor += preco;
+        if (r.os) g.osSet.add(String(r.os).trim());
         g.compradasItens.push({ os: r.os, description: it.description, quantity: it.quantity || 1, preco, supplier: it.supplier, data: dataBaseCompra });
       });
     });
 
-    return Object.values(map).sort((a, b) => b.valor - a.valor);
+    return Object.values(map).map(g => ({ ...g, osCount: g.osSet.size })).sort((a, b) => b.valor - a.valor);
   }, [requests, vehicleMapLinha, inicioPeriodo, fimPeriodo]);
 
   const exportarAuditoriaLinhas = () => {
@@ -5991,7 +6019,7 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
   const maxValDia = Math.max(...dadosCompra.dias.map(d => d.valor), 1);
 
   // Helper para renderizar gráfico estilo "Diretoria"
-  const renderChart = (canvas, data, maxValue, type, sempreMostrarRotulos) => {
+    const renderChart = (canvas, data, maxValue, type, sempreMostrarRotulos) => {
     if (!canvas) return;
    const ctx = canvas.getContext('2d');
     const dpr = Math.max(window.devicePixelRatio || 1, 2);
@@ -6012,8 +6040,13 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
    const padL = 72, padR = 40, bot = 96, top = 40;
     const chartH = displayH - bot - top, chartW = displayW - padL - padR;
     const n = data.length;
-    const bw = chartW / n;
-    const barGap = n > 15 ? 0.1 : 0.25;
+    const manyBars = n > 20;
+    const rawBw = chartW / n;
+    const maxBarPixel = 72; // trava a largura máxima da barra — evita blocos gigantes quando há poucos dias
+    const bw = Math.min(rawBw, maxBarPixel);
+    const groupWidth = bw * n;
+    const offsetX = padL + Math.max(0, (chartW - groupWidth) / 2); // centraliza o grupo de barras quando sobra espaço
+    const barGap = n > 15 ? 0.12 : 0.28;
     
     // Grid lines
     ctx.setLineDash([3, 3]);
@@ -6048,9 +6081,9 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
    data.forEach((d, i) => {
       // Para 'pedidos', a barra mostra o total de PEÇAS solicitadas no dia;
       // 'count' mostra quantos pedidos/OS geraram essas peças (rótulo abaixo da barra)
-     const val = type === 'valor' ? d.valor : d.pedidos.reduce((a, p) => a + (p.items||[]).reduce((s,it)=>s+(Number(it.quantity)||1),0), 0);
-const count = type === 'valor' ? d.itens.reduce((s,it)=>s+(Number(it.quantity)||1),0) : d.osSet.size;
-      const x = padL + i * bw;
+      const val = type === 'valor' ? d.valor : d.pedidos.reduce((a, p) => a + (p.items?.length || 0), 0);
+      const count = type === 'valor' ? d.itens.length : d.osSet.size;
+      const x = offsetX + i * bw;
       const bh = maxValue > 0 ? (val / maxValue) * chartH : 0;
       const bx = x + bw * barGap, bwidth = bw * (1 - barGap * 2);
       const barY = top + chartH - Math.max(bh, 2);
@@ -6071,7 +6104,7 @@ const count = type === 'valor' ? d.itens.reduce((s,it)=>s+(Number(it.quantity)||
      // Value on top - Mostrar sempre, inclusive quando o valor for R$ 0,00 (RESOLVIDO NA FABRICA / ESTOQUE)
       if (val > 0 || count > 0) {
         ctx.fillStyle = '#000';
-        ctx.font = 'bold 10px Plus Jakarta Sans';
+        ctx.font = (manyBars ? '700 8px' : 'bold 10px') + ' Plus Jakarta Sans';
         ctx.textAlign = 'center';
       let vStr;
         if (type === 'valor') {
@@ -6080,21 +6113,13 @@ const count = type === 'valor' ? d.itens.reduce((s,it)=>s+(Number(it.quantity)||
         } else {
           vStr = val;
         }
-        // No mensal, rotacionar se necessário ou diminuir fonte
-      if (periodo === 'mensal') {
-          ctx.save();
-          ctx.translate(x + bw / 2, barY - 12);
-          ctx.rotate(-Math.PI / 4);
-          ctx.fillText(vStr, 0, 0);
-          ctx.restore();
-        } else {
-          ctx.fillText(vStr, x + bw / 2, barY - 8);
-        }
+        // Nunca inclina o rótulo — mesmo padrão em todos os períodos, só reduz a fonte quando há muitas barras
+        ctx.fillText(vStr, x + bw / 2, barY - 8);
       }
 // X-axis Labels - semanal/quinzenal sempre mostram todas; mensal só mostra algumas para não poluir
    if (sempreMostrarRotulos || n <= 15 || i % Math.ceil(n/10) === 0 || i === n - 1) {
         ctx.fillStyle = '#000';
-        ctx.font = 'bold 10px Plus Jakarta Sans';
+        ctx.font = (manyBars ? '700 9px' : 'bold 10px') + ' Plus Jakarta Sans';
         ctx.textAlign = 'center';
         ctx.fillText(d.label, x + bw / 2, displayH - 70);
         
@@ -6104,10 +6129,10 @@ const count = type === 'valor' ? d.itens.reduce((s,it)=>s+(Number(it.quantity)||
         ctx.fillText(`${dtParts[2]}/${dtParts[1]}`, x + bw / 2, displayH - 57);
       }
 
-  // Rótulo abaixo da barra: itens + OS's que geraram o valor (gráfico de compras) ou peças + OS's (gráfico de pedidos)
-    if ((sempreMostrarRotulos || n <= 15 || diaSelecionado?.date === d.date) && (count > 0 || val > 0)) {
+  // Rótulo abaixo da barra: itens + OS's que geraram o valor — agora sempre visível, em todos os períodos (inclusive mensal)
+    if (count > 0 || val > 0) {
         ctx.fillStyle = '#DC1F1F';
-        ctx.font = 'bold 9px Plus Jakarta Sans';
+        ctx.font = (manyBars ? '700 7px' : 'bold 9px') + ' Plus Jakarta Sans';
         ctx.textAlign = 'center';
         if (type === 'valor') {
           const osQtd = d.osSet ? d.osSet.size : 0;
@@ -6223,16 +6248,16 @@ const count = type === 'valor' ? d.itens.reduce((s,it)=>s+(Number(it.quantity)||
         </div>
       </div>
 
-     {/* KPIs */}
+         {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10, marginBottom: 24 }}>
         {[
-         { label: 'Peças no período', v: totalPecasPeriodo, sub: `${osUnicasPeriodo} OS's no período`, icon: 'clipboard-list', dark: true },
-          { label: 'Média por veículo', v: mediaPorCarro, sub: 'peças / carro', icon: 'car', red: true },
-          { label: 'Itens comprados', v: dadosCompra.totalItens, sub: `${dadosCompra.osUnicas} OS com compra`, icon: 'shopping-bag' },
-          { label: 'Valor médio / OS', v: dadosCompra.mediaValorOS > 0 ? fmtBRL(dadosCompra.mediaValorOS) : '—', sub: 'no período', icon: 'trending-up' },
-{ label: 'Total gasto', v: dadosCompra.totalValor > 0 ? fmtBRL(dadosCompra.totalValor) : '—', sub: 'em compras', icon: 'banknote' },
-          { label: 'Resolvido na Fábrica', v: dadosCompra.resolvidoFabricaCount, sub: `${dadosCompra.resolvidoFabricaOSCount} OS's no período`, icon: 'factory' },
-          { label: 'Retirado do Estoque', v: dadosCompra.estoqueCount, sub: `${dadosCompra.estoqueOSCount} OS's no período`, icon: 'boxes' },
+         { label: 'Peças no período', v: totalPecasPeriodo, sub: `${osUnicasPeriodo} OS's no período`, icon: 'clipboard-list', dark: true, onClick: () => setDetalheKpi({ tipo: 'requisitadas', titulo: 'Peças no Período — por OS' }) },
+          { label: 'Média por veículo', v: mediaPorCarro, sub: 'peças / carro', icon: 'car', red: true, onClick: () => setDetalheKpi({ tipo: 'requisitadas', titulo: 'Peças no Período — por OS' }) },
+          { label: 'Itens comprados', v: dadosCompra.totalItens, sub: `${dadosCompra.osUnicas} OS com compra`, icon: 'shopping-bag', onClick: () => setDetalheKpi({ tipo: 'compradas', titulo: 'Itens Comprados — por OS' }) },
+          { label: 'Valor médio / OS', v: dadosCompra.mediaValorOS > 0 ? fmtBRL(dadosCompra.mediaValorOS) : '—', sub: 'no período', icon: 'trending-up', onClick: () => setDetalheKpi({ tipo: 'compradas', titulo: 'Valor Gasto — por OS' }) },
+{ label: 'Total gasto', v: dadosCompra.totalValor > 0 ? fmtBRL(dadosCompra.totalValor) : '—', sub: 'em compras', icon: 'banknote', onClick: () => setDetalheKpi({ tipo: 'compradas', titulo: 'Total Gasto — por OS' }) },
+          { label: 'Resolvido na Fábrica', v: dadosCompra.resolvidoFabricaCount, sub: `${dadosCompra.resolvidoFabricaOSCount} OS's no período`, icon: 'factory', onClick: () => setDetalheKpi({ tipo: 'resolvidoFabrica', titulo: 'Resolvido na Fábrica' }) },
+          { label: 'Retirado do Estoque', v: dadosCompra.estoqueCount, sub: `${dadosCompra.estoqueOSCount} OS's no período`, icon: 'boxes', onClick: () => setDetalheKpi({ tipo: 'estoque', titulo: 'Retirado do Estoque' }) },
           { label: "OS's c/ pedidos em dias diferentes", v: osComPedidosEmDiasDiferentes.length, sub: 'clique para ver detalhes', icon: 'calendar-clock', dark: true, onClick: () => setOsMultiDiaAberto(true) },
         ].map((k, i) => (
           <div key={i} onClick={k.onClick} style={{ background: k.dark ? '#0D0D0D' : k.red ? 'var(--red)' : 'var(--smoke)', color: k.dark || k.red ? '#fff' : 'var(--ink)', borderRadius: 14, padding: '16px 18px', border: (!k.dark && !k.red) ? '1.5px solid var(--border)' : 'none', cursor: k.onClick ? 'pointer' : 'default' }}>
@@ -6261,8 +6286,8 @@ const count = type === 'valor' ? d.itens.reduce((s,it)=>s+(Number(it.quantity)||
             </div>
           </div>
         </div>
-        <div style={{ overflowX: 'auto' }}>
-          <canvas ref={refBar1} width={periodo === 'mensal' ? 1200 : 840} height={300} style={{ width: '100%', height: 'auto', minWidth: periodo === 'mensal' ? 800 : 'auto' }} />
+              <div style={{ overflowX: 'auto' }}>
+          <canvas ref={refBar1} width={1100} height={320} style={{ width: '100%', height: 'auto', minWidth: numDias > 15 ? 900 : undefined }} />
         </div>
       </div>
 
@@ -6283,8 +6308,8 @@ const count = type === 'valor' ? d.itens.reduce((s,it)=>s+(Number(it.quantity)||
             </div>
           </div>
         </div>
-                <div style={{ overflowX: 'auto' }}>
-          <canvas ref={refBar2} width={periodo === 'mensal' ? 1200 : 840} height={300} style={{ width: '100%', height: 'auto', minWidth: periodo === 'mensal' ? 800 : 'auto' }} />
+                               <div style={{ overflowX: 'auto' }}>
+          <canvas ref={refBar2} width={1100} height={320} style={{ width: '100%', height: 'auto', minWidth: numDias > 15 ? 900 : undefined }} />
         </div>
       </div>
 
@@ -6304,18 +6329,18 @@ const count = type === 'valor' ? d.itens.reduce((s,it)=>s+(Number(it.quantity)||
           <p style={{ fontSize: 10, color: 'var(--muted)', textAlign: 'center', padding: '20px 0' }}>Nenhum dado de linha de produção encontrado no período.</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-            {dadosPorLinha.map((d, i) => {
+                       {dadosPorLinha.map((d, i) => {
               const prop = d.requisitadas > 0 ? Math.round((d.compradas / d.requisitadas) * 100) : 0;
-              const pctValor = totalValorLinhas > 0 ? Math.round((d.valor / totalValorLinhas) * 100) : 0;
               return (
                 <div key={i} onClick={() => setLinhaSelecionadaResumo(d)} style={{ background: 'var(--smoke)', border: '1px solid var(--border)', borderRadius: 12, padding: 14, cursor: 'pointer', transition: 'background .15s' }} onMouseEnter={e => e.currentTarget.style.background = '#F0ECE8'} onMouseLeave={e => e.currentTarget.style.background = 'var(--smoke)'}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <div style={{ width: 22, height: 22, borderRadius: 6, background: 'var(--ink)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="factory" size={12} style={{ color: '#fff' }} /></div>
                       <span style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase' }}>{d.linha}</span>
+                      <span className="pill" style={{ fontSize: 8 }}>{d.osCount} OS{d.osCount !== 1 ? "'s" : ''}</span>
                       <Icon name="chevron-right" size={13} style={{ color: 'var(--muted)' }} />
                     </div>
-                    <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--red)' }}>{fmtBRL(d.valor)} <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--muted)' }}>({pctValor}% do gasto total)</span></span>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--red)' }}>{fmtBRL(d.valor)}</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -6342,45 +6367,101 @@ const count = type === 'valor' ? d.itens.reduce((s,it)=>s+(Number(it.quantity)||
         )}
       </div>
 
-                  {linhaSelecionadaResumo && (
+                               {linhaSelecionadaResumo && (() => {
+        const osMapLinha = {};
+        (linhaSelecionadaResumo.requisitadasItens || []).forEach(it => {
+          const k = String(it.os || '—');
+          if (!osMapLinha[k]) osMapLinha[k] = { os: it.os, requisitadas: [], compradas: [] };
+          osMapLinha[k].requisitadas.push(it);
+        });
+        (linhaSelecionadaResumo.compradasItens || []).forEach(it => {
+          const k = String(it.os || '—');
+          if (!osMapLinha[k]) osMapLinha[k] = { os: it.os, requisitadas: [], compradas: [] };
+          osMapLinha[k].compradas.push(it);
+        });
+        const osListLinha = Object.values(osMapLinha).sort((a, b) => String(a.os).localeCompare(String(b.os), undefined, { numeric: true }));
+        return (
         <DetailModal
           title={linhaSelecionadaResumo.linha}
-          subtitle={`${linhaSelecionadaResumo.requisitadas} peça(s) requisitada(s) · ${linhaSelecionadaResumo.compradas} comprada(s)`}
+          subtitle={`${linhaSelecionadaResumo.osCount} OS${linhaSelecionadaResumo.osCount !== 1 ? "'s" : ''} · ${linhaSelecionadaResumo.requisitadas} requisitada(s) · ${linhaSelecionadaResumo.compradas} comprada(s)`}
           onClose={() => setLinhaSelecionadaResumo(null)}
         >
-          <div style={{ marginBottom: 20 }}>
-            <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 10 }}>Peças Requisitadas ({linhaSelecionadaResumo.requisitadasItens.length})</p>
-            {linhaSelecionadaResumo.requisitadasItens.length === 0 ? <p style={{ fontSize: 10, color: 'var(--muted)' }}>Nenhuma peça requisitada nesta linha no período.</p> : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {linhaSelecionadaResumo.requisitadasItens.map((it, i) => (
-                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '8px 12px', background: 'var(--smoke)', border: '1px solid var(--border)', borderRadius: 9, fontSize: 10 }}>
-                    <span style={{ fontWeight: 700, textTransform: 'uppercase' }}>{it.quantity}× {it.description || '(sem descrição)'}</span>
-                    <span style={{ color: 'var(--muted)', fontWeight: 600, flexShrink: 0 }}>OS #{it.os}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <div>
-            <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 10 }}>Peças Compradas ({linhaSelecionadaResumo.compradasItens.length})</p>
-            {linhaSelecionadaResumo.compradasItens.length === 0 ? <p style={{ fontSize: 10, color: 'var(--muted)' }}>Nenhuma compra registrada nesta linha no período.</p> : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {linhaSelecionadaResumo.compradasItens.map((it, i) => (
-                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '10px 12px', background: '#fff', border: '1px solid #AAE6C5', borderRadius: 9 }}>
-                    <div style={{ minWidth: 0 }}>
-                      <p style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', margin: 0 }}>{it.description || '(sem descrição)'}</p>
-                      <p style={{ fontSize: 9, color: 'var(--muted)', margin: 0 }}>OS #{it.os} · {it.supplier || '—'}</p>
+          {osListLinha.length === 0 ? (
+            <p style={{ fontSize: 10, color: 'var(--muted)', textAlign: 'center', padding: '20px 0' }}>Nenhum dado nesta linha no período.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {osListLinha.map((g, i) => (
+                <div key={i} className="card" style={{ padding: 14 }}>
+                  <p style={{ fontSize: 13, fontWeight: 800, margin: '0 0 10px' }}>OS #{g.os}</p>
+                  {g.requisitadas.length > 0 && (
+                    <div style={{ marginBottom: g.compradas.length > 0 ? 12 : 0 }}>
+                      <p style={{ fontSize: 8, fontWeight: 800, textTransform: 'uppercase', color: '#1A4EC2', marginBottom: 6 }}>Requisitadas ({g.requisitadas.length})</p>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {g.requisitadas.map((it, ii) => (
+                          <span key={ii} style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', background: '#EAF0FF', border: '1px solid #C0D0F5', borderRadius: 6, padding: '3px 8px', color: '#1A4EC2' }}>{it.quantity}× {it.description || '(sem descrição)'}</span>
+                        ))}
+                      </div>
                     </div>
-                    <span style={{ fontSize: 11, fontWeight: 800, color: '#059669', flexShrink: 0 }}>{fmtBRL(it.preco)}</span>
-                  </div>
-                ))}
-                <div style={{ marginTop: 6, padding: '12px 16px', background: '#0D0D0D', borderRadius: 12, color: '#fff', display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase' }}>Total desta linha</span>
-                  <span style={{ fontSize: 14, fontWeight: 800 }}>{fmtBRL(linhaSelecionadaResumo.valor)}</span>
+                  )}
+                  {g.compradas.length > 0 && (
+                    <div>
+                      <p style={{ fontSize: 8, fontWeight: 800, textTransform: 'uppercase', color: '#059669', marginBottom: 6 }}>Compradas ({g.compradas.length})</p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                        {g.compradas.map((it, ii) => (
+                          <div key={ii} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 9, background: '#F0FBF5', border: '1px solid #AAE6C5', borderRadius: 6, padding: '5px 8px' }}>
+                            <span style={{ fontWeight: 700, textTransform: 'uppercase' }}>{it.quantity}× {it.description || '(sem descrição)'}</span>
+                            <span style={{ fontWeight: 800, color: '#059669', flexShrink: 0 }}>{fmtBRL(it.preco)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
+              ))}
+              <div style={{ padding: '12px 16px', background: '#0D0D0D', borderRadius: 12, color: '#fff', display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase' }}>Total desta linha</span>
+                <span style={{ fontSize: 14, fontWeight: 800 }}>{fmtBRL(linhaSelecionadaResumo.valor)}</span>
               </div>
-            )}
-          </div>
+            </div>
+          )}
+        </DetailModal>
+        );
+      })()}
+
+      {detalheKpi && (
+        <DetailModal title={detalheKpi.titulo} onClose={() => setDetalheKpi(null)}>
+          {(detalheKpi.tipo === 'requisitadas' || detalheKpi.tipo === 'compradas') ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {(detalheKpi.tipo === 'requisitadas' ? porOSRequisitadas : porOSCompradas).length === 0 ? (
+                <p style={{ fontSize: 10, color: 'var(--muted)', textAlign: 'center', padding: '20px 0' }}>Nenhum dado no período.</p>
+              ) : (detalheKpi.tipo === 'requisitadas' ? porOSRequisitadas : porOSCompradas).map((g, i) => (
+                <div key={i} style={{ background: 'var(--smoke)', border: '1px solid var(--border)', borderRadius: 10, padding: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <span style={{ fontWeight: 800, fontSize: 12 }}>OS #{g.os}</span>
+                    <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--red)' }}>{detalheKpi.tipo === 'compradas' ? fmtBRL(g.totalValor) : `${g.totalQtd} peça(s)`}</span>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {g.itens.map((it, ii) => (
+                      <span key={ii} style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', background: '#fff', border: '1px solid var(--border)', borderRadius: 6, padding: '3px 8px' }}>
+                        {it.quantity}× {it.description || '(sem descrição)'}{detalheKpi.tipo === 'compradas' && it._preco > 0 ? ` — ${fmtBRL(it._preco)}` : ''}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {(detalheKpi.tipo === 'resolvidoFabrica' ? itensResolvidoFabrica : itensEstoque).length === 0 ? (
+                <p style={{ fontSize: 10, color: 'var(--muted)', textAlign: 'center', padding: '20px 0' }}>Nenhum item encontrado.</p>
+              ) : (detalheKpi.tipo === 'resolvidoFabrica' ? itensResolvidoFabrica : itensEstoque).map((it, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'var(--smoke)', border: '1px solid var(--border)', borderRadius: 9, fontSize: 10 }}>
+                  <span style={{ fontWeight: 700, textTransform: 'uppercase' }}>{it.quantity}× {it.description || '(sem descrição)'}</span>
+                  <span style={{ color: 'var(--muted)', fontWeight: 600 }}>OS #{it.os}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </DetailModal>
       )}
 
