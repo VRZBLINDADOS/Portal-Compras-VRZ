@@ -5386,7 +5386,7 @@ try{
         <>
           {sub==='nova'&&<NovaFinalizacaoForm vehiclesDB={vehiclesDB} requests={requests} loggedInUser={loggedInUser} isMaster={isMaster} finalizacoes={finalizacoes}/>}
           {sub==='meus'&&<MeusCarrosView loggedInUser={loggedInUser} isMaster={isMaster} finalizacoes={finalizacoes} requests={requests}/>}
-          {sub==='comparativo'&&<InspecaoComparativoView finalizacoes={finalizacoes} requests={requests} vehicles={vehiclesDB}/>}
+                    {sub==='comparativo'&&loggedInUser?.user===MASTER_USER&&<InspecaoComparativoView finalizacoes={finalizacoes} requests={requests} vehicles={vehiclesDB}/>}
           {sub==='historico'&&isMaster&&<FinalizacaoHistoricoView/>}
         </>
       )}
