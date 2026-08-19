@@ -4491,10 +4491,10 @@ useEffect(()=>{
       setPecasEscolha(novas?'novas':exc?'excedente':'suficiente');
       setMostrarNovas(novas);
       setMostrarExcedente(exc);
-      setPerguntaExcedenteFeita(true);
+            setPerguntaExcedenteFeita(true);
       setPerguntaNovasFeita(true);
       setExcedentes([]);setNovasPecas([]);
-       setReadOnly(false);
+      setReadOnly(!(isMaster||fin.criadoPor===loggedInUser.user));
   }else{
     setExistingFin(null);
       setAjuste([]);setMartelinho([]);setPintura([]);setVidro([]);setOutro([]);setInstalacaoPecas([]);
@@ -4719,11 +4719,19 @@ const executarSalvar=async()=>{
             <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',display:'block',marginBottom:6}}>Número da OS</label>
             <input type="text" inputMode="numeric" value={os} onChange={e=>setOs(sanitize(e.target.value))} onBlur={onOSBlur} placeholder="Nº da OS" className="input" style={{fontSize:22,fontWeight:800}} disabled={!etapaInspecao}/>
           </div>
-                 {existingFin&&(
+                       {existingFin&&!readOnly&&(
             <div style={{background:'#EAF0FF',border:'1px solid #C0D0F5',borderRadius:10,padding:'10px 14px',display:'flex',alignItems:'center',gap:10}}>
               <Icon name="info" size={16} style={{color:'#1A4EC2',flexShrink:0}}/>
               <p style={{fontSize:10,fontWeight:700,color:'#1A4EC2',margin:0}}>
-                Esta OS já possui uma inspeção <strong>{etapaOf(existingFin)}</strong> criada por <strong>{existingFin.criadoPor}</strong>. Qualquer inspetor pode continuar editando, adicionando ou removendo itens — todas as alterações ficam registradas no histórico.
+                Esta OS já possui uma inspeção <strong>{etapaOf(existingFin)}</strong> criada por <strong>{existingFin.criadoPor}</strong>. Você pode editar porque é o autor ou Master — todas as alterações ficam registradas no histórico.
+              </p>
+            </div>
+          )}
+         {existingFin&&readOnly&&(
+            <div style={{background:'var(--red-light)',border:'1px solid #FFBDBD',borderRadius:10,padding:'10px 14px',display:'flex',alignItems:'center',gap:10}}>
+              <Icon name="lock" size={16} style={{color:'var(--red)',flexShrink:0}}/>
+              <p style={{fontSize:10,fontWeight:700,color:'var(--red)',margin:0}}>
+                A inspeção <strong>{etapaOf(existingFin)}</strong> desta OS foi registrada por <strong>{existingFin.criadoPor}</strong>. Você pode visualizar, mas apenas {existingFin.criadoPor} ou o Master podem editá-la.
               </p>
             </div>
           )}
@@ -4902,10 +4910,11 @@ const comStatus=useMemo(()=>baseVisiveis.map(fin=>{
   const countConcluidos=comStatus.filter(c=>c.concluida).length;
   const countPendentes=comStatus.filter(c=>!c.concluida).length;
 
-  const podeEditar=(fin)=>true;
+    const podeEditar=(fin)=>isMaster||fin.criadoPor===loggedInUser.user;
 
-  const resolverPendencia=async(finId,categoria,itemId,observacao)=>{
+   const resolverPendencia=async(finId,categoria,itemId,observacao)=>{
     const fin=finalizacoes.find(f=>f.id===finId);if(!fin)return;
+    if(!podeEditar(fin))return alert('Você não tem permissão para editar esta inspeção — apenas '+fin.criadoPor+' ou o Master podem alterá-la.');
     const now=Date.now();
     const newCat=(fin[categoria]||[]).map(p=>p.id===itemId?{...p,status:'Solucionado',resolvidoPor:loggedInUser.user,resolvidoEm:now,obsResolucao:observacao||''}:p);
     const novoHistorico=[...(fin.historico||[]),{acao:`Pendência resolvida (${categoria})${observacao?' — Obs: '+observacao:''}`,usuario:loggedInUser.user,timestamp:now}];
@@ -4927,8 +4936,9 @@ const comStatus=useMemo(()=>baseVisiveis.map(fin=>{
     setObsResolucao('');
   };
 
-  const cancelarSolucao=async(finId,categoria,itemId)=>{
+   const cancelarSolucao=async(finId,categoria,itemId)=>{
     const fin=finalizacoes.find(f=>f.id===finId);if(!fin)return;
+    if(!podeEditar(fin))return alert('Você não tem permissão para editar esta inspeção — apenas '+fin.criadoPor+' ou o Master podem alterá-la.');
     const now=Date.now();
     const newCat=(fin[categoria]||[]).map(p=>{
       if(p.id!==itemId)return p;
@@ -5367,7 +5377,7 @@ try{
           <LastUpdateBadge/>
         </div>
         <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)',width:'fit-content',flexWrap:'wrap'}}>
-         {[!isComercial&&{k:'nova',l:'Nova Inspeção'},{k:'meus',l:'Carros'},{k:'comparativo',l:'Comparativo'},isMaster&&{k:'historico',l:'Histórico'}].filter(Boolean).map(t=>(
+                  {[!isComercial&&{k:'nova',l:'Nova Inspeção'},{k:'meus',l:'Carros'},loggedInUser?.user===MASTER_USER&&{k:'comparativo',l:'Comparativo'},isMaster&&{k:'historico',l:'Histórico'}].filter(Boolean).map(t=>(
             <button key={t.k} onClick={()=>setSub(t.k)} style={{padding:'8px 16px',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',border:'none',cursor:'pointer',letterSpacing:'.06em',fontFamily:'Plus Jakarta Sans,sans-serif',background:sub===t.k?'#fff':'transparent',color:sub===t.k?'var(--red)':'var(--muted)',boxShadow:sub===t.k?'0 2px 8px rgba(0,0,0,.08)':'none'}}>{t.l}</button>
           ))}
         </div>
@@ -5628,11 +5638,34 @@ function PedidosExcedentesView({requests}){
 
 // ── App Principal
  // ── Resumo Reunião ────────────────────────────────────────────────────────
+  function DetailModal({title,subtitle,badge,onClose,children,accent='var(--red)'}){
+  return ReactDOM.createPortal((
+    <div style={{position:'fixed',inset:0,zIndex:900,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}} className="fade-in" onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+      <div style={{background:'#fff',borderRadius:24,overflow:'hidden',maxWidth:640,width:'100%',height:'min(640px,86vh)',display:'flex',flexDirection:'column',boxShadow:'0 40px 80px rgba(0,0,0,.4)'}}>
+        <div style={{background:'var(--ink)',padding:'20px 24px',display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12,flexShrink:0,borderBottom:`4px solid ${accent}`}}>
+          <div style={{flex:1,minWidth:0}}>
+            <h3 style={{margin:0,fontSize:17,fontWeight:800,color:'#fff',wordBreak:'break-word'}}>{title}</h3>
+            {subtitle&&<p style={{margin:0,fontSize:9,color:'rgba(255,255,255,.45)',textTransform:'uppercase',letterSpacing:'.08em',marginTop:4}}>{subtitle}</p>}
+            {badge}
+          </div>
+          <button onClick={onClose} style={{width:36,height:36,background:'rgba(255,255,255,.08)',border:'none',borderRadius:10,cursor:'pointer',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="x" size={18}/></button>
+        </div>
+        <div className="scroll-y" style={{padding:20,overflowY:'auto',flex:1,minHeight:0}}>
+          {children}
+        </div>
+        <div style={{padding:'14px 20px',background:'var(--smoke)',borderTop:'1px solid var(--border)',flexShrink:0}}>
+          <button onClick={onClose} className="btn-primary" style={{width:'100%'}}>Fechar</button>
+        </div>
+      </div>
+    </div>
+  ),document.body);
+}
 function ResumoReuniaoView({requests, vehicles}){
   const [periodo, setPeriodo] = useState('semanal'); // 'diario', 'semanal', 'quinzenal', 'mensal'
   const [offset, setOffset] = useState(0);
-  const [diaSelecionado, setDiaSelecionado] = useState(null);
+    const [diaSelecionado, setDiaSelecionado] = useState(null);
   const [osMultiDiaAberto, setOsMultiDiaAberto] = useState(false);
+  const [linhaSelecionadaResumo, setLinhaSelecionadaResumo] = useState(null);
 
   const vehicleMapLinha = useMemo(() => { const m = {}; (vehicles || []).forEach(v => { m[String(v.os).trim()] = v; }); return m; }, [vehicles]);
 
@@ -5864,22 +5897,29 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
     a.download = `Auditoria_Compras_${inicioPeriodo.toLocaleDateString('pt-BR').replace(/\//g, '-')}_a_${fimPeriodo.toLocaleDateString('pt-BR').replace(/\//g, '-')}.csv`;
     a.click();
   };
-    const dadosPorLinha = useMemo(() => {
-    const map = {};
-    const getLinhaProd = (osVal, vehicleData) => {
-      const vInfo = vehicleMapLinha[String(osVal || '').trim()];
-      return (vInfo?.linhaProducao || vehicleData?.linhaProducao || 'N/D').trim() || 'N/D';
-    };
-    const ensure = (linha) => { if (!map[linha]) map[linha] = { linha, requisitadas: 0, compradas: 0, valor: 0 }; return map[linha]; };
+     const getLinhaProdResumo = (osVal, vehicleData) => {
+    const vInfo = vehicleMapLinha[String(osVal || '').trim()];
+    if (vInfo?.linhaProducao) return { linha: (vInfo.linhaProducao.trim() || 'N/D'), fonte: 'Cadastro de Veículos (atual)' };
+    if (vehicleData?.linhaProducao) return { linha: (vehicleData.linhaProducao.trim() || 'N/D'), fonte: 'Snapshot do Pedido' };
+    return { linha: 'N/D', fonte: '—' };
+  };
 
+  const dadosPorLinha = useMemo(() => {
+    const map = {};
+    const ensure = (linha) => { if (!map[linha]) map[linha] = { linha, requisitadas: 0, compradas: 0, valor: 0, requisitadasItens: [], compradasItens: [] }; return map[linha]; };
+
+    // Mesma fonte (pedidosConsolidados) e mesmo filtro de período usados no gráfico "Volume de Requisições"
     pedidosConsolidados(requests).forEach(r => {
       if (!r.timestamp) return;
       const dt = new Date(r.timestamp);
       if (dt < inicioPeriodo || dt > fimPeriodo) return;
-      const linha = getLinhaProd(r.os, r.vehicleData);
-      ensure(linha).requisitadas += (r.items?.length || 0);
+      const { linha } = getLinhaProdResumo(r.os, r.vehicleData);
+      const g = ensure(linha);
+      g.requisitadas += (r.items?.length || 0);
+      (r.items || []).forEach(it => g.requisitadasItens.push({ os: r.os, description: it.description, quantity: it.quantity || 1, responsavel: r.responsavel }));
     });
 
+    // Mesma fonte e mesmo filtro (boughtAt/actualDeliveryDate, exclui duplicataDeDoacao) usados no gráfico "Valor Gasto em Peças"
     requests.forEach(r => {
       (r.items || []).forEach(it => {
         const dataBaseCompra = it.boughtAt || it.actualDeliveryDate;
@@ -5887,15 +5927,53 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
         if (it.duplicataDeDoacao) return;
         const dt = new Date(String(dataBaseCompra).trim().slice(0, 10) + 'T00:00:00');
         if (dt < inicioPeriodo || dt > fimPeriodo) return;
-        const linha = getLinhaProd(r.os, r.vehicleData);
+        const { linha } = getLinhaProdResumo(r.os, r.vehicleData);
         const g = ensure(linha);
+        const preco = parsePrice(it.price);
         g.compradas += 1;
-        g.valor += parsePrice(it.price);
+        g.valor += preco;
+        g.compradasItens.push({ os: r.os, description: it.description, quantity: it.quantity || 1, preco, supplier: it.supplier, data: dataBaseCompra });
       });
     });
 
     return Object.values(map).sort((a, b) => b.valor - a.valor);
   }, [requests, vehicleMapLinha, inicioPeriodo, fimPeriodo]);
+
+  const exportarAuditoriaLinhas = () => {
+    const rows = [[csvCellRR('Linha'), csvCellRR('Tipo'), csvCellRR('OS'), csvCellRR('Peça'), csvCellRR('Qtd'), csvCellRR('Valor'), csvCellRR('Data'), csvCellRR('Fonte da Linha')].join(';')];
+    pedidosConsolidados(requests).forEach(r => {
+      if (!r.timestamp) return;
+      const dt = new Date(r.timestamp);
+      if (dt < inicioPeriodo || dt > fimPeriodo) return;
+      const { linha, fonte } = getLinhaProdResumo(r.os, r.vehicleData);
+      (r.items || []).forEach(it => {
+        rows.push([csvCellRR(linha), csvCellRR('Requisitada'), csvCellRR(r.os), csvCellRR(it.description || '(sem descrição)'), csvCellRR(it.quantity || 1), csvCellRR('-'), csvCellRR(new Date(r.timestamp).toLocaleDateString('pt-BR')), csvCellRR(fonte)].join(';'));
+      });
+    });
+    requests.forEach(r => {
+      (r.items || []).forEach(it => {
+        const dataBaseCompra = it.boughtAt || it.actualDeliveryDate;
+        if (!dataBaseCompra) return;
+        const dt = new Date(String(dataBaseCompra).trim().slice(0, 10) + 'T00:00:00');
+        if (dt < inicioPeriodo || dt > fimPeriodo) return;
+        const { linha, fonte } = getLinhaProdResumo(r.os, r.vehicleData);
+        const excluido = !!it.duplicataDeDoacao;
+        rows.push([csvCellRR(linha), csvCellRR(excluido ? 'Comprada (EXCLUÍDA — duplicata de doação)' : 'Comprada'), csvCellRR(r.os), csvCellRR(it.description || '(sem descrição)'), csvCellRR(it.quantity || 1), csvCellRR(parsePrice(it.price).toLocaleString('pt-BR', { minimumFractionDigits: 2 })), csvCellRR(dataBaseCompra), csvCellRR(fonte)].join(';'));
+      });
+    });
+    const totalLinhas = dadosPorLinha.reduce((a, d) => a + d.valor, 0);
+    rows.push('');
+    rows.push([csvCellRR('GERADO EM'), csvCellRR(new Date().toLocaleString('pt-BR'))].join(';'));
+    rows.push([csvCellRR('PERÍODO'), csvCellRR(`${inicioPeriodo.toLocaleDateString('pt-BR')} a ${fimPeriodo.toLocaleDateString('pt-BR')}`)].join(';'));
+    rows.push([csvCellRR('TOTAL (SOMA DAS LINHAS)'), csvCellRR(fmtBRL(totalLinhas))].join(';'));
+    rows.push([csvCellRR('TOTAL ("Valor Gasto em Peças")'), csvCellRR(fmtBRL(dadosCompra.totalValor))].join(';'));
+    rows.push([csvCellRR('DIVERGÊNCIA'), csvCellRR(totalLinhas === dadosCompra.totalValor ? 'NENHUMA — valores batem' : 'ATENÇÃO: valores não batem, revisar')].join(';'));
+    const blob = new Blob(['\uFEFF' + rows.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `Auditoria_Linhas_${inicioPeriodo.toLocaleDateString('pt-BR').replace(/\//g, '-')}_a_${fimPeriodo.toLocaleDateString('pt-BR').replace(/\//g, '-')}.csv`;
+    a.click();
+  };
 
   const maxReqLinha = Math.max(...dadosPorLinha.map(d => d.requisitadas), 1);
   const maxValLinha2 = Math.max(...dadosPorLinha.map(d => d.valor), 1);
@@ -6201,12 +6279,17 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
         </div>
       </div>
 
-      {/* Compras por Linha de Produção */}
+            {/* Compras por Linha de Produção */}
       <div className="card" style={{ padding: 24, marginTop: 16 }}>
-        <div style={{ marginBottom: 20 }}>
-          <p style={{ fontSize: 8, fontWeight: 800, textTransform: 'uppercase', color: 'var(--red)', margin: '0 0 4px' }}>Comparativo por linha de produção</p>
-          <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Peças Requisitadas × Compradas por Linha</h3>
-          <p style={{ fontSize: 9, color: 'var(--muted)', marginTop: 6 }}>Período: {fmtPeriodo}</p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10, marginBottom: 20 }}>
+          <div>
+            <p style={{ fontSize: 8, fontWeight: 800, textTransform: 'uppercase', color: 'var(--red)', margin: '0 0 4px' }}>Comparativo por linha de produção</p>
+            <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Peças Requisitadas × Compradas por Linha</h3>
+            <p style={{ fontSize: 9, color: 'var(--muted)', marginTop: 6 }}>Período: {fmtPeriodo} · Clique numa linha para ver o detalhe</p>
+          </div>
+          <button onClick={exportarAuditoriaLinhas} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'var(--ink)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 9, fontWeight: 800, textTransform: 'uppercase', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans,sans-serif', flexShrink: 0 }}>
+            <Icon name="shield-check" size={13} /> Auditoria
+          </button>
         </div>
         {dadosPorLinha.length === 0 ? (
           <p style={{ fontSize: 10, color: 'var(--muted)', textAlign: 'center', padding: '20px 0' }}>Nenhum dado de linha de produção encontrado no período.</p>
@@ -6216,11 +6299,12 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
               const prop = d.requisitadas > 0 ? Math.round((d.compradas / d.requisitadas) * 100) : 0;
               const pctValor = totalValorLinhas > 0 ? Math.round((d.valor / totalValorLinhas) * 100) : 0;
               return (
-                <div key={i} style={{ background: 'var(--smoke)', border: '1px solid var(--border)', borderRadius: 12, padding: 14 }}>
+                <div key={i} onClick={() => setLinhaSelecionadaResumo(d)} style={{ background: 'var(--smoke)', border: '1px solid var(--border)', borderRadius: 12, padding: 14, cursor: 'pointer', transition: 'background .15s' }} onMouseEnter={e => e.currentTarget.style.background = '#F0ECE8'} onMouseLeave={e => e.currentTarget.style.background = 'var(--smoke)'}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <div style={{ width: 22, height: 22, borderRadius: 6, background: 'var(--ink)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="factory" size={12} style={{ color: '#fff' }} /></div>
                       <span style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase' }}>{d.linha}</span>
+                      <Icon name="chevron-right" size={13} style={{ color: 'var(--muted)' }} />
                     </div>
                     <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--red)' }}>{fmtBRL(d.valor)} <span style={{ fontSize: 9, fontWeight: 600, color: 'var(--muted)' }}>({pctValor}% do gasto total)</span></span>
                   </div>
@@ -6249,18 +6333,55 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
         )}
       </div>
 
+                  {linhaSelecionadaResumo && (
+        <DetailModal
+          title={linhaSelecionadaResumo.linha}
+          subtitle={`${linhaSelecionadaResumo.requisitadas} peça(s) requisitada(s) · ${linhaSelecionadaResumo.compradas} comprada(s)`}
+          onClose={() => setLinhaSelecionadaResumo(null)}
+        >
+          <div style={{ marginBottom: 20 }}>
+            <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 10 }}>Peças Requisitadas ({linhaSelecionadaResumo.requisitadasItens.length})</p>
+            {linhaSelecionadaResumo.requisitadasItens.length === 0 ? <p style={{ fontSize: 10, color: 'var(--muted)' }}>Nenhuma peça requisitada nesta linha no período.</p> : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {linhaSelecionadaResumo.requisitadasItens.map((it, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '8px 12px', background: 'var(--smoke)', border: '1px solid var(--border)', borderRadius: 9, fontSize: 10 }}>
+                    <span style={{ fontWeight: 700, textTransform: 'uppercase' }}>{it.quantity}× {it.description || '(sem descrição)'}</span>
+                    <span style={{ color: 'var(--muted)', fontWeight: 600, flexShrink: 0 }}>OS #{it.os}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div>
+            <p style={{ fontSize: 9, fontWeight: 800, textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 10 }}>Peças Compradas ({linhaSelecionadaResumo.compradasItens.length})</p>
+            {linhaSelecionadaResumo.compradasItens.length === 0 ? <p style={{ fontSize: 10, color: 'var(--muted)' }}>Nenhuma compra registrada nesta linha no período.</p> : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {linhaSelecionadaResumo.compradasItens.map((it, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '10px 12px', background: '#fff', border: '1px solid #AAE6C5', borderRadius: 9 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <p style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', margin: 0 }}>{it.description || '(sem descrição)'}</p>
+                      <p style={{ fontSize: 9, color: 'var(--muted)', margin: 0 }}>OS #{it.os} · {it.supplier || '—'}</p>
+                    </div>
+                    <span style={{ fontSize: 11, fontWeight: 800, color: '#059669', flexShrink: 0 }}>{fmtBRL(it.preco)}</span>
+                  </div>
+                ))}
+                <div style={{ marginTop: 6, padding: '12px 16px', background: '#0D0D0D', borderRadius: 12, color: '#fff', display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase' }}>Total desta linha</span>
+                  <span style={{ fontSize: 14, fontWeight: 800 }}>{fmtBRL(linhaSelecionadaResumo.valor)}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </DetailModal>
+      )}
+
       {/* Modal de Detalhes do Dia */}
       {diaSelecionado && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 800, background: 'rgba(0,0,0,.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} className="fade-in">
-          <div style={{ background: '#fff', borderRadius: 24, overflow: 'hidden', maxWidth: 600, width: '100%', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ background: 'var(--ink)', padding: '24px 28px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>Detalhes de {new Date(diaSelecionado.date + 'T00:00:00').toLocaleDateString('pt-BR')}</h3>
-                <p style={{ margin: 0, fontSize: 10, color: 'rgba(255,255,255,.5)', textTransform: 'uppercase', letterSpacing: '.1em', marginTop: 4 }}>{diaSelecionado.label}</p>
-              </div>
-              <button onClick={() => setDiaSelecionado(null)} style={{ background: 'rgba(255,255,255,.1)', border: 'none', color: '#fff', width: 32, height: 32, borderRadius: 999, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyCenter: 'center' }}><Icon name="x" size={20} /></button>
-            </div>
-            <div className="scroll-y" style={{ padding: 24, flex: 1 }}>
+        <DetailModal
+          title={`Detalhes de ${new Date(diaSelecionado.date + 'T00:00:00').toLocaleDateString('pt-BR')}`}
+          subtitle={diaSelecionado.label}
+          onClose={() => setDiaSelecionado(null)}
+        >
               {/* Seção Pedidos */}
               {diaSelecionado.pedidos && diaSelecionado.pedidos.length > 0 && (
                 <div style={{ marginBottom: 24 }}>
@@ -6326,26 +6447,16 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
                   </div>
                 );
               })()}
-            </div>
-           <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)', background: 'var(--smoke)' }}>
-              <button onClick={() => setDiaSelecionado(null)} className="btn-primary" style={{ width: '100%' }}>Fechar</button>
-            </div>
-          </div>
-        </div>
+        </DetailModal>
       )}
 
-      {/* Modal — OS's com pedidos em dias diferentes */}
+            {/* Modal — OS's com pedidos em dias diferentes */}
       {osMultiDiaAberto && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 800, background: 'rgba(0,0,0,.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} className="fade-in">
-          <div style={{ background: '#fff', borderRadius: 24, overflow: 'hidden', maxWidth: 640, width: '100%', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ background: 'var(--ink)', padding: '24px 28px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>OS's com pedidos em dias diferentes</h3>
-                <p style={{ margin: 0, fontSize: 10, color: 'rgba(255,255,255,.5)', textTransform: 'uppercase', letterSpacing: '.1em', marginTop: 4 }}>{osComPedidosEmDiasDiferentes.length} OS{osComPedidosEmDiasDiferentes.length !== 1 ? "'s" : ''} no período</p>
-              </div>
-              <button onClick={() => setOsMultiDiaAberto(false)} style={{ background: 'rgba(255,255,255,.1)', border: 'none', color: '#fff', width: 32, height: 32, borderRadius: 999, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="x" size={20} /></button>
-            </div>
-            <div className="scroll-y" style={{ padding: 24, flex: 1 }}>
+        <DetailModal
+          title="OS's com pedidos em dias diferentes"
+          subtitle={`${osComPedidosEmDiasDiferentes.length} OS${osComPedidosEmDiasDiferentes.length !== 1 ? "'s" : ''} no período`}
+          onClose={() => setOsMultiDiaAberto(false)}
+        >
               {osComPedidosEmDiasDiferentes.length === 0 ? (
                 <p style={{ fontSize: 10, color: 'var(--muted)', textAlign: 'center', padding: '30px 0' }}>Nenhuma OS teve pedidos em dias diferentes neste período.</p>
               ) : (
@@ -6384,12 +6495,7 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
                   ))}
                 </div>
               )}
-            </div>
-            <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)', background: 'var(--smoke)' }}>
-              <button onClick={() => setOsMultiDiaAberto(false)} className="btn-primary" style={{ width: '100%' }}>Fechar</button>
-            </div>
-          </div>
-        </div>
+        </DetailModal>
       )}
     </div>
   );
