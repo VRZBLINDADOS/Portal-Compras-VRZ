@@ -5787,10 +5787,10 @@ function ResumoReuniaoView({requests, vehicles}){
 
 // Estas duas métricas usam a MESMA fórmula das barras/rótulos abaixo — garante 100% de
   // fidelidade entre os cartões do topo e o que está desenhado no gráfico, sempre.
- const totalPecasPeriodo = dadosDia.reduce((a, d) => a + d.pedidos.reduce((s, p) => s + (p.items?.length || 0), 0), 0);
+ const totalPecasPeriodo = dadosDia.reduce((a, d) => a + d.pedidos.reduce((s, p) => s + (p.items||[]).reduce((si,it)=>si+(Number(it.quantity)||1),0), 0), 0);
 const osUnicasPeriodo = new Set(dadosDia.flatMap(d => Array.from(d.osSet))).size;
 const mediaPorCarro = osUnicasPeriodo > 0 ? (totalPecasPeriodo / osUnicasPeriodo).toFixed(1) : '0';
-const maxPedDia = Math.max(...dadosDia.map(d => d.pedidos.reduce((s, p) => s + (p.items?.length || 0), 0)), 1);
+const maxPedDia = Math.max(...dadosDia.map(d => d.pedidos.reduce((s, p) => s + (p.items||[]).reduce((si,it)=>si+(Number(it.quantity)||1),0), 0)), 1);
 
   const exportarAuditoriaPedidos = () => {
     const csvCellP = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
@@ -5802,13 +5802,11 @@ const maxPedDia = Math.max(...dadosDia.map(d => d.pedidos.reduce((s, p) => s + (
       const todasDoadas = r.items?.length > 0 && r.items.every(it => it.donatedTo);
       const key = r.loteId ? `lote_${r.loteId}` : (r.parte ? `${r.os}_${r.responsavel}_${r.totalPartes}_legacy` : r.id);
       const descItens = (r.items || []).map(it => `${it.quantity}x ${it.description || '(sem descrição)'}`).join(' | ') || '—';
-      rows.push([
-        csvCellP(r.id),
-        csvCellP(r.os),
-        csvCellP(dt.toLocaleString('pt-BR')),
-        csvCellP(r.responsavel || '—'),
-        csvCellP(r.items?.length || 0),
-        csvCellP(descItens),
+const qtdTotalDoc = (r.items||[]).reduce((s,it)=>s+(Number(it.quantity)||1),0);
+rows.push([
+  csvCellP(r.id), csvCellP(r.os), csvCellP(dt.toLocaleString('pt-BR')), csvCellP(r.responsavel || '—'),
+  csvCellP(qtdTotalDoc),
+  csvCellP(descItens),
         csvCellP(key),
         csvCellP(todasDoadas ? 'NÃO' : 'SIM'),
         csvCellP(todasDoadas ? 'Cópia automática de doação (100% dos itens são donatedTo)' : '-'),
@@ -5856,7 +5854,7 @@ const dadosCompra = useMemo(() => {
     });
     const dias = Object.values(map);
     const totalValor = dias.reduce((a, d) => a + d.valor, 0);
-    const totalItens = dias.reduce((a, d) => a + d.itens.length, 0);
+    const totalItens = dias.reduce((a, d) => a + d.itens.reduce((s,it)=>s+(Number(it.quantity)||1),0), 0);
     const mediaValorOS = osComCompra.size > 0 ? (totalValor / osComCompra.size) : 0;
     return {
       dias, totalItens, osUnicas: osComCompra.size, totalValor, mediaValorOS,
@@ -5915,7 +5913,7 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
       if (dt < inicioPeriodo || dt > fimPeriodo) return;
       const { linha } = getLinhaProdResumo(r.os, r.vehicleData);
       const g = ensure(linha);
-      g.requisitadas += (r.items?.length || 0);
+     g.requisitadas += (r.items||[]).reduce((s,it)=>s+(Number(it.quantity)||1),0);
       (r.items || []).forEach(it => g.requisitadasItens.push({ os: r.os, description: it.description, quantity: it.quantity || 1, responsavel: r.responsavel }));
     });
 
@@ -5930,7 +5928,7 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
         const { linha } = getLinhaProdResumo(r.os, r.vehicleData);
         const g = ensure(linha);
         const preco = parsePrice(it.price);
-        g.compradas += 1;
+        g.compradas += (Number(it.quantity)||1);
         g.valor += preco;
         g.compradasItens.push({ os: r.os, description: it.description, quantity: it.quantity || 1, preco, supplier: it.supplier, data: dataBaseCompra });
       });
@@ -5962,12 +5960,23 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
       });
     });
     const totalLinhas = dadosPorLinha.reduce((a, d) => a + d.valor, 0);
-    rows.push('');
-    rows.push([csvCellRR('GERADO EM'), csvCellRR(new Date().toLocaleString('pt-BR'))].join(';'));
-    rows.push([csvCellRR('PERÍODO'), csvCellRR(`${inicioPeriodo.toLocaleDateString('pt-BR')} a ${fimPeriodo.toLocaleDateString('pt-BR')}`)].join(';'));
-    rows.push([csvCellRR('TOTAL (SOMA DAS LINHAS)'), csvCellRR(fmtBRL(totalLinhas))].join(';'));
-    rows.push([csvCellRR('TOTAL ("Valor Gasto em Peças")'), csvCellRR(fmtBRL(dadosCompra.totalValor))].join(';'));
-    rows.push([csvCellRR('DIVERGÊNCIA'), csvCellRR(totalLinhas === dadosCompra.totalValor ? 'NENHUMA — valores batem' : 'ATENÇÃO: valores não batem, revisar')].join(';'));
+const totalReqLinhas = dadosPorLinha.reduce((a, d) => a + d.requisitadas, 0);
+const totalCompLinhas = dadosPorLinha.reduce((a, d) => a + d.compradas, 0);
+const valoresBatem = Math.abs(totalLinhas - dadosCompra.totalValor) < 0.01;
+const reqBatem = totalReqLinhas === totalPecasPeriodo;
+const compBatem = totalCompLinhas === dadosCompra.totalItens;
+rows.push('');
+rows.push([csvCellRR('GERADO EM'), csvCellRR(new Date().toLocaleString('pt-BR'))].join(';'));
+rows.push([csvCellRR('PERÍODO'), csvCellRR(`${inicioPeriodo.toLocaleDateString('pt-BR')} a ${fimPeriodo.toLocaleDateString('pt-BR')}`)].join(';'));
+rows.push([csvCellRR('TOTAL (SOMA DAS LINHAS) — Valor'), csvCellRR(fmtBRL(totalLinhas))].join(';'));
+rows.push([csvCellRR('TOTAL ("Valor Gasto em Peças")'), csvCellRR(fmtBRL(dadosCompra.totalValor))].join(';'));
+rows.push([csvCellRR('DIVERGÊNCIA — Valor'), csvCellRR(valoresBatem ? 'NENHUMA — valores batem' : 'ATENÇÃO: valores não batem, revisar')].join(';'));
+rows.push([csvCellRR('TOTAL (SOMA DAS LINHAS) — Peças Requisitadas'), csvCellRR(totalReqLinhas)].join(';'));
+rows.push([csvCellRR('TOTAL ("Volume de Requisições")'), csvCellRR(totalPecasPeriodo)].join(';'));
+rows.push([csvCellRR('DIVERGÊNCIA — Requisitadas'), csvCellRR(reqBatem ? 'NENHUMA — valores batem' : 'ATENÇÃO: valores não batem, revisar')].join(';'));
+rows.push([csvCellRR('TOTAL (SOMA DAS LINHAS) — Peças Compradas'), csvCellRR(totalCompLinhas)].join(';'));
+rows.push([csvCellRR('TOTAL ("Valor Gasto em Peças" — Itens)'), csvCellRR(dadosCompra.totalItens)].join(';'));
+rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHUMA — valores batem' : 'ATENÇÃO: valores não batem, revisar')].join(';'));
     const blob = new Blob(['\uFEFF' + rows.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -6039,8 +6048,8 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
    data.forEach((d, i) => {
       // Para 'pedidos', a barra mostra o total de PEÇAS solicitadas no dia;
       // 'count' mostra quantos pedidos/OS geraram essas peças (rótulo abaixo da barra)
-      const val = type === 'valor' ? d.valor : d.pedidos.reduce((a, p) => a + (p.items?.length || 0), 0);
-      const count = type === 'valor' ? d.itens.length : d.osSet.size;
+     const val = type === 'valor' ? d.valor : d.pedidos.reduce((a, p) => a + (p.items||[]).reduce((s,it)=>s+(Number(it.quantity)||1),0), 0);
+const count = type === 'valor' ? d.itens.reduce((s,it)=>s+(Number(it.quantity)||1),0) : d.osSet.size;
       const x = padL + i * bw;
       const bh = maxValue > 0 ? (val / maxValue) * chartH : 0;
       const bx = x + bw * barGap, bwidth = bw * (1 - barGap * 2);
