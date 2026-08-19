@@ -5876,7 +5876,7 @@ const dadosCompra = useMemo(() => {
       const key = String(it.os || '—');
       if (!map[key]) map[key] = { os: it.os, itens: [], totalQtd: 0, totalValor: 0 };
       map[key].itens.push(it);
-      map[key].totalQtd += (it.quantity || 1);
+      map[key].totalQtd += (Number(it.quantity) || 1);
       if (valorField) map[key].totalValor += (it[valorField] || 0);
     });
     return Object.values(map).sort((a, b) => (b.totalValor || b.totalQtd) - (a.totalValor || a.totalQtd));
@@ -5930,7 +5930,7 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
 
     const dadosPorLinha = useMemo(() => {
     const map = {};
-    const ensure = (linha) => { if (!map[linha]) map[linha] = { linha, requisitadas: 0, compradas: 0, valor: 0, requisitadasItens: [], compradasItens: [], osSet: new Set() }; return map[linha]; };
+        const ensure = (linha) => { if (!map[linha]) map[linha] = { linha, requisitadas: 0, compradas: 0, valor: 0, requisitadasItens: [], compradasItens: [], osReqSet: new Set(), osCompSet: new Set() }; return map[linha]; };
 
     // Mesma fonte (pedidosConsolidados) e mesmo filtro de período usados no gráfico "Volume de Requisições"
     pedidosConsolidados(requests).forEach(r => {
@@ -5939,8 +5939,8 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
       if (dt < inicioPeriodo || dt > fimPeriodo) return;
       const { linha } = getLinhaProdResumo(r.os, r.vehicleData);
       const g = ensure(linha);
-      g.requisitadas += (r.items?.length || 0);
-      if (r.os) g.osSet.add(String(r.os).trim());
+           g.requisitadas += (r.items?.length || 0);
+      if (r.os) g.osReqSet.add(String(r.os).trim());
       (r.items || []).forEach(it => g.requisitadasItens.push({ os: r.os, description: it.description, quantity: it.quantity || 1, responsavel: r.responsavel }));
     });
 
@@ -5955,14 +5955,14 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
         const { linha } = getLinhaProdResumo(r.os, r.vehicleData);
         const g = ensure(linha);
         const preco = parsePrice(it.price);
-        g.compradas += 1;
+               g.compradas += 1;
         g.valor += preco;
-        if (r.os) g.osSet.add(String(r.os).trim());
+        if (r.os) g.osCompSet.add(String(r.os).trim());
         g.compradasItens.push({ os: r.os, description: it.description, quantity: it.quantity || 1, preco, supplier: it.supplier, data: dataBaseCompra });
       });
     });
 
-    return Object.values(map).map(g => ({ ...g, osCount: g.osSet.size })).sort((a, b) => b.valor - a.valor);
+       return Object.values(map).map(g => ({ ...g, osReqCount: g.osReqSet.size, osCompCount: g.osCompSet.size })).sort((a, b) => b.valor - a.valor);
   }, [requests, vehicleMapLinha, inicioPeriodo, fimPeriodo]);
 
   const exportarAuditoriaLinhas = () => {
@@ -6081,7 +6081,7 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
    data.forEach((d, i) => {
       // Para 'pedidos', a barra mostra o total de PEÇAS solicitadas no dia;
       // 'count' mostra quantos pedidos/OS geraram essas peças (rótulo abaixo da barra)
-      const val = type === 'valor' ? d.valor : d.pedidos.reduce((a, p) => a + (p.items?.length || 0), 0);
+       const val = type === 'valor' ? d.valor : d.pedidos.reduce((a, p) => a + (p.items || []).reduce((s, it) => s + (Number(it.quantity) || 1), 0), 0);
       const count = type === 'valor' ? d.itens.length : d.osSet.size;
       const x = offsetX + i * bw;
       const bh = maxValue > 0 ? (val / maxValue) * chartH : 0;
@@ -6101,20 +6101,25 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
       ctx.fillStyle = diaSelecionado?.date === d.date ? '#A81515' : '#DC1F1F';
       ctx.fill();
 
-     // Value on top - Mostrar sempre, inclusive quando o valor for R$ 0,00 (RESOLVIDO NA FABRICA / ESTOQUE)
+           // Value on top - Mostrar sempre, inclusive quando o valor for R$ 0,00 (RESOLVIDO NA FABRICA / ESTOQUE)
       if (val > 0 || count > 0) {
         ctx.fillStyle = '#000';
-        ctx.font = (manyBars ? '700 8px' : 'bold 10px') + ' Plus Jakarta Sans';
+        ctx.font = (manyBars ? '700 7px' : 'bold 10px') + ' Plus Jakarta Sans';
         ctx.textAlign = 'center';
-      let vStr;
+        let vStr;
         if (type === 'valor') {
-          // Valor exato — sem abreviação em "k" — para fidelidade financeira total
-          vStr = 'R$ ' + val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          if (manyBars) {
+            // Muitas barras (mensal) — abrevia pra não sobrepor o texto vizinho
+            vStr = val >= 1000 ? 'R$' + (val / 1000).toFixed(1).replace('.', ',') + 'k' : val > 0 ? 'R$' + Math.round(val) : 'R$0';
+          } else {
+            vStr = 'R$ ' + val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          }
         } else {
           vStr = val;
         }
-        // Nunca inclina o rótulo — mesmo padrão em todos os períodos, só reduz a fonte quando há muitas barras
-        ctx.fillText(vStr, x + bw / 2, barY - 8);
+        // Com muitas barras, alterna a altura do rótulo (zig-zag) pra não sobrepor o texto da barra vizinha
+        const labelY = manyBars && (i % 2 === 1) ? barY - 20 : barY - 8;
+        ctx.fillText(vStr, x + bw / 2, labelY);
       }
 // X-axis Labels - semanal/quinzenal sempre mostram todas; mensal só mostra algumas para não poluir
    if (sempreMostrarRotulos || n <= 15 || i % Math.ceil(n/10) === 0 || i === n - 1) {
@@ -6129,10 +6134,11 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
         ctx.fillText(`${dtParts[2]}/${dtParts[1]}`, x + bw / 2, displayH - 57);
       }
 
-  // Rótulo abaixo da barra: itens + OS's que geraram o valor — agora sempre visível, em todos os períodos (inclusive mensal)
-    if (count > 0 || val > 0) {
+       // Rótulo abaixo da barra: itens + OS's que geraram o valor — oculto quando há muitas barras (mensal),
+      // pois o texto não cabe e sobrepõe; nesse caso, clique na barra pra ver o detalhe do dia
+      if ((count > 0 || val > 0) && !manyBars) {
         ctx.fillStyle = '#DC1F1F';
-        ctx.font = (manyBars ? '700 7px' : 'bold 9px') + ' Plus Jakarta Sans';
+        ctx.font = 'bold 9px Plus Jakarta Sans';
         ctx.textAlign = 'center';
         if (type === 'valor') {
           const osQtd = d.osSet ? d.osSet.size : 0;
@@ -6329,15 +6335,16 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
           <p style={{ fontSize: 10, color: 'var(--muted)', textAlign: 'center', padding: '20px 0' }}>Nenhum dado de linha de produção encontrado no período.</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-                       {dadosPorLinha.map((d, i) => {
-              const prop = d.requisitadas > 0 ? Math.round((d.compradas / d.requisitadas) * 100) : 0;
+                                   {dadosPorLinha.map((d, i) => {
+              const pctValor = totalValorLinhas > 0 ? Math.round((d.valor / totalValorLinhas) * 100) : 0;
               return (
                 <div key={i} onClick={() => setLinhaSelecionadaResumo(d)} style={{ background: 'var(--smoke)', border: '1px solid var(--border)', borderRadius: 12, padding: 14, cursor: 'pointer', transition: 'background .15s' }} onMouseEnter={e => e.currentTarget.style.background = '#F0ECE8'} onMouseLeave={e => e.currentTarget.style.background = 'var(--smoke)'}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <div style={{ width: 22, height: 22, borderRadius: 6, background: 'var(--ink)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="factory" size={12} style={{ color: '#fff' }} /></div>
                       <span style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase' }}>{d.linha}</span>
-                      <span className="pill" style={{ fontSize: 8 }}>{d.osCount} OS{d.osCount !== 1 ? "'s" : ''}</span>
+                      <span className="pill" style={{ fontSize: 8, background: '#EAF0FF', color: '#1A4EC2', borderColor: '#C0D0F5' }}>{d.osReqCount} OS{d.osReqCount !== 1 ? "'s" : ''} requisitaram</span>
+                      <span className="pill" style={{ fontSize: 8, background: '#EDFAF3', color: '#059669', borderColor: '#AAE6C5' }}>{d.osCompCount} OS{d.osCompCount !== 1 ? "'s" : ''} compraram</span>
                       <Icon name="chevron-right" size={13} style={{ color: 'var(--muted)' }} />
                     </div>
                     <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--red)' }}>{fmtBRL(d.valor)}</span>
@@ -6359,7 +6366,7 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
                       <span style={{ fontSize: 9, fontWeight: 800, width: 70, textAlign: 'right', flexShrink: 0 }}>{fmtBRL(d.valor)}</span>
                     </div>
                   </div>
-                  <p style={{ fontSize: 8, fontWeight: 700, color: 'var(--muted)', marginTop: 8 }}>{prop}% das peças requisitadas nesta linha já foram compradas</p>
+                  <p style={{ fontSize: 8, fontWeight: 700, color: 'var(--muted)', marginTop: 8 }}>{pctValor}% do valor total gasto no período</p>
                 </div>
               );
             })}
@@ -6381,9 +6388,9 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
         });
         const osListLinha = Object.values(osMapLinha).sort((a, b) => String(a.os).localeCompare(String(b.os), undefined, { numeric: true }));
         return (
-        <DetailModal
+               <DetailModal
           title={linhaSelecionadaResumo.linha}
-          subtitle={`${linhaSelecionadaResumo.osCount} OS${linhaSelecionadaResumo.osCount !== 1 ? "'s" : ''} · ${linhaSelecionadaResumo.requisitadas} requisitada(s) · ${linhaSelecionadaResumo.compradas} comprada(s)`}
+          subtitle={`${linhaSelecionadaResumo.osReqCount} OS${linhaSelecionadaResumo.osReqCount !== 1 ? "'s" : ''} requisitaram · ${linhaSelecionadaResumo.osCompCount} OS${linhaSelecionadaResumo.osCompCount !== 1 ? "'s" : ''} compraram · ${linhaSelecionadaResumo.requisitadas} peça(s) requisitada(s) · ${linhaSelecionadaResumo.compradas} peça(s) comprada(s)`}
           onClose={() => setLinhaSelecionadaResumo(null)}
         >
           {osListLinha.length === 0 ? (
