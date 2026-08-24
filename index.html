@@ -6084,6 +6084,54 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
   const maxValPeca = Math.max(...dadosPorPeca.map(d => d.valor), 1);
   const totalValorPecas = dadosPorPeca.reduce((a, d) => a + d.valor, 0);
 
+  // Mesmo agrupamento por linha usado no gráfico "Peças Requisitadas × Compradas por Linha",
+  // mas aqui detalhando quais peças (e valores) compõem cada linha, pela data da solicitação.
+  const dadosPorPecaPorLinha = useMemo(() => {
+    const map = {};
+    const ensureLinha = (linha) => {
+      if (!map[linha]) map[linha] = { linha, requisitadas: 0, valor: 0, osReqSet: new Set(), osCompSet: new Set(), pecasMap: {} };
+      return map[linha];
+    };
+    pedidosConsolidados(requests).forEach(r => {
+      if (!r.timestamp) return;
+      const dt = new Date(r.timestamp);
+      if (dt < inicioPeriodo || dt > fimPeriodo) return;
+      const { linha } = getLinhaProdResumo(r.os, r.vehicleData);
+      const g = ensureLinha(linha);
+      (r.items || []).forEach(it => {
+        const desc = (it.description || '(sem descrição)').trim().toUpperCase() || '(SEM DESCRIÇÃO)';
+        if (!g.pecasMap[desc]) g.pecasMap[desc] = { descricao: desc, requisitadas: 0, valor: 0, itens: [], osSet: new Set(), osCompSet: new Set() };
+        const p = g.pecasMap[desc];
+        const qtd = Number(it.quantity) || 1;
+        const preco = parsePrice(it.price);
+        p.requisitadas += qtd;
+        g.requisitadas += qtd;
+        if (r.os) { p.osSet.add(String(r.os).trim()); g.osReqSet.add(String(r.os).trim()); }
+        if (preco > 0) {
+          p.valor += preco;
+          g.valor += preco;
+          if (r.os) { p.osCompSet.add(String(r.os).trim()); g.osCompSet.add(String(r.os).trim()); }
+        }
+        p.itens.push({ os: r.os, quantity: qtd, preco, status: it.statusOriginal || it.status || 'Pendente', responsavel: r.responsavel });
+      });
+    });
+    return Object.values(map)
+      .map(g => ({
+        linha: g.linha,
+        requisitadas: g.requisitadas,
+        valor: g.valor,
+        osReqCount: g.osReqSet.size,
+        osCompCount: g.osCompSet.size,
+        pecas: Object.values(g.pecasMap)
+          .map(p => ({ ...p, osReqCount: p.osSet.size, osCompCount: p.osCompSet.size }))
+          .sort((a, b) => b.valor - a.valor || b.requisitadas - a.requisitadas),
+      }))
+      .sort((a, b) => b.valor - a.valor || b.requisitadas - a.requisitadas);
+  }, [requests, vehicleMapLinha, inicioPeriodo, fimPeriodo]);
+
+  const maxReqLinhaPeca = Math.max(...dadosPorPecaPorLinha.map(d => d.requisitadas), 1);
+  const maxValLinhaPeca = Math.max(...dadosPorPecaPorLinha.map(d => d.valor), 1);
+
   const maxValDia = Math.max(...dadosCompra.dias.map(d => d.valor), 1);
 
   // Helper para renderizar gráfico estilo "Diretoria"
@@ -6442,55 +6490,63 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
         )}
       </div>
 
-      {/* Peças Solicitadas × Valor — atribuído pela data da SOLICITAÇÃO, não da compra */}
+           {/* Peças Solicitadas × Valor por Linha — atribuído pela data da SOLICITAÇÃO, não da compra */}
       <div className="card" style={{ padding: 24, marginTop: 16 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10, marginBottom: 20 }}>
           <div>
-            <p style={{ fontSize: 8, fontWeight: 800, textTransform: 'uppercase', color: 'var(--red)', margin: '0 0 4px' }}>Comparativo por peça — data da solicitação</p>
-            <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Peças Solicitadas × Valor Gasto</h3>
-            <p style={{ fontSize: 9, color: 'var(--muted)', marginTop: 6 }}>Período: {fmtPeriodo} · A peça é contabilizada na data em que foi solicitada, mesmo que a compra tenha ocorrido depois · Clique numa peça para ver o detalhe</p>
+            <p style={{ fontSize: 8, fontWeight: 800, textTransform: 'uppercase', color: 'var(--red)', margin: '0 0 4px' }}>Comparativo por peça e linha de produção — data da solicitação</p>
+            <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Peças Solicitadas × Valor Gasto por Linha</h3>
+            <p style={{ fontSize: 9, color: 'var(--muted)', marginTop: 6 }}>Período: {fmtPeriodo} · A peça é contabilizada na data em que foi solicitada, mesmo que a compra tenha ocorrido depois · Clique numa peça para ver quais OS's compõem o número</p>
           </div>
           <button onClick={exportarAuditoriaPecas} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'var(--ink)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 9, fontWeight: 800, textTransform: 'uppercase', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans,sans-serif', flexShrink: 0 }}>
             <Icon name="shield-check" size={13} /> Auditoria
           </button>
         </div>
-        {dadosPorPeca.length === 0 ? (
+        {dadosPorPecaPorLinha.length === 0 ? (
           <p style={{ fontSize: 10, color: 'var(--muted)', textAlign: 'center', padding: '20px 0' }}>Nenhuma peça solicitada no período.</p>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-            {dadosPorPeca.map((d, i) => {
-              const pctValorPeca = totalValorPecas > 0 ? Math.round((d.valor / totalValorPecas) * 100) : 0;
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {dadosPorPecaPorLinha.map((linhaG, li) => {
+              const pctValorLinhaPeca = totalValorPecas > 0 ? Math.round((linhaG.valor / totalValorPecas) * 100) : 0;
+              const pecasVisiveis = linhaG.pecas.slice(0, 8);
               return (
-                <div key={i} onClick={() => setPecaSelecionadaResumo(d)} style={{ background: 'var(--smoke)', border: '1px solid var(--border)', borderRadius: 12, padding: 14, cursor: 'pointer', transition: 'background .15s' }} onMouseEnter={e => e.currentTarget.style.background = '#F0ECE8'} onMouseLeave={e => e.currentTarget.style.background = 'var(--smoke)'}>
+                <div key={li} style={{ background: 'var(--smoke)', border: '1px solid var(--border)', borderRadius: 12, padding: 14 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <div style={{ width: 22, height: 22, borderRadius: 6, background: 'var(--ink)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="package" size={12} style={{ color: '#fff' }} /></div>
-                      <span style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase' }}>{d.descricao}</span>
-                      <span className="pill" style={{ fontSize: 8, background: '#EAF0FF', color: '#1A4EC2', borderColor: '#C0D0F5' }}>{d.osReqCount} OS{d.osReqCount !== 1 ? "'s" : ''} solicitaram</span>
-                      {d.osCompCount > 0 && <span className="pill" style={{ fontSize: 8, background: '#EDFAF3', color: '#059669', borderColor: '#AAE6C5' }}>{d.osCompCount} OS{d.osCompCount !== 1 ? "'s" : ''} compraram</span>}
-                      <Icon name="chevron-right" size={13} style={{ color: 'var(--muted)' }} />
+                      <div style={{ width: 22, height: 22, borderRadius: 6, background: 'var(--ink)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="factory" size={12} style={{ color: '#fff' }} /></div>
+                      <span style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase' }}>{linhaG.linha}</span>
+                      <span className="pill" style={{ fontSize: 8, background: '#EAF0FF', color: '#1A4EC2', borderColor: '#C0D0F5' }}>{linhaG.osReqCount} OS{linhaG.osReqCount !== 1 ? "'s" : ''} solicitaram</span>
+                      {linhaG.osCompCount > 0 && <span className="pill" style={{ fontSize: 8, background: '#EDFAF3', color: '#059669', borderColor: '#AAE6C5' }}>{linhaG.osCompCount} OS{linhaG.osCompCount !== 1 ? "'s" : ''} compraram</span>}
                     </div>
-                    <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--red)' }}>{d.valor > 0 ? fmtBRL(d.valor) : '—'}</span>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--red)' }}>{linhaG.valor > 0 ? fmtBRL(linhaG.valor) : '—'}</span>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontSize: 8, fontWeight: 700, color: 'var(--muted)', width: 130, flexShrink: 0 }}>Peças requisitadas</span>
-                      <div className="progress-track" style={{ flex: 1 }}><div className="progress-fill" style={{ width: `${d.requisitadas / maxReqPeca * 100}%`, background: '#1A4EC2' }} /></div>
-                      <span style={{ fontSize: 10, fontWeight: 800, width: 34, textAlign: 'right', flexShrink: 0 }}>{d.requisitadas}</span>
+                      <div className="progress-track" style={{ flex: 1 }}><div className="progress-fill" style={{ width: `${linhaG.requisitadas / maxReqLinhaPeca * 100}%`, background: '#1A4EC2' }} /></div>
+                      <span style={{ fontSize: 10, fontWeight: 800, width: 34, textAlign: 'right', flexShrink: 0 }}>{linhaG.requisitadas}</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontSize: 8, fontWeight: 700, color: 'var(--muted)', width: 130, flexShrink: 0 }}>Valor gasto</span>
-                      <div className="progress-track" style={{ flex: 1 }}><div className="progress-fill" style={{ width: `${d.valor / maxValPeca * 100}%`, background: 'var(--red)' }} /></div>
-                      <span style={{ fontSize: 9, fontWeight: 800, width: 70, textAlign: 'right', flexShrink: 0 }}>{d.valor > 0 ? fmtBRL(d.valor) : '—'}</span>
+                      <div className="progress-track" style={{ flex: 1 }}><div className="progress-fill" style={{ width: `${linhaG.valor / maxValLinhaPeca * 100}%`, background: 'var(--red)' }} /></div>
+                      <span style={{ fontSize: 9, fontWeight: 800, width: 70, textAlign: 'right', flexShrink: 0 }}>{linhaG.valor > 0 ? fmtBRL(linhaG.valor) : '—'}</span>
                     </div>
                   </div>
-                  <p style={{ fontSize: 8, fontWeight: 700, color: 'var(--muted)', marginTop: 8 }}>{pctValorPeca}% do valor total gasto (atribuído pela data de solicitação) no período</p>
+                  <p style={{ fontSize: 8, fontWeight: 700, color: 'var(--muted)', marginBottom: 10 }}>{pctValorLinhaPeca}% do valor total gasto (atribuído pela data de solicitação) no período</p>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {pecasVisiveis.map((p, pi) => (
+                      <span key={pi} onClick={() => setPecaSelecionadaResumo(p)} style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', padding: '4px 9px', borderRadius: 6, background: '#fff', border: '1px solid var(--border)', color: 'var(--ink)' }}>
+                        {p.descricao} · {p.requisitadas} un.{p.valor > 0 ? ` · ${fmtBRL(p.valor)}` : ''}
+                        <Icon name="chevron-right" size={10} style={{ color: 'var(--muted)' }} />
+                      </span>
+                    ))}
+                    {linhaG.pecas.length > pecasVisiveis.length && (
+                      <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--muted)', padding: '4px 9px' }}>+{linhaG.pecas.length - pecasVisiveis.length} outra(s) peça(s)</span>
+                    )}
+                  </div>
                 </div>
               );
             })}
-            {dadosPorPeca.length > 20 && (
-              <p style={{ fontSize: 9, color: 'var(--muted)', textAlign: 'center', fontWeight: 700 }}>Mostrando as 20 peças de maior valor, de {dadosPorPeca.length} peças distintas solicitadas no período.</p>
-            )}
           </div>
         )}
       </div>
