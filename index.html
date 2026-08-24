@@ -6086,10 +6086,10 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
 
   // Mesmo agrupamento por linha usado no gráfico "Peças Requisitadas × Compradas por Linha",
   // mas aqui detalhando quais peças (e valores) compõem cada linha, pela data da solicitação.
-  const dadosPorPecaPorLinha = useMemo(() => {
+    const dadosPorPecaPorLinha = useMemo(() => {
     const map = {};
     const ensureLinha = (linha) => {
-      if (!map[linha]) map[linha] = { linha, requisitadas: 0, valor: 0, osReqSet: new Set(), osCompSet: new Set(), pecasMap: {} };
+      if (!map[linha]) map[linha] = { linha, requisitadas: 0, compradas: 0, valor: 0, osReqSet: new Set(), osCompSet: new Set(), pecasMap: {} };
       return map[linha];
     };
     pedidosConsolidados(requests).forEach(r => {
@@ -6100,17 +6100,22 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
       const g = ensureLinha(linha);
       (r.items || []).forEach(it => {
         const desc = (it.description || '(sem descrição)').trim().toUpperCase() || '(SEM DESCRIÇÃO)';
-        if (!g.pecasMap[desc]) g.pecasMap[desc] = { descricao: desc, requisitadas: 0, valor: 0, itens: [], osSet: new Set(), osCompSet: new Set() };
+        if (!g.pecasMap[desc]) g.pecasMap[desc] = { descricao: desc, requisitadas: 0, compradas: 0, valor: 0, itens: [], osSet: new Set(), osCompSet: new Set() };
         const p = g.pecasMap[desc];
         const qtd = Number(it.quantity) || 1;
         const preco = parsePrice(it.price);
+        const foiComprada = !!(it.boughtAt || it.actualDeliveryDate || preco > 0);
         p.requisitadas += qtd;
         g.requisitadas += qtd;
         if (r.os) { p.osSet.add(String(r.os).trim()); g.osReqSet.add(String(r.os).trim()); }
+        if (foiComprada) {
+          p.compradas += qtd;
+          g.compradas += qtd;
+          if (r.os) { p.osCompSet.add(String(r.os).trim()); g.osCompSet.add(String(r.os).trim()); }
+        }
         if (preco > 0) {
           p.valor += preco;
           g.valor += preco;
-          if (r.os) { p.osCompSet.add(String(r.os).trim()); g.osCompSet.add(String(r.os).trim()); }
         }
         p.itens.push({ os: r.os, quantity: qtd, preco, status: it.statusOriginal || it.status || 'Pendente', responsavel: r.responsavel });
       });
@@ -6119,6 +6124,7 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
       .map(g => ({
         linha: g.linha,
         requisitadas: g.requisitadas,
+        compradas: g.compradas,
         valor: g.valor,
         osReqCount: g.osReqSet.size,
         osCompCount: g.osCompSet.size,
@@ -6520,11 +6526,16 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
                     </div>
                     <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--red)' }}>{linhaG.valor > 0 ? fmtBRL(linhaG.valor) : '—'}</span>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontSize: 8, fontWeight: 700, color: 'var(--muted)', width: 130, flexShrink: 0 }}>Peças requisitadas</span>
                       <div className="progress-track" style={{ flex: 1 }}><div className="progress-fill" style={{ width: `${linhaG.requisitadas / maxReqLinhaPeca * 100}%`, background: '#1A4EC2' }} /></div>
                       <span style={{ fontSize: 10, fontWeight: 800, width: 34, textAlign: 'right', flexShrink: 0 }}>{linhaG.requisitadas}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 8, fontWeight: 700, color: 'var(--muted)', width: 130, flexShrink: 0 }}>Peças compradas</span>
+                      <div className="progress-track" style={{ flex: 1 }}><div className="progress-fill" style={{ width: `${linhaG.compradas / maxReqLinhaPeca * 100}%`, background: '#059669' }} /></div>
+                      <span style={{ fontSize: 10, fontWeight: 800, width: 34, textAlign: 'right', flexShrink: 0 }}>{linhaG.compradas}</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontSize: 8, fontWeight: 700, color: 'var(--muted)', width: 130, flexShrink: 0 }}>Valor gasto</span>
@@ -6536,7 +6547,7 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {pecasVisiveis.map((p, pi) => (
                       <span key={pi} onClick={() => setPecaSelecionadaResumo(p)} style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 9, fontWeight: 700, textTransform: 'uppercase', padding: '4px 9px', borderRadius: 6, background: '#fff', border: '1px solid var(--border)', color: 'var(--ink)' }}>
-                        {p.descricao} · {p.requisitadas} un.{p.valor > 0 ? ` · ${fmtBRL(p.valor)}` : ''}
+                        {p.descricao} · {p.requisitadas} req. / {p.compradas} comp.{p.valor > 0 ? ` · ${fmtBRL(p.valor)}` : ''}
                         <Icon name="chevron-right" size={10} style={{ color: 'var(--muted)' }} />
                       </span>
                     ))}
