@@ -5665,7 +5665,8 @@ function ResumoReuniaoView({requests, vehicles}){
   const [offset, setOffset] = useState(0);
     const [diaSelecionado, setDiaSelecionado] = useState(null);
   const [osMultiDiaAberto, setOsMultiDiaAberto] = useState(false);
-  const [linhaSelecionadaResumo, setLinhaSelecionadaResumo] = useState(null);
+   const [linhaSelecionadaResumo, setLinhaSelecionadaResumo] = useState(null);
+  const [pecaSelecionadaResumo, setPecaSelecionadaResumo] = useState(null);
   const [detalheKpi, setDetalheKpi] = useState(null);
 
   const vehicleMapLinha = useMemo(() => { const m = {}; (vehicles || []).forEach(v => { m[String(v.os).trim()] = v; }); return m; }, [vehicles]);
@@ -6005,7 +6006,7 @@ rows.push([csvCellRR('DIVERGÊNCIA — Requisitadas'), csvCellRR(reqBatem ? 'NEN
 rows.push([csvCellRR('TOTAL (SOMA DAS LINHAS) — Peças Compradas'), csvCellRR(totalCompLinhas)].join(';'));
 rows.push([csvCellRR('TOTAL ("Valor Gasto em Peças" — Itens)'), csvCellRR(dadosCompra.totalItens)].join(';'));
 rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHUMA — valores batem' : 'ATENÇÃO: valores não batem, revisar')].join(';'));
-    const blob = new Blob(['\uFEFF' + rows.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+      const blob = new Blob(['\uFEFF' + rows.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `Auditoria_Linhas_${inicioPeriodo.toLocaleDateString('pt-BR').replace(/\//g, '-')}_a_${fimPeriodo.toLocaleDateString('pt-BR').replace(/\//g, '-')}.csv`;
@@ -6015,6 +6016,73 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
   const maxReqLinha = Math.max(...dadosPorLinha.map(d => d.requisitadas), 1);
   const maxValLinha2 = Math.max(...dadosPorLinha.map(d => d.valor), 1);
   const totalValorLinhas = dadosPorLinha.reduce((a, d) => a + d.valor, 0);
+
+  // Peças solicitadas x valor — usa a DATA DA SOLICITAÇÃO como referência do período,
+  // mesmo que o preço só tenha sido preenchido depois, na compra. Mesma fonte
+  // (pedidosConsolidados) e mesmo filtro de período do gráfico "Volume de Requisições".
+  const dadosPorPeca = useMemo(() => {
+    const map = {};
+    const ensure = (desc) => {
+      if (!map[desc]) map[desc] = { descricao: desc, requisitadas: 0, valor: 0, itens: [], osSet: new Set(), osCompSet: new Set() };
+      return map[desc];
+    };
+    pedidosConsolidados(requests).forEach(r => {
+      if (!r.timestamp) return;
+      const dt = new Date(r.timestamp);
+      if (dt < inicioPeriodo || dt > fimPeriodo) return;
+      (r.items || []).forEach(it => {
+        const desc = (it.description || '(sem descrição)').trim().toUpperCase() || '(SEM DESCRIÇÃO)';
+        const g = ensure(desc);
+        const qtd = Number(it.quantity) || 1;
+        const preco = parsePrice(it.price);
+        g.requisitadas += qtd;
+        if (r.os) g.osSet.add(String(r.os).trim());
+        if (preco > 0) {
+          g.valor += preco;
+          if (r.os) g.osCompSet.add(String(r.os).trim());
+        }
+        g.itens.push({ os: r.os, quantity: qtd, preco, status: it.statusOriginal || it.status || 'Pendente', responsavel: r.responsavel });
+      });
+    });
+    return Object.values(map)
+      .map(g => ({ ...g, osReqCount: g.osSet.size, osCompCount: g.osCompSet.size }))
+      .sort((a, b) => b.valor - a.valor || b.requisitadas - a.requisitadas);
+  }, [requests, inicioPeriodo, fimPeriodo]);
+
+  const exportarAuditoriaPecas = () => {
+    const rows = [[csvCellRR('Peça'), csvCellRR('OS'), csvCellRR('Qtd'), csvCellRR('Valor'), csvCellRR('Status'), csvCellRR('Data Solicitação')].join(';')];
+    pedidosConsolidados(requests).forEach(r => {
+      if (!r.timestamp) return;
+      const dt = new Date(r.timestamp);
+      if (dt < inicioPeriodo || dt > fimPeriodo) return;
+      (r.items || []).forEach(it => {
+        rows.push([
+          csvCellRR(it.description || '(sem descrição)'),
+          csvCellRR(r.os),
+          csvCellRR(it.quantity || 1),
+          csvCellRR(parsePrice(it.price).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })),
+          csvCellRR(it.statusOriginal || it.status || 'Pendente'),
+          csvCellRR(new Date(r.timestamp).toLocaleDateString('pt-BR')),
+        ].join(';'));
+      });
+    });
+    const totalPecasAud = dadosPorPeca.reduce((a, d) => a + d.requisitadas, 0);
+    const totalValorAud = dadosPorPeca.reduce((a, d) => a + d.valor, 0);
+    rows.push('');
+    rows.push([csvCellRR('GERADO EM'), csvCellRR(new Date().toLocaleString('pt-BR'))].join(';'));
+    rows.push([csvCellRR('PERÍODO (base: data da solicitação)'), csvCellRR(`${inicioPeriodo.toLocaleDateString('pt-BR')} a ${fimPeriodo.toLocaleDateString('pt-BR')}`)].join(';'));
+    rows.push([csvCellRR('TOTAL DE PEÇAS (SOMA)'), csvCellRR(totalPecasAud)].join(';'));
+    rows.push([csvCellRR('TOTAL VALOR (SOMA)'), csvCellRR(fmtBRL(totalValorAud))].join(';'));
+    const blob = new Blob(['\uFEFF' + rows.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `Auditoria_Pecas_Por_Solicitacao_${inicioPeriodo.toLocaleDateString('pt-BR').replace(/\//g, '-')}_a_${fimPeriodo.toLocaleDateString('pt-BR').replace(/\//g, '-')}.csv`;
+    a.click();
+  };
+
+  const maxReqPeca = Math.max(...dadosPorPeca.map(d => d.requisitadas), 1);
+  const maxValPeca = Math.max(...dadosPorPeca.map(d => d.valor), 1);
+  const totalValorPecas = dadosPorPeca.reduce((a, d) => a + d.valor, 0);
 
   const maxValDia = Math.max(...dadosCompra.dias.map(d => d.valor), 1);
 
@@ -6366,10 +6434,63 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
                       <span style={{ fontSize: 9, fontWeight: 800, width: 70, textAlign: 'right', flexShrink: 0 }}>{fmtBRL(d.valor)}</span>
                     </div>
                   </div>
-                  <p style={{ fontSize: 8, fontWeight: 700, color: 'var(--muted)', marginTop: 8 }}>{pctValor}% do valor total gasto no período</p>
+                                <p style={{ fontSize: 8, fontWeight: 700, color: 'var(--muted)', marginTop: 8 }}>{pctValor}% do valor total gasto no período</p>
                 </div>
               );
             })}
+          </div>
+        )}
+      </div>
+
+      {/* Peças Solicitadas × Valor — atribuído pela data da SOLICITAÇÃO, não da compra */}
+      <div className="card" style={{ padding: 24, marginTop: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10, marginBottom: 20 }}>
+          <div>
+            <p style={{ fontSize: 8, fontWeight: 800, textTransform: 'uppercase', color: 'var(--red)', margin: '0 0 4px' }}>Comparativo por peça — data da solicitação</p>
+            <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Peças Solicitadas × Valor Gasto</h3>
+            <p style={{ fontSize: 9, color: 'var(--muted)', marginTop: 6 }}>Período: {fmtPeriodo} · A peça é contabilizada na data em que foi solicitada, mesmo que a compra tenha ocorrido depois · Clique numa peça para ver o detalhe</p>
+          </div>
+          <button onClick={exportarAuditoriaPecas} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'var(--ink)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 9, fontWeight: 800, textTransform: 'uppercase', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans,sans-serif', flexShrink: 0 }}>
+            <Icon name="shield-check" size={13} /> Auditoria
+          </button>
+        </div>
+        {dadosPorPeca.length === 0 ? (
+          <p style={{ fontSize: 10, color: 'var(--muted)', textAlign: 'center', padding: '20px 0' }}>Nenhuma peça solicitada no período.</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            {dadosPorPeca.map((d, i) => {
+              const pctValorPeca = totalValorPecas > 0 ? Math.round((d.valor / totalValorPecas) * 100) : 0;
+              return (
+                <div key={i} onClick={() => setPecaSelecionadaResumo(d)} style={{ background: 'var(--smoke)', border: '1px solid var(--border)', borderRadius: 12, padding: 14, cursor: 'pointer', transition: 'background .15s' }} onMouseEnter={e => e.currentTarget.style.background = '#F0ECE8'} onMouseLeave={e => e.currentTarget.style.background = 'var(--smoke)'}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <div style={{ width: 22, height: 22, borderRadius: 6, background: 'var(--ink)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="package" size={12} style={{ color: '#fff' }} /></div>
+                      <span style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase' }}>{d.descricao}</span>
+                      <span className="pill" style={{ fontSize: 8, background: '#EAF0FF', color: '#1A4EC2', borderColor: '#C0D0F5' }}>{d.osReqCount} OS{d.osReqCount !== 1 ? "'s" : ''} solicitaram</span>
+                      {d.osCompCount > 0 && <span className="pill" style={{ fontSize: 8, background: '#EDFAF3', color: '#059669', borderColor: '#AAE6C5' }}>{d.osCompCount} OS{d.osCompCount !== 1 ? "'s" : ''} compraram</span>}
+                      <Icon name="chevron-right" size={13} style={{ color: 'var(--muted)' }} />
+                    </div>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--red)' }}>{d.valor > 0 ? fmtBRL(d.valor) : '—'}</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 8, fontWeight: 700, color: 'var(--muted)', width: 130, flexShrink: 0 }}>Peças requisitadas</span>
+                      <div className="progress-track" style={{ flex: 1 }}><div className="progress-fill" style={{ width: `${d.requisitadas / maxReqPeca * 100}%`, background: '#1A4EC2' }} /></div>
+                      <span style={{ fontSize: 10, fontWeight: 800, width: 34, textAlign: 'right', flexShrink: 0 }}>{d.requisitadas}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 8, fontWeight: 700, color: 'var(--muted)', width: 130, flexShrink: 0 }}>Valor gasto</span>
+                      <div className="progress-track" style={{ flex: 1 }}><div className="progress-fill" style={{ width: `${d.valor / maxValPeca * 100}%`, background: 'var(--red)' }} /></div>
+                      <span style={{ fontSize: 9, fontWeight: 800, width: 70, textAlign: 'right', flexShrink: 0 }}>{d.valor > 0 ? fmtBRL(d.valor) : '—'}</span>
+                    </div>
+                  </div>
+                  <p style={{ fontSize: 8, fontWeight: 700, color: 'var(--muted)', marginTop: 8 }}>{pctValorPeca}% do valor total gasto (atribuído pela data de solicitação) no período</p>
+                </div>
+              );
+            })}
+            {dadosPorPeca.length > 20 && (
+              <p style={{ fontSize: 9, color: 'var(--muted)', textAlign: 'center', fontWeight: 700 }}>Mostrando as 20 peças de maior valor, de {dadosPorPeca.length} peças distintas solicitadas no período.</p>
+            )}
           </div>
         )}
       </div>
@@ -6432,8 +6553,35 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
             </div>
           )}
         </DetailModal>
-        );
+               );
       })()}
+
+      {pecaSelecionadaResumo && (
+        <DetailModal
+          title={pecaSelecionadaResumo.descricao}
+          subtitle={`${pecaSelecionadaResumo.osReqCount} OS${pecaSelecionadaResumo.osReqCount !== 1 ? "'s" : ''} solicitaram · ${pecaSelecionadaResumo.requisitadas} peça(s) requisitada(s) · valor atribuído pela data de solicitação`}
+          onClose={() => setPecaSelecionadaResumo(null)}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {pecaSelecionadaResumo.itens.map((it, i) => (
+              <div key={i} style={{ background: 'var(--smoke)', border: '1px solid var(--border)', borderRadius: 10, padding: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <div>
+                  <p style={{ fontWeight: 800, fontSize: 11, margin: '0 0 3px' }}>OS #{it.os}</p>
+                  <p style={{ fontSize: 9, color: 'var(--muted)', margin: 0 }}>{it.responsavel || '—'} · Qtd {it.quantity}</p>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <StatusBadge status={it.status || 'Pendente'} />
+                  <p style={{ fontSize: 11, fontWeight: 800, color: it.preco > 0 ? '#059669' : 'var(--muted)', margin: '4px 0 0' }}>{it.preco > 0 ? fmtBRL(it.preco) : '—'}</p>
+                </div>
+              </div>
+            ))}
+            <div style={{ marginTop: 8, padding: '12px 16px', background: '#0D0D0D', borderRadius: 12, color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase' }}>Total desta peça</span>
+              <span style={{ fontSize: 14, fontWeight: 800 }}>{pecaSelecionadaResumo.valor > 0 ? fmtBRL(pecaSelecionadaResumo.valor) : '—'}</span>
+            </div>
+          </div>
+        </DetailModal>
+      )}
 
       {detalheKpi && (
         <DetailModal title={detalheKpi.titulo} onClose={() => setDetalheKpi(null)}>
