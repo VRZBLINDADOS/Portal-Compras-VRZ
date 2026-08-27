@@ -3048,15 +3048,16 @@ function StorageView({requests,loggedInUser}){
     const blob=new Blob(['\uFEFF'+rows.join('\n')],{type:'text/csv;charset=utf-8;'});
     const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`VRZ_Concluidos_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.csv`;a.click();
   };
-  const exportPDF=async()=>{
+   const exportPDF=async()=>{
     if(!pedSel.length)return;setExportando(true);
     try{
-      const{jsPDF}=window.jspdf;const doc=new jsPDF();const hoje=new Date().toLocaleDateString('pt-BR');
-      doc.setFillColor(13,13,13);doc.rect(0,0,210,38,'F');doc.setTextColor(255,255,255);doc.setFontSize(16);doc.setFont('helvetica','bold');
-      doc.text('VRZ COMPRAS — ARQUIVO DE CONCLUÍDOS',10,16);doc.setFontSize(8);doc.setFont('helvetica','normal');doc.text(`Gerado: ${hoje}  |  Pedidos: ${pedSel.length}`,10,28);
-      doc.setTextColor(0,0,0);let y=50;
-      pedSel.forEach(req=>{
-        if(y>250){doc.addPage();y=15;}
+      const zip=new JSZip();
+      const hoje=new Date().toLocaleDateString('pt-BR');
+      for(const req of pedSel){
+        const{jsPDF}=window.jspdf;const doc=new jsPDF();
+        doc.setFillColor(13,13,13);doc.rect(0,0,210,38,'F');doc.setTextColor(255,255,255);doc.setFontSize(16);doc.setFont('helvetica','bold');
+        doc.text(`OS #${req.os} — VRZ COMPRAS`,10,16);doc.setFontSize(8);doc.setFont('helvetica','normal');doc.text(`Gerado: ${hoje}  |  Unidade: ${req.unidade||'Unidade 1'}`,10,28);
+        doc.setTextColor(0,0,0);let y=50;
         doc.setFillColor(245,242,240);doc.rect(8,y-4,194,13,'F');
         doc.setFont('helvetica','bold');doc.setFontSize(9);doc.text(`OS #${req.os} (${req.unidade||'Unidade 1'}) — ${req.vehicleData?.modelo||''}`,12,y+3);
         doc.setFont('helvetica','normal');doc.setFontSize(7);doc.text(`Solicitante: ${req.responsavel||'—'}  |  ${req.timestamp?new Date(req.timestamp).toLocaleDateString('pt-BR'):''}`,12,y+9);y+=16;
@@ -3067,9 +3068,10 @@ function StorageView({requests,loggedInUser}){
           const det=`Qtd:${it.quantity||1}  Fornecedor:${it.supplier||'—'}  Valor:${it.price?'R$'+Number(it.price).toLocaleString('pt-BR',{minimumFractionDigits:2}):'—'}  Entrega:${it.actualDeliveryDate||'—'}`;
           const ls=doc.splitTextToSize(det,180);doc.text(ls,16,y+5);doc.setTextColor(0,0,0);y+=5+ls.length*4+2;
         });
-        y+=4;doc.setDrawColor(220,220,220);doc.line(8,y-2,202,y-2);
-      });
-      doc.save(`VRZ_Concluidos_${hoje.replace(/\//g,'-')}.pdf`);
+        zip.file(`OS_${req.os}.pdf`,doc.output('blob'));
+      }
+      const content=await zip.generateAsync({type:'blob'});
+      const a=document.createElement('a');a.href=URL.createObjectURL(content);a.download=`VRZ_Concluidos_${hoje.replace(/\//g,'-')}.zip`;a.click();
     }catch(e){alert('Erro PDF: '+e.message);}
     setExportando(false);
   };
@@ -5630,14 +5632,159 @@ function PedidosExcedentesView({requests}){
             </tr>
           ))}
        </tbody>
-      </table>
+           </table>
       </div>
     </div>
   );
 }
 
+function LimpezaVeiculosView({vehicles, requests}){
+  const[selecionados,setSelecionados]=useState([]);
+  const[confirmando,setConfirmando]=useState(false);
+  const[excluindo,setExcluindo]=useState(false);
+  const[filtro,setFiltro]=useState('todos');
+  const[search,setSearch]=useState('');
+
+  const pendenciasPorOS=useMemo(()=>{
+    const map={};
+    requests.forEach(r=>{
+      const os=String(r.os||'').trim();if(!os)return;
+      const pend=(r.items||[]).filter(it=>it.status!=='Concluído'&&it.status!=='Doado').length;
+      if(pend>0)map[os]=(map[os]||0)+pend;
+    });
+    return map;
+  },[requests]);
+
+  const lista=useMemo(()=>{
+    return vehicles.map(v=>{
+      const os=String(v.os||'').trim();
+      const pendentes=pendenciasPorOS[os]||0;
+      const entregue=String(v.etapa||'').trim().toLowerCase()==='entregue'||String(v.localizacao||'').trim().toLowerCase()==='entregue';
+      return{...v,_pendentes:pendentes,_entregue:entregue};
+    }).filter(v=>v._pendentes>0||v._entregue)
+      .filter(v=>{
+        if(filtro==='pendentes')return v._pendentes>0;
+        if(filtro==='entregues')return v._entregue;
+        return true;
+      })
+      .filter(v=>{
+        const t=search.trim().toLowerCase();
+        if(!t)return true;
+        return String(v.os).toLowerCase().includes(t)||String(v.modelo||'').toLowerCase().includes(t)||String(v.chassi||'').toLowerCase().includes(t);
+      })
+      .sort((a,b)=>String(a.os).localeCompare(String(b.os),undefined,{numeric:true}));
+  },[vehicles,pendenciasPorOS,filtro,search]);
+
+  const toggle=(os)=>setSelecionados(p=>p.includes(os)?p.filter(x=>x!==os):[...p,os]);
+  const todosSel=lista.length>0&&lista.every(v=>selecionados.includes(String(v.os)));
+  const toggleTodos=()=>{
+    if(todosSel)setSelecionados(p=>p.filter(os=>!lista.some(v=>String(v.os)===os)));
+    else setSelecionados(p=>[...new Set([...p,...lista.map(v=>String(v.os))])]);
+  };
+
+  const executarExclusao=async()=>{
+    setConfirmando(false);setExcluindo(true);
+    try{
+      for(const os of selecionados){
+        await col('vehicles').doc(os).delete();
+      }
+      setSelecionados([]);
+    }catch(e){alert('Erro ao excluir: '+e.message);}
+    setExcluindo(false);
+  };
+
+  return(
+    <div className="fade-in" style={{display:'flex',flexDirection:'column',gap:16}}>
+      <div style={{background:'#FFFBE6',border:'1px solid #FFE680',borderRadius:12,padding:'12px 16px'}}>
+        <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'#856A00',margin:'0 0 4px'}}>⚠ Atenção</p>
+        <p style={{fontSize:10,color:'#856A00',margin:0,lineHeight:1.5}}>Esta lista mostra veículos cadastrados no Portal que estão com peças pendentes OU já marcados como "Entregue". A exclusão remove apenas o cadastro do veículo (OS) — os pedidos de peças não são apagados automaticamente.</p>
+      </div>
+      <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+        <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)'}}>
+          {[{v:'todos',l:'Todos'},{v:'pendentes',l:'Com Pendências'},{v:'entregues',l:'Entregues'}].map(f=>(
+            <button key={f.v} onClick={()=>setFiltro(f.v)} style={{padding:'7px 14px',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',border:'none',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif',background:filtro===f.v?'#fff':'transparent',color:filtro===f.v?'var(--red)':'var(--muted)',boxShadow:filtro===f.v?'0 2px 8px rgba(0,0,0,.08)':'none'}}>{f.l}</button>
+          ))}
+        </div>
+        <div style={{position:'relative',flex:1,minWidth:200}}>
+          <input type="text" placeholder="Buscar OS / Modelo / Chassi..." value={search} onChange={e=>setSearch(e.target.value)} className="input" style={{paddingLeft:36,fontSize:11}}/>
+          <div style={{position:'absolute',left:11,top:'50%',transform:'translateY(-50%)',color:'var(--muted)'}}><Icon name="search" size={14}/></div>
+        </div>
+      </div>
+
+      {lista.length===0?(
+        <div style={{padding:'56px 20px',textAlign:'center',background:'#fff',borderRadius:16,border:'1.5px dashed var(--border)'}}>
+          <Icon name="car" size={30} style={{margin:'0 auto 10px',display:'block',color:'var(--muted)'}}/>
+          <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',margin:0}}>Nenhum veículo encontrado com esses filtros</p>
+        </div>
+      ):(
+        <div className="card" style={{overflow:'hidden'}}>
+          <div style={{padding:'10px 16px',background:'var(--smoke)',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8}}>
+            <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer'}}>
+              <input type="checkbox" checked={todosSel} onChange={toggleTodos} style={{width:15,height:15,accentColor:'var(--red)'}}/>
+              <span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)'}}>Selecionar todos ({lista.length})</span>
+            </label>
+            {selecionados.length>0&&(
+              <button onClick={()=>setConfirmando(true)} disabled={excluindo} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 16px',background:'var(--red)',color:'#fff',border:'none',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
+                <Icon name="trash-2" size={13}/> Excluir {selecionados.length} selecionado(s)
+              </button>
+            )}
+          </div>
+          <div style={{maxHeight:'60vh',overflowY:'auto'}} className="scroll-y">
+            {lista.map(v=>{
+              const os=String(v.os);
+              const isSel=selecionados.includes(os);
+              return(
+                <label key={os} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',borderBottom:'1px solid var(--smoke)',cursor:'pointer',background:isSel?'var(--red-light)':'#fff'}}>
+                  <input type="checkbox" checked={isSel} onChange={()=>toggle(os)} style={{width:16,height:16,accentColor:'var(--red)',flexShrink:0}}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:3}}>
+                      <span style={{fontSize:13,fontWeight:800}}>OS #{v.os}</span>
+                      <span style={{fontSize:9,fontWeight:700,color:'var(--muted)',textTransform:'uppercase'}}>{v.modelo||'—'}</span>
+                    </div>
+                    <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                      {v._pendentes>0&&<span style={{fontSize:8,fontWeight:800,padding:'2px 8px',borderRadius:999,background:'#FFF4E6',color:'#C45E00',border:'1px solid #FFD9A8'}}>{v._pendentes} peça(s) pendente(s)</span>}
+                      {v._entregue&&<span style={{fontSize:8,fontWeight:800,padding:'2px 8px',borderRadius:999,background:'#EDFAF3',color:'#059669',border:'1px solid #AAE6C5'}}>Entregue</span>}
+                    </div>
+                  </div>
+                  <span className="mono" style={{fontSize:9,color:'var(--muted)',flexShrink:0}}>{v.chassi||''}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {confirmando&&(
+        <div style={{position:'fixed',inset:0,zIndex:700,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}} className="fade-in">
+          <div style={{background:'#fff',borderRadius:20,overflow:'hidden',maxWidth:400,width:'100%'}}>
+            <div style={{background:'var(--red)',padding:'24px 20px',textAlign:'center',color:'#fff'}}>
+              <div style={{width:52,height:52,background:'rgba(255,255,255,.2)',borderRadius:14,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 12px'}}><Icon name="trash-2" size={26}/></div>
+              <h3 style={{margin:0,fontSize:16,fontWeight:800}}>Excluir {selecionados.length} veículo(s)?</h3>
+            </div>
+            <div style={{padding:20}}>
+              <p style={{fontSize:11,color:'var(--muted)',textAlign:'center',marginBottom:16}}>Isso remove o cadastro destes veículos do Portal. Os pedidos de peças vinculados NÃO serão apagados.</p>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                <button onClick={()=>setConfirmando(false)} className="btn-ghost">Cancelar</button>
+                <button onClick={executarExclusao} className="btn-primary">Confirmar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {excluindo&&(
+        <div style={{position:'fixed',inset:0,zIndex:700,background:'rgba(0,0,0,.9)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div style={{background:'#fff',borderRadius:20,padding:32,textAlign:'center'}}>
+            <Icon name="refresh-cw" size={28} className="spin"/>
+            <p style={{fontSize:11,fontWeight:800,marginTop:12}}>Excluindo...</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── App Principal
- // ── Resumo Reunião ────────────────────────────────────────────────────────
+ // ── Resumo Reunião
   function DetailModal({title,subtitle,badge,onClose,children,accent='var(--red)'}){
   return ReactDOM.createPortal((
     <div style={{position:'fixed',inset:0,zIndex:900,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}} className="fade-in" onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
@@ -7619,7 +7766,7 @@ const navItems=[
         canAccessFinalizacao&&{key:'finalizacao',icon:'clipboard-check',label:'Inspeção'},
     canAccessFeedbackFinalizacao&&{key:'feedbackFinalizacao',icon:'message-square',label:'Feedback Finalização'},
     canAccessFeedbackFinalizacao&&{key:'feedbackFinalizacaoReuniao',icon:'presentation',label:'Feedback Finalização Reunião'},
-    loggedIn?.user===MASTER_USER&&{key:'donor',icon:'git-merge',label:'Doações'},
+        (loggedIn?.user===MASTER_USER||loggedIn?.user==='Matheus.Ransi')&&{key:'donor',icon:'git-merge',label:'Doações'},
     canDo(role,'manage')&&{key:'admin',icon:'settings',label:'Gestão'},
     (isMaster||isAdmin)&&{key:'dashboard',icon:'bar-chart-2',label:'Análises'},
     (loggedIn?.user===MASTER_USER||loggedIn?.user==='Matheus.Ransi')&&{key:'resumo',icon:'presentation',label:'Resumo Reunião'},
@@ -7718,7 +7865,7 @@ const navItems=[
                 {view==='status'&&<StatusView requests={requests} loggedInUser={loggedIn} vehicles={vehicles}/>}
                 {view==='chegadas'&&<ChegadasView requests={requests} loggedInUser={loggedIn} vehicles={vehicles}/>}
                 {view==='estoque'&&<EstoqueView estoque={estoque} movimentos={estoqueMovimentos} requests={requests} loggedInUser={loggedIn} isMaster={isMaster}/>}
-               {view==='donor'&&canDo(role,'donor')&&<DonorSystem requests={requests} vehicles={vehicles} loggedInUser={loggedIn}/>}
+                              {view==='donor'&&(canDo(role,'donor')||loggedIn?.user==='Matheus.Ransi')&&<DonorSystem requests={requests} vehicles={vehicles} loggedInUser={loggedIn}/>}
                 {view==='finalizacao'&&canAccessFinalizacao&&<FinalizacaoView vehiclesDB={vehicles} requests={requests} loggedInUser={loggedIn} isMaster={isMaster}/>}
                {view==='feedbackFinalizacao'&&canAccessFeedbackFinalizacao&&<FeedbackFinalizacaoView finalizacoes={finalizacoesApp} requests={requests} vehicles={vehicles} loggedInUser={loggedIn}/>}
                 {view==='feedbackFinalizacaoReuniao'&&canAccessFeedbackFinalizacao&&<FeedbackFinalizacaoReuniaoView finalizacoes={finalizacoesApp} requests={requests} vehicles={vehicles} loggedInUser={loggedIn}/>}
@@ -7750,7 +7897,8 @@ const navItems=[
                        {key:'overdue',label:`⚠ Atrasados (${tabCounts.overdue||0})`,color:'#DC1F1F'},
                        {key:'completed',label:`Concluídos (${tabCounts.completed})`,color:'#0A6B34'},
                         {key:'donated',label:`Doados (${tabCounts.donated})`,color:'#A81515'},
-                       {key:'vehicles',label:`Veículos (${vehicles.length})`,color:'var(--ink)'},
+                                              {key:'vehicles',label:`Veículos (${vehicles.length})`,color:'var(--ink)'},
+                        isMaster&&{key:'limpezaVeiculos',label:'Limpar Veículos',color:'#DC2626'},
                         isMaster&&{key:'excedentes',label:`Pedidos Excedentes (${excedentesCount})`,color:'#DC2626'},
                         isMaster&&{key:'users',label:'Usuários',color:'var(--red)'},
                         isMaster&&{key:'storage',label:'Capacidade',color:'#7C3AED'},
@@ -7766,6 +7914,7 @@ const navItems=[
 {subView==='cancelDonation'&&isMaster&&<CancelDonationView requests={requests} loggedInUser={loggedIn}/>}
 {subView==='deletedItems'&&isMaster&&<DeletedItemsView loggedInUser={loggedIn}/>}
 {subView==='excedentes'&&isMaster&&<PedidosExcedentesView requests={requests}/>}
+{subView==='limpezaVeiculos'&&isMaster&&<LimpezaVeiculosView vehicles={vehicles} requests={requests}/>}
                     {subView==='vehicles'&&(
                       <div className="card" style={{overflow:'hidden'}}>
                         <div style={{overflowX:'auto',maxHeight:'60vh'}} className="scroll-y">
