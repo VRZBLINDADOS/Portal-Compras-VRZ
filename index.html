@@ -3177,8 +3177,7 @@ function StorageView({requests,loggedInUser}){
         <div style={{padding:'14px 16px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:10}}>
           <div><p style={{fontSize:12,fontWeight:800,textTransform:'uppercase',margin:0}}>Arquivar Pedidos Concluídos</p><p style={{fontSize:9,color:'var(--muted)',fontWeight:600,margin:0,marginTop:2}}>Exporte e exclua para liberar capacidade</p></div>
           <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-            {[{label:'Excel',icon:'file-spreadsheet',cb:exportCSV,bg:'#059669',disabled:!qtdSel},{label:'ZIP de PDFs',icon:'file-down',cb:exportPDF,bg:'#2563EB',disabled:!qtdSel||exportando,sp:exportando}
-,{label:'Excluir',icon:'trash-2',cb:()=>qtdSel&&setConfirmar(true),bg:'var(--red)',disabled:!qtdSel||excluindo}].map((b,i)=>(
+            {[{label:'Excel',icon:'file-spreadsheet',cb:exportCSV,bg:'#059669',disabled:!qtdSel},{label:'ZIP de PDFs',icon:'file-down',cb:exportPDF,bg:'#2563EB',disabled:!qtdSel||exportando,sp:exportando},{label:'Excluir',icon:'trash-2',cb:()=>qtdSel&&setConfirmar(true),bg:'var(--red)',disabled:!qtdSel||excluindo}].map((b,i)=>(
               <button key={i} onClick={b.cb} disabled={b.disabled} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 14px',background:b.disabled?'var(--smoke)':b.bg,color:b.disabled?'var(--muted)':'#fff',border:'none',borderRadius:8,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:b.disabled?'not-allowed':'pointer'}}>
                 {b.sp?<Icon name="loader" size={13} className="spin"/>:<Icon name={b.icon} size={13}/>} {b.label} ({qtdSel})
               </button>
@@ -6059,7 +6058,8 @@ const corrigirPedidosDeVeiculosJaApagados=async()=>{
               <h3 style={{margin:0,fontSize:16,fontWeight:800}}>Excluir {selecionados.length} veículo(s)?</h3>
             </div>
             <div style={{padding:20}}>
-              <p style={{fontSize:11,color:'var(--muted)',textAlign:'center',marginBottom:16}}>Isso remove o cadastro destes veículos do Portal. Os pedidos de peças vinculados NÃO serão apagados.</p>
+              <p style={{fontSize:11,color:'var(--muted)',textAlign:'center',marginBottom:16}}>Isso arquiva o cadastro destes veículos e os pedidos de peças vinculados. Eles deixarão de aparecer nas abas operacionais, mas continuarão disponíveis nos gráficos.</p>
+
              <div style={{display:'flex',flexDirection:'column',gap:10}}>
   <button onClick={exportarPDF} disabled={exportando} className="btn-primary" style={{background:'#2563EB'}}>
     {exportando?<Icon name="refresh-cw" size={14} className="spin"/>:<Icon name="file-down" size={14}/>} Baixar ZIP antes de excluir
