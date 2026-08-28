@@ -5655,9 +5655,11 @@ function PedidosExcedentesView({requests}){
 
 function LimpezaVeiculosView({vehicles, requests}){
   const[selecionados,setSelecionados]=useState([]);
-  const[confirmando,setConfirmando]=useState(false);
-  const[excluindo,setExcluindo]=useState(false);
-  const[exportando,setExportando]=useState(false);
+const[confirmando,setConfirmando]=useState(false);
+const[excluindo,setExcluindo]=useState(false);
+const[corrigindoAntigos,setCorrigindoAntigos]=useState(false);
+const[exportando,setExportando]=useState(false);
+
   const[filtro,setFiltro]=useState('todos');
   const[search,setSearch]=useState('');
   const[veiculoDetalhe,setVeiculoDetalhe]=useState(null);
@@ -5708,15 +5710,92 @@ function LimpezaVeiculosView({vehicles, requests}){
   };
 
   const executarExclusao=async()=>{
-    setConfirmando(false);setExcluindo(true);
-    try{
-      for(const os of selecionados){
-        await col('vehicles').doc(os).delete();
+  setConfirmando(false);
+  setExcluindo(true);
+
+  try{
+    for(const os of selecionados){
+      const pedidosDaOS=requests.filter(r=>String(r.os||'').trim()===String(os).trim());
+
+      for(const req of pedidosDaOS){
+        const{id:_id,...pedidoSemId}=req;
+
+        await col('requestsArquivados').add(stripUndefined({
+          ...pedidoSemId,
+          originalId:req.id,
+          arquivadoPor:'Limpeza de Veículos',
+          arquivadoEm:Date.now(),
+          origemLimpezaVeiculo:true,
+        }));
+
+        await col('requests').doc(req.id).delete();
       }
-      setSelecionados([]);
-    }catch(e){alert('Erro ao excluir: '+e.message);}
-    setExcluindo(false);
-  };
+
+      await col('vehicles').doc(os).delete();
+    }
+
+    setSelecionados([]);
+  }catch(e){
+    alert('Erro ao arquivar e limpar: '+e.message);
+  }
+
+  setExcluindo(false);
+};
+
+const corrigirPedidosDeVeiculosJaApagados=async()=>{
+  const osAtuais=new Set(
+    vehicles.map(v=>String(v.os||'').trim())
+  );
+
+  const pedidosAntigos=requests.filter(r=>{
+    const os=String(r.os||'').trim();
+    if(!os||osAtuais.has(os))return false;
+
+    const dadosVeiculo=r.vehicleData||{};
+    const etapa=String(dadosVeiculo.etapa||'').trim().toLowerCase();
+    const localizacao=String(dadosVeiculo.localizacao||'').trim().toLowerCase();
+
+    return etapa==='entregue'||localizacao==='entregue';
+  });
+
+  if(!pedidosAntigos.length){
+    alert('Nenhum pedido antigo de veículo entregue foi encontrado.');
+    return;
+  }
+
+  const confirmarAntigos=window.confirm(
+    'Foram encontrados '+pedidosAntigos.length+
+    ' pedido(s) de veículo(s) já apagado(s).\n\n'+
+    'Eles serão arquivados e deixarão de aparecer nas abas operacionais, mas continuarão nos gráficos.\n\n'+
+    'Deseja continuar?'
+  );
+
+  if(!confirmarAntigos)return;
+
+  setCorrigindoAntigos(true);
+
+  try{
+    for(const req of pedidosAntigos){
+      const{id:_id,...pedidoSemId}=req;
+
+      await col('requestsArquivados').add(stripUndefined({
+        ...pedidoSemId,
+        originalId:req.id,
+        arquivadoPor:'Correção de Limpeza de Veículos',
+        arquivadoEm:Date.now(),
+        origemLimpezaVeiculo:true,
+      }));
+
+      await col('requests').doc(req.id).delete();
+    }
+
+    alert(pedidosAntigos.length+' pedido(s) foram arquivados com sucesso.');
+  }catch(e){
+    alert('Erro ao corrigir pedidos antigos: '+e.message);
+  }
+
+  setCorrigindoAntigos(false);
+};
 
   const exportarPDF=async()=>{
     if(!selecionados.length)return;setExportando(true);
@@ -5780,8 +5859,27 @@ function LimpezaVeiculosView({vehicles, requests}){
     <div className="fade-in" style={{display:'flex',flexDirection:'column',gap:16}}>
       <div style={{background:'#FFFBE6',border:'1px solid #FFE680',borderRadius:12,padding:'12px 16px'}}>
         <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'#856A00',margin:'0 0 4px'}}>⚠ Atenção</p>
-        <p style={{fontSize:10,color:'#856A00',margin:0,lineHeight:1.5}}>Esta lista mostra veículos cadastrados no Portal que estão com peças pendentes (de compra ou de entrega) OU já marcados como "Entregue". Clique em um veículo para ver o detalhe de cada peça. A exclusão remove apenas o cadastro do veículo (OS) — os pedidos de peças NÃO são apagados automaticamente.</p>
+        <p style={{fontSize:10,color:'#856A00',margin:0,lineHeight:1.5}}>Esta lista mostra veículos cadastrados no Portal que estão com peças pendentes (de compra ou de entrega) OU já marcados como "Entregue". Clique em um veículo para ver o detalhe de cada peça. Ao limpar um veículo, o cadastro e os pedidos da mesma OS são arquivados para não aparecerem mais nas abas operacionais, mas continuam disponíveis nos gráficos.</p>
       </div>
+<div style={{background:'#EAF0FF',border:'1px solid #C0D0F5',borderRadius:12,padding:'12px 16px',display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,flexWrap:'wrap'}}>
+  <div>
+    <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'#1A4EC2',margin:'0 0 4px'}}>
+      Corrigir veículos já apagados
+    </p>
+    <p style={{fontSize:10,color:'#1A4EC2',margin:0,lineHeight:1.5}}>
+      Arquiva pedidos de veículos entregues que já não existem mais na lista de veículos.
+    </p>
+  </div>
+
+  <button
+    onClick={corrigirPedidosDeVeiculosJaApagados}
+    disabled={corrigindoAntigos}
+    style={{display:'flex',alignItems:'center',gap:6,padding:'9px 14px',background:corrigindoAntigos?'var(--muted)':'#1A4EC2',color:'#fff',border:'none',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:corrigindoAntigos?'not-allowed':'pointer',fontFamily:'Plus Jakarta Sans,sans-serif',whiteSpace:'nowrap'}}
+  >
+    {corrigindoAntigos?<Icon name="loader" size={13} className="spin"/>:<Icon name="archive" size={13}/>} 
+    {corrigindoAntigos?'Corrigindo...':'Corrigir antigos'}
+  </button>
+</div>
 
       {countEntregueComPendencia>0&&(
         <div style={{background:'var(--red-light)',border:'1px solid #FFBDBD',borderRadius:12,padding:'12px 16px',display:'flex',alignItems:'center',gap:10}}>
