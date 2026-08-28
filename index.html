@@ -3081,12 +3081,23 @@ function StorageView({requests,loggedInUser}){
     try{
       const req=requests.find(r=>r.id===id);
       if(req){
+        const{id:_dropId,...reqSemId}=req;
+        // Cópia PERMANENTE — mantém os dados nos gráficos mesmo após a exclusão operacional
+        const arquivadoRef=await col('requestsArquivados').add(stripUndefined({
+          ...reqSemId,
+          originalId:req.id,
+          arquivadoPor:loggedInUser?.user||'Sistema',
+          arquivadoEm:Date.now(),
+        }));
+        // Cópia de 5 dias para desfazer via "Itens Excluídos"
         await col('deletedItems').add(stripUndefined({
-          ...req,
+          ...reqSemId,
           originalId:req.id,
           deletedBy:loggedInUser?.user||'Sistema',
           deletedAt:Date.now(),
           expiresAt:Date.now()+(5*86400000),
+          origemArquivamento:true,
+          arquivadoHistoricoId:arquivadoRef.id,
         }));
       }
       await col('requests').doc(id).delete();
@@ -3924,12 +3935,16 @@ function DeletedItemsView({loggedInUser}){
       .sort((a,b)=>b.deletedAt-a.deletedAt);
   },[deletedRaw,search]);
 
-  const restaurar=async(item)=>{
+    const restaurar=async(item)=>{
     setProcessando(true);
     try{
-      const{id,originalId,deletedBy,deletedAt,expiresAt,restaurado,...reqData}=item;
+      const{id,originalId,deletedBy,deletedAt,expiresAt,restaurado,origemArquivamento,arquivadoHistoricoId,...reqData}=item;
       await col('requests').add(stripUndefined({...reqData,id:undefined,restauradoDe:item.id,restauradoPor:loggedInUser?.user||'Sistema',restauradoEm:Date.now()}));
       await col('deletedItems').doc(item.id).update({restaurado:true,restauradoPor:loggedInUser?.user||'Sistema',restauradoEm:Date.now()});
+      // Se veio do arquivamento da Capacidade, remove a cópia histórica pra não contar em dobro nos gráficos
+      if(origemArquivamento&&arquivadoHistoricoId){
+        try{await col('requestsArquivados').doc(arquivadoHistoricoId).delete();}catch(e){console.warn('Falha ao remover cópia histórica:',e);}
+      }
       setRestaurando(null);
     }catch(e){alert('Erro ao restaurar: '+e.message);}
     setProcessando(false);
@@ -5642,29 +5657,37 @@ function LimpezaVeiculosView({vehicles, requests}){
   const[selecionados,setSelecionados]=useState([]);
   const[confirmando,setConfirmando]=useState(false);
   const[excluindo,setExcluindo]=useState(false);
+  const[exportando,setExportando]=useState(false);
   const[filtro,setFiltro]=useState('todos');
   const[search,setSearch]=useState('');
+  const[veiculoDetalhe,setVeiculoDetalhe]=useState(null);
 
-  const pendenciasPorOS=useMemo(()=>{
+  const dadosPorOS=useMemo(()=>{
     const map={};
-    requests.forEach(r=>{
-      const os=String(r.os||'').trim();if(!os)return;
-      const pend=(r.items||[]).filter(it=>it.status!=='Concluído'&&it.status!=='Doado').length;
-      if(pend>0)map[os]=(map[os]||0)+pend;
+    vehicles.forEach(v=>{
+      const os=String(v.os||'').trim();if(!os)return;
+      const itensOS=getPecasParaOS(os,requests);
+      const pendentesCompra=itensOS.filter(it=>it.status==='Pendente'||it.status==='Em Cotação');
+      const aguardandoEntrega=itensOS.filter(it=>it.status==='Comprado');
+      const entregues=itensOS.filter(it=>it.status==='Concluído');
+      const doadas=itensOS.filter(it=>it.status==='Doado');
+      const entregue=String(v.etapa||'').trim().toLowerCase()==='entregue'||String(v.localizacao||'').trim().toLowerCase()==='entregue';
+      const temPendencia=pendentesCompra.length>0||aguardandoEntrega.length>0;
+      map[os]={itensOS,pendentesCompra,aguardandoEntrega,entregues,doadas,entregue,temPendencia,entregueComPendencia:entregue&&temPendencia};
     });
     return map;
-  },[requests]);
+  },[vehicles,requests]);
 
   const lista=useMemo(()=>{
     return vehicles.map(v=>{
       const os=String(v.os||'').trim();
-      const pendentes=pendenciasPorOS[os]||0;
-      const entregue=String(v.etapa||'').trim().toLowerCase()==='entregue'||String(v.localizacao||'').trim().toLowerCase()==='entregue';
-      return{...v,_pendentes:pendentes,_entregue:entregue};
-    }).filter(v=>v._pendentes>0||v._entregue)
+      const d=dadosPorOS[os]||{itensOS:[],pendentesCompra:[],aguardandoEntrega:[],entregues:[],doadas:[],entregue:false,temPendencia:false,entregueComPendencia:false};
+      return{...v,...d};
+    }).filter(v=>v.temPendencia||v.entregue)
       .filter(v=>{
-        if(filtro==='pendentes')return v._pendentes>0;
-        if(filtro==='entregues')return v._entregue;
+        if(filtro==='pendentes')return v.temPendencia;
+        if(filtro==='entregues')return v.entregue;
+        if(filtro==='entregueComPendencia')return v.entregueComPendencia;
         return true;
       })
       .filter(v=>{
@@ -5673,7 +5696,9 @@ function LimpezaVeiculosView({vehicles, requests}){
         return String(v.os).toLowerCase().includes(t)||String(v.modelo||'').toLowerCase().includes(t)||String(v.chassi||'').toLowerCase().includes(t);
       })
       .sort((a,b)=>String(a.os).localeCompare(String(b.os),undefined,{numeric:true}));
-  },[vehicles,pendenciasPorOS,filtro,search]);
+  },[vehicles,dadosPorOS,filtro,search]);
+
+  const countEntregueComPendencia=useMemo(()=>Object.values(dadosPorOS).filter(d=>d.entregueComPendencia).length,[dadosPorOS]);
 
   const toggle=(os)=>setSelecionados(p=>p.includes(os)?p.filter(x=>x!==os):[...p,os]);
   const todosSel=lista.length>0&&lista.every(v=>selecionados.includes(String(v.os)));
@@ -5693,16 +5718,82 @@ function LimpezaVeiculosView({vehicles, requests}){
     setExcluindo(false);
   };
 
+  const exportarPDF=async()=>{
+    if(!selecionados.length)return;setExportando(true);
+    try{
+      const{jsPDF}=window.jspdf;const doc=new jsPDF();const hoje=new Date().toLocaleDateString('pt-BR');
+      const selecionadosList=lista.filter(v=>selecionados.includes(String(v.os)));
+      doc.setFillColor(13,13,13);doc.rect(0,0,210,38,'F');doc.setTextColor(255,255,255);doc.setFontSize(16);doc.setFont('helvetica','bold');
+      doc.text('VRZ COMPRAS — LIMPEZA DE VEÍCULOS',10,16);doc.setFontSize(8);doc.setFont('helvetica','normal');doc.text(`Gerado: ${hoje}  |  Veículos: ${selecionadosList.length}`,10,28);
+      doc.setTextColor(0,0,0);let y=50;
+      selecionadosList.forEach(v=>{
+        if(y>245){doc.addPage();y=15;}
+        doc.setFillColor(245,242,240);doc.rect(8,y-4,194,13,'F');
+        doc.setFont('helvetica','bold');doc.setFontSize(9);
+        const situacao=v.entregueComPendencia?'ENTREGUE COM PENDÊNCIA':v.entregue?'ENTREGUE':'COM PENDÊNCIA';
+        doc.text(`OS #${v.os} — ${v.modelo||''} — ${situacao}`,12,y+3);
+        doc.setFont('helvetica','normal');doc.setFontSize(7);doc.text(`Chassi: ${v.chassi||'—'}  |  Etapa: ${v.etapa||'—'}  |  Localização: ${v.localizacao||'—'}`,12,y+9);y+=16;
+        if(v.itensOS.length===0){
+          doc.setFont('helvetica','normal');doc.setFontSize(8);doc.text('Nenhuma peça vinculada.',14,y);y+=8;
+        }
+        v.itensOS.forEach((it,ii)=>{
+          if(y>265){doc.addPage();y=15;}
+          const statusLabel=it.status==='Concluído'?'RECEBIDA':it.status==='Comprado'?'AGUARDANDO ENTREGA':it.status==='Doado'?'DOADA':'PENDENTE DE COMPRA';
+          doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(0,0,0);doc.text(`${ii+1}. ${it.description||''}  [${statusLabel}]`,14,y);
+          doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(80,80,80);
+          const det=`Qtd:${it.quantity||1}  Fornecedor:${it.supplier||'—'}  Valor:${it.price?'R$'+Number(it.price).toLocaleString('pt-BR',{minimumFractionDigits:2}):'—'}  Prazo:${it.deliveryDate?new Date(it.deliveryDate+'T00:00:00').toLocaleDateString('pt-BR'):'—'}  Entrega Real:${it.actualDeliveryDate?new Date(it.actualDeliveryDate+'T00:00:00').toLocaleDateString('pt-BR'):'—'}`;
+          const ls=doc.splitTextToSize(det,180);doc.text(ls,16,y+5);doc.setTextColor(0,0,0);y+=5+ls.length*4+2;
+        });
+        y+=4;doc.setDrawColor(220,220,220);doc.line(8,y-2,202,y-2);
+      });
+      doc.save(`VRZ_Limpeza_Veiculos_${hoje.replace(/\//g,'-')}.pdf`);
+    }catch(e){alert('Erro ao gerar PDF: '+e.message);}
+    setExportando(false);
+  };
+
+  const ItemStatusRow=({it})=>{
+    const bg=it.status==='Concluído'?'#F0FBF5':it.status==='Doado'?'#FFF5F5':it.status==='Comprado'?'#F8F4FF':'#FFF8F0';
+    const border=it.status==='Concluído'?'#AAE6C5':it.status==='Doado'?'#FFBDBD':it.status==='Comprado'?'#D8B4FE':'#FFD9A8';
+    const statusLabel=it.status==='Concluído'?'Recebida / Entregue':it.status==='Comprado'?'Comprada — aguardando entrega':it.status==='Doado'?'Doada':it.status==='Em Cotação'?'Pendente — em cotação':'Pendente de compra';
+    return(
+      <div style={{display:'flex',gap:10,alignItems:'flex-start',padding:'10px 12px',borderRadius:10,border:`1px solid ${border}`,background:bg}}>
+        {it.photo?<img src={it.photo} style={{width:40,height:40,borderRadius:8,objectFit:'cover',flexShrink:0}}/>:<div style={{width:40,height:40,borderRadius:8,background:'#fff',border:'1px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="package" size={16}/></div>}
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:4}}>
+            <span style={{fontSize:11,fontWeight:800,textTransform:'uppercase'}}>{it.description||'(sem descrição)'}</span>
+            <span style={{fontSize:8,background:'rgba(0,0,0,.06)',padding:'1px 6px',borderRadius:4,fontWeight:700,color:'var(--muted)'}}>×{it.quantity||1}</span>
+          </div>
+          <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',margin:'0 0 4px',color:it.status==='Concluído'?'#059669':it.status==='Comprado'?'#6B21A8':it.status==='Doado'?'var(--red)':'#C45E00'}}>{statusLabel}</p>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap',fontSize:9,color:'var(--muted)',fontWeight:600}}>
+            <span>{it._responsavel||'—'}</span>
+            {it.supplier&&<span>· {it.supplier}</span>}
+            {it.price>0&&<span style={{color:'#059669',fontWeight:800}}>· {fmtBRL(it.price)}</span>}
+            {it.deliveryDate&&<span>· Prazo: {new Date(it.deliveryDate+'T00:00:00').toLocaleDateString('pt-BR')}</span>}
+            {it.actualDeliveryDate&&<span style={{color:'#059669',fontWeight:800}}>· Entregue: {new Date(it.actualDeliveryDate+'T00:00:00').toLocaleDateString('pt-BR')}</span>}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return(
     <div className="fade-in" style={{display:'flex',flexDirection:'column',gap:16}}>
       <div style={{background:'#FFFBE6',border:'1px solid #FFE680',borderRadius:12,padding:'12px 16px'}}>
         <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'#856A00',margin:'0 0 4px'}}>⚠ Atenção</p>
-        <p style={{fontSize:10,color:'#856A00',margin:0,lineHeight:1.5}}>Esta lista mostra veículos cadastrados no Portal que estão com peças pendentes OU já marcados como "Entregue". A exclusão remove apenas o cadastro do veículo (OS) — os pedidos de peças não são apagados automaticamente.</p>
+        <p style={{fontSize:10,color:'#856A00',margin:0,lineHeight:1.5}}>Esta lista mostra veículos cadastrados no Portal que estão com peças pendentes (de compra ou de entrega) OU já marcados como "Entregue". Clique em um veículo para ver o detalhe de cada peça. A exclusão remove apenas o cadastro do veículo (OS) — os pedidos de peças NÃO são apagados automaticamente.</p>
       </div>
+
+      {countEntregueComPendencia>0&&(
+        <div style={{background:'var(--red-light)',border:'1px solid #FFBDBD',borderRadius:12,padding:'12px 16px',display:'flex',alignItems:'center',gap:10}}>
+          <Icon name="alert-triangle" size={18} style={{color:'var(--red)',flexShrink:0}}/>
+          <p style={{fontSize:10,fontWeight:700,color:'var(--red)',margin:0}}><strong>{countEntregueComPendencia} veículo(s)</strong> já estão marcados como "Entregue" mas ainda possuem peças pendentes de compra ou de entrega.</p>
+        </div>
+      )}
+
       <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
-        <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)'}}>
-          {[{v:'todos',l:'Todos'},{v:'pendentes',l:'Com Pendências'},{v:'entregues',l:'Entregues'}].map(f=>(
-            <button key={f.v} onClick={()=>setFiltro(f.v)} style={{padding:'7px 14px',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',border:'none',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif',background:filtro===f.v?'#fff':'transparent',color:filtro===f.v?'var(--red)':'var(--muted)',boxShadow:filtro===f.v?'0 2px 8px rgba(0,0,0,.08)':'none'}}>{f.l}</button>
+        <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)',flexWrap:'wrap'}}>
+          {[{v:'todos',l:'Todos'},{v:'pendentes',l:'Com Pendências'},{v:'entregues',l:'Entregues'},{v:'entregueComPendencia',l:'Entregue + Pendência'}].map(f=>(
+            <button key={f.v} onClick={()=>setFiltro(f.v)} style={{padding:'7px 14px',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',border:'none',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif',whiteSpace:'nowrap',background:filtro===f.v?'#fff':'transparent',color:filtro===f.v?'var(--red)':'var(--muted)',boxShadow:filtro===f.v?'0 2px 8px rgba(0,0,0,.08)':'none'}}>{f.l}</button>
           ))}
         </div>
         <div style={{position:'relative',flex:1,minWidth:200}}>
@@ -5724,9 +5815,14 @@ function LimpezaVeiculosView({vehicles, requests}){
               <span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)'}}>Selecionar todos ({lista.length})</span>
             </label>
             {selecionados.length>0&&(
-              <button onClick={()=>setConfirmando(true)} disabled={excluindo} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 16px',background:'var(--red)',color:'#fff',border:'none',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
-                <Icon name="trash-2" size={13}/> Excluir {selecionados.length} selecionado(s)
-              </button>
+              <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                <button onClick={exportarPDF} disabled={exportando} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 16px',background:'#2563EB',color:'#fff',border:'none',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
+                  {exportando?<Icon name="refresh-cw" size={13} className="spin"/>:<Icon name="file-down" size={13}/>} Baixar PDF ({selecionados.length})
+                </button>
+                <button onClick={()=>setConfirmando(true)} disabled={excluindo} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 16px',background:'var(--red)',color:'#fff',border:'none',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
+                  <Icon name="trash-2" size={13}/> Excluir {selecionados.length} selecionado(s)
+                </button>
+              </div>
             )}
           </div>
           <div style={{maxHeight:'60vh',overflowY:'auto'}} className="scroll-y">
@@ -5734,25 +5830,67 @@ function LimpezaVeiculosView({vehicles, requests}){
               const os=String(v.os);
               const isSel=selecionados.includes(os);
               return(
-                <label key={os} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',borderBottom:'1px solid var(--smoke)',cursor:'pointer',background:isSel?'var(--red-light)':'#fff'}}>
-                  <input type="checkbox" checked={isSel} onChange={()=>toggle(os)} style={{width:16,height:16,accentColor:'var(--red)',flexShrink:0}}/>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:3}}>
+                <div key={os} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',borderBottom:'1px solid var(--smoke)',background:isSel?'var(--red-light)':'#fff'}}>
+                  <input type="checkbox" checked={isSel} onChange={e=>{e.stopPropagation();toggle(os);}} style={{width:16,height:16,accentColor:'var(--red)',flexShrink:0,cursor:'pointer'}}/>
+                  <div onClick={()=>setVeiculoDetalhe(v)} style={{flex:1,minWidth:0,cursor:'pointer'}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:4}}>
                       <span style={{fontSize:13,fontWeight:800}}>OS #{v.os}</span>
                       <span style={{fontSize:9,fontWeight:700,color:'var(--muted)',textTransform:'uppercase'}}>{v.modelo||'—'}</span>
+                      <Icon name="chevron-right" size={12} style={{color:'var(--muted)'}}/>
                     </div>
                     <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                      {v._pendentes>0&&<span style={{fontSize:8,fontWeight:800,padding:'2px 8px',borderRadius:999,background:'#FFF4E6',color:'#C45E00',border:'1px solid #FFD9A8'}}>{v._pendentes} peça(s) pendente(s)</span>}
-                      {v._entregue&&<span style={{fontSize:8,fontWeight:800,padding:'2px 8px',borderRadius:999,background:'#EDFAF3',color:'#059669',border:'1px solid #AAE6C5'}}>Entregue</span>}
+                      {v.entregueComPendencia?(
+                        <span style={{fontSize:8,fontWeight:800,padding:'2px 8px',borderRadius:999,background:'var(--red)',color:'#fff'}}>⚠ ENTREGUE COM PENDÊNCIA</span>
+                      ):(
+                        <>{v.entregue&&<span style={{fontSize:8,fontWeight:800,padding:'2px 8px',borderRadius:999,background:'#EDFAF3',color:'#059669',border:'1px solid #AAE6C5'}}>Entregue</span>}</>
+                      )}
+                      {v.pendentesCompra.length>0&&<span style={{fontSize:8,fontWeight:800,padding:'2px 8px',borderRadius:999,background:'#FFF4E6',color:'#C45E00',border:'1px solid #FFD9A8'}}>{v.pendentesCompra.length} pendente(s) de compra</span>}
+                      {v.aguardandoEntrega.length>0&&<span style={{fontSize:8,fontWeight:800,padding:'2px 8px',borderRadius:999,background:'#F3E8FF',color:'#6B21A8',border:'1px solid #D8B4FE'}}>{v.aguardandoEntrega.length} aguardando entrega</span>}
                     </div>
                   </div>
                   <span className="mono" style={{fontSize:9,color:'var(--muted)',flexShrink:0}}>{v.chassi||''}</span>
-                </label>
+                </div>
               );
             })}
           </div>
         </div>
       )}
+
+      {veiculoDetalhe&&ReactDOM.createPortal((
+        <div style={{position:'fixed',inset:0,zIndex:900,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}} className="fade-in">
+          <div style={{background:'#fff',borderRadius:24,overflow:'hidden',maxWidth:640,width:'100%',maxHeight:'88vh',display:'flex',flexDirection:'column',boxShadow:'0 40px 80px rgba(0,0,0,.4)'}}>
+            <div style={{background:'var(--ink)',padding:'20px 24px',display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12,flexShrink:0,borderBottom:'4px solid var(--red)'}}>
+              <div style={{flex:1,minWidth:0}}>
+                <h3 style={{margin:0,fontSize:17,fontWeight:800,color:'#fff'}}>OS #{veiculoDetalhe.os}</h3>
+                <p style={{margin:0,fontSize:9,color:'rgba(255,255,255,.45)',textTransform:'uppercase',letterSpacing:'.08em',marginTop:4}}>{veiculoDetalhe.modelo||'—'} · {veiculoDetalhe.chassi||'—'}</p>
+                <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:8}}>
+                  {veiculoDetalhe.entregueComPendencia?(
+                    <span style={{fontSize:8,fontWeight:800,padding:'2px 9px',borderRadius:999,background:'var(--red)',color:'#fff'}}>⚠ ENTREGUE COM PENDÊNCIA</span>
+                  ):veiculoDetalhe.entregue?(
+                    <span style={{fontSize:8,fontWeight:800,padding:'2px 9px',borderRadius:999,background:'#EDFAF3',color:'#059669',border:'1px solid #AAE6C5'}}>Entregue</span>
+                  ):null}
+                </div>
+              </div>
+              <button onClick={()=>setVeiculoDetalhe(null)} style={{width:36,height:36,background:'rgba(255,255,255,.08)',border:'none',borderRadius:10,cursor:'pointer',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="x" size={18}/></button>
+            </div>
+            <div className="scroll-y" style={{padding:20,overflowY:'auto',flex:1}}>
+              {veiculoDetalhe.itensOS.length===0?(
+                <p style={{fontSize:10,color:'var(--muted)',textAlign:'center',padding:'30px 0'}}>Nenhuma peça vinculada a esta OS.</p>
+              ):(
+                <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                  {veiculoDetalhe.itensOS.map((it,i)=><ItemStatusRow key={i} it={it}/>)}
+                </div>
+              )}
+            </div>
+            <div style={{padding:'14px 20px',background:'var(--smoke)',borderTop:'1px solid var(--border)',flexShrink:0,display:'flex',gap:10}}>
+              <button onClick={()=>{toggle(String(veiculoDetalhe.os));}} className="btn-ghost" style={{flex:1}}>
+                {selecionados.includes(String(veiculoDetalhe.os))?'Remover da seleção':'Selecionar este veículo'}
+              </button>
+              <button onClick={()=>setVeiculoDetalhe(null)} className="btn-primary" style={{flex:1}}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      ),document.body)}
 
       {confirmando&&(
         <div style={{position:'fixed',inset:0,zIndex:700,background:'rgba(0,0,0,.85)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}} className="fade-in">
@@ -7523,11 +7661,14 @@ const[gestSearch,setGestSearch]=useState('');
 const[gestFab,setGestFab]=useState('');
 
 const{data:requests,loading:reqLoad}=useFirestore('requests');
+  const{data:requestsArquivados,loading:arqLoad}=useFirestore('requestsArquivados');
   const{data:vehicles,loading:vehLoad}=useFirestore('vehicles');
   const{data:usersData,loading:usrLoad}=useFirestore('users');
   const{data:estoque,loading:estLoad}=useFirestore('estoque');
   const{data:estoqueMovimentos,loading:movLoad}=useFirestore('estoqueMovimentos',{orderBy:'timestamp',direction:'desc',limit:300});
   const{data:finalizacoesApp,loading:finLoad}=useFirestore('finalizacoes');
+  // Live + arquivado — usado SOMENTE nos gráficos (Análises e Resumo Reunião), pra não perder histórico ao excluir em Capacidade
+  const requestsComHistorico=useMemo(()=>[...requests,...requestsArquivados],[requests,requestsArquivados]);
   const[users,setUsers]=useState([]);
   const[initDone,setInitDone]=useState(false);
 
@@ -7772,7 +7913,7 @@ const navItems=[
     (loggedIn?.user===MASTER_USER||loggedIn?.user==='Matheus.Ransi')&&{key:'resumo',icon:'presentation',label:'Resumo Reunião'},
   ].filter(Boolean);
 
-  const loading=reqLoad||vehLoad||usrLoad||estLoad||movLoad||finLoad;
+    const loading=reqLoad||arqLoad||vehLoad||usrLoad||estLoad||movLoad||finLoad;
 
   // ── Return condicional APÓS todos os hooks ────────────────────────────────
   if(!loggedIn)return <LoginView onLogin={login} usersList={users} loadingUsers={usrLoad}/>;
@@ -7859,8 +8000,8 @@ const navItems=[
           <div style={{maxWidth:1100,margin:'0 auto'}}>
             {loading?<Skeleton/>:(
               <>
-                {view==='dashboard'&&(isMaster||isAdmin)&&<DashboardView requests={requests} vehicles={vehicles}/>}
-{view==='resumo'&&(loggedIn?.user===MASTER_USER||loggedIn?.user==='Matheus.Ransi')&&<ResumoReuniaoView requests={requests} vehicles={vehicles}/>}
+                                {view==='dashboard'&&(isMaster||isAdmin)&&<DashboardView requests={requestsComHistorico} vehicles={vehicles}/>}
+{view==='resumo'&&(loggedIn?.user===MASTER_USER||loggedIn?.user==='Matheus.Ransi')&&<ResumoReuniaoView requests={requestsComHistorico} vehicles={vehicles}/>}
                 {view==='request'&&isSol&&<RequestForm user={user} loggedInUser={loggedIn} vehiclesDB={vehicles} requests={requests}/>}
                 {view==='status'&&<StatusView requests={requests} loggedInUser={loggedIn} vehicles={vehicles}/>}
                 {view==='chegadas'&&<ChegadasView requests={requests} loggedInUser={loggedIn} vehicles={vehicles}/>}
