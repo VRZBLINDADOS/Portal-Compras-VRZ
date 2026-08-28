@@ -5759,24 +5759,29 @@ const corrigirPedidosDeVeiculosJaApagados=async()=>{
 
   const pedidosAntigos=requests.filter(r=>{
     const os=String(r.os||'').trim();
-    if(!os||osAtuais.has(os))return false;
 
-    const dadosVeiculo=r.vehicleData||{};
-    const etapa=String(dadosVeiculo.etapa||'').trim().toLowerCase();
-    const localizacao=String(dadosVeiculo.localizacao||'').trim().toLowerCase();
+    // Ignora pedidos sem OS.
+    if(!os)return false;
 
-    return etapa==='entregue'||localizacao==='entregue';
+    // Encontra qualquer pedido cuja OS não existe mais na lista de veículos.
+    return !osAtuais.has(os);
   });
 
   if(!pedidosAntigos.length){
-    alert('Nenhum pedido antigo de veículo entregue foi encontrado.');
+    alert('Nenhum pedido de veículo já apagado foi encontrado.');
     return;
   }
 
+  const resumo=pedidosAntigos.map(r=>{
+    const modelo=r.vehicleData?.modelo||'Modelo não informado';
+    return `OS #${r.os} — ${modelo}`;
+  }).join('\n');
+
   const confirmarAntigos=window.confirm(
     'Foram encontrados '+pedidosAntigos.length+
-    ' pedido(s) de veículo(s) já apagado(s).\n\n'+
-    'Eles serão arquivados e deixarão de aparecer nas abas operacionais, mas continuarão nos gráficos.\n\n'+
+    ' pedido(s) cuja OS não existe mais na lista de veículos.\n\n'+
+    resumo+'\n\n'+
+    'Esses pedidos serão arquivados e deixarão de aparecer nas abas operacionais, mas continuarão nos gráficos.\n\n'+
     'Deseja continuar?'
   );
 
@@ -5806,6 +5811,7 @@ const corrigirPedidosDeVeiculosJaApagados=async()=>{
 
   setCorrigindoAntigos(false);
 };
+
 
   const exportarPDF=async()=>{
   if(!selecionados.length)return;
