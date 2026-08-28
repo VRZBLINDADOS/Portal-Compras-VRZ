@@ -3116,7 +3116,17 @@ function StorageView({requests,loggedInUser}){
             <div style={{padding:20,display:'flex',flexDirection:'column',gap:14}}>
               <div style={{background:'var(--red-light)',border:'1px solid #FFBDBD',borderRadius:12,padding:16,textAlign:'center'}}><p style={{fontSize:36,fontWeight:800,color:'var(--red)',margin:0}}>{qtdSel}</p><p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--red)',margin:0}}>pedidos serão excluídos</p></div>
               <p style={{fontSize:10,color:'var(--muted)',textAlign:'center'}}>Certifique-se de ter exportado antes.</p>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}><button onClick={()=>setConfirmar(false)} className="btn-ghost">Cancelar</button><button onClick={executarExclusao} className="btn-primary">Excluir definitivamente</button></div>
+              <div style={{display:'flex',flexDirection:'column',gap:10}}>
+  <button onClick={exportPDF} disabled={exportando} className="btn-primary" style={{background:'#2563EB'}}>
+    {exportando?<Icon name="loader" size={14} className="spin"/>:<Icon name="file-down" size={14}/>} Baixar ZIP antes de excluir
+  </button>
+
+  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+    <button onClick={()=>setConfirmar(false)} className="btn-ghost">Cancelar</button>
+    <button onClick={executarExclusao} className="btn-primary">Excluir definitivamente</button>
+  </div>
+</div>
+
             </div>
           </div>
         </div>
@@ -3167,7 +3177,8 @@ function StorageView({requests,loggedInUser}){
         <div style={{padding:'14px 16px',borderBottom:'1px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:10}}>
           <div><p style={{fontSize:12,fontWeight:800,textTransform:'uppercase',margin:0}}>Arquivar Pedidos Concluídos</p><p style={{fontSize:9,color:'var(--muted)',fontWeight:600,margin:0,marginTop:2}}>Exporte e exclua para liberar capacidade</p></div>
           <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-            {[{label:'Excel',icon:'file-spreadsheet',cb:exportCSV,bg:'#059669',disabled:!qtdSel},{label:'PDF',icon:'file-down',cb:exportPDF,bg:'#2563EB',disabled:!qtdSel||exportando,sp:exportando},{label:'Excluir',icon:'trash-2',cb:()=>qtdSel&&setConfirmar(true),bg:'var(--red)',disabled:!qtdSel||excluindo}].map((b,i)=>(
+            {[{label:'Excel',icon:'file-spreadsheet',cb:exportCSV,bg:'#059669',disabled:!qtdSel},{label:'ZIP de PDFs',icon:'file-down',cb:exportPDF,bg:'#2563EB',disabled:!qtdSel||exportando,sp:exportando}
+,{label:'Excluir',icon:'trash-2',cb:()=>qtdSel&&setConfirmar(true),bg:'var(--red)',disabled:!qtdSel||excluindo}].map((b,i)=>(
               <button key={i} onClick={b.cb} disabled={b.disabled} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 14px',background:b.disabled?'var(--smoke)':b.bg,color:b.disabled?'var(--muted)':'#fff',border:'none',borderRadius:8,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:b.disabled?'not-allowed':'pointer'}}>
                 {b.sp?<Icon name="loader" size={13} className="spin"/>:<Icon name={b.icon} size={13}/>} {b.label} ({qtdSel})
               </button>
@@ -5798,37 +5809,86 @@ const corrigirPedidosDeVeiculosJaApagados=async()=>{
 };
 
   const exportarPDF=async()=>{
-    if(!selecionados.length)return;setExportando(true);
-    try{
-      const{jsPDF}=window.jspdf;const doc=new jsPDF();const hoje=new Date().toLocaleDateString('pt-BR');
-      const selecionadosList=lista.filter(v=>selecionados.includes(String(v.os)));
-      doc.setFillColor(13,13,13);doc.rect(0,0,210,38,'F');doc.setTextColor(255,255,255);doc.setFontSize(16);doc.setFont('helvetica','bold');
-      doc.text('VRZ COMPRAS — LIMPEZA DE VEÍCULOS',10,16);doc.setFontSize(8);doc.setFont('helvetica','normal');doc.text(`Gerado: ${hoje}  |  Veículos: ${selecionadosList.length}`,10,28);
-      doc.setTextColor(0,0,0);let y=50;
-      selecionadosList.forEach(v=>{
-        if(y>245){doc.addPage();y=15;}
-        doc.setFillColor(245,242,240);doc.rect(8,y-4,194,13,'F');
-        doc.setFont('helvetica','bold');doc.setFontSize(9);
-        const situacao=v.entregueComPendencia?'ENTREGUE COM PENDÊNCIA':v.entregue?'ENTREGUE':'COM PENDÊNCIA';
-        doc.text(`OS #${v.os} — ${v.modelo||''} — ${situacao}`,12,y+3);
-        doc.setFont('helvetica','normal');doc.setFontSize(7);doc.text(`Chassi: ${v.chassi||'—'}  |  Etapa: ${v.etapa||'—'}  |  Localização: ${v.localizacao||'—'}`,12,y+9);y+=16;
-        if(v.itensOS.length===0){
-          doc.setFont('helvetica','normal');doc.setFontSize(8);doc.text('Nenhuma peça vinculada.',14,y);y+=8;
+  if(!selecionados.length)return;
+  setExportando(true);
+
+  try{
+    const zip=new JSZip();
+    const hoje=new Date().toLocaleDateString('pt-BR');
+    const selecionadosList=lista.filter(v=>selecionados.includes(String(v.os)));
+
+    for(const v of selecionadosList){
+      const{jsPDF}=window.jspdf;
+      const doc=new jsPDF();
+
+      doc.setFillColor(13,13,13);
+      doc.rect(0,0,210,38,'F');
+      doc.setTextColor(255,255,255);
+      doc.setFontSize(16);
+      doc.setFont('helvetica','bold');
+      doc.text(`OS #${v.os} — VRZ COMPRAS`,10,16);
+      doc.setFontSize(8);
+      doc.setFont('helvetica','normal');
+      doc.text(`Gerado: ${hoje}  |  Veículo: ${v.modelo||'—'}`,10,28);
+
+      doc.setTextColor(0,0,0);
+      let y=50;
+
+      doc.setFillColor(245,242,240);
+      doc.rect(8,y-4,194,13,'F');
+      doc.setFont('helvetica','bold');
+      doc.setFontSize(9);
+      doc.text(`OS #${v.os} — ${v.modelo||''}`,12,y+3);
+      doc.setFont('helvetica','normal');
+      doc.setFontSize(7);
+      doc.text(`Chassi: ${v.chassi||'—'}  |  Etapa: ${v.etapa||'—'}  |  Localização: ${v.localizacao||'—'}`,12,y+9);
+      y+=16;
+
+      if(v.itensOS.length===0){
+        doc.setFont('helvetica','normal');
+        doc.setFontSize(8);
+        doc.text('Nenhuma peça vinculada.',14,y);
+        y+=8;
+      }
+
+      v.itensOS.forEach((it,ii)=>{
+        if(y>265){
+          doc.addPage();
+          y=15;
         }
-        v.itensOS.forEach((it,ii)=>{
-          if(y>265){doc.addPage();y=15;}
-          const statusLabel=it.status==='Concluído'?'RECEBIDA':it.status==='Comprado'?'AGUARDANDO ENTREGA':it.status==='Doado'?'DOADA':'PENDENTE DE COMPRA';
-          doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor(0,0,0);doc.text(`${ii+1}. ${it.description||''}  [${statusLabel}]`,14,y);
-          doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(80,80,80);
-          const det=`Qtd:${it.quantity||1}  Fornecedor:${it.supplier||'—'}  Valor:${it.price?'R$'+Number(it.price).toLocaleString('pt-BR',{minimumFractionDigits:2}):'—'}  Prazo:${it.deliveryDate?new Date(it.deliveryDate+'T00:00:00').toLocaleDateString('pt-BR'):'—'}  Entrega Real:${it.actualDeliveryDate?new Date(it.actualDeliveryDate+'T00:00:00').toLocaleDateString('pt-BR'):'—'}`;
-          const ls=doc.splitTextToSize(det,180);doc.text(ls,16,y+5);doc.setTextColor(0,0,0);y+=5+ls.length*4+2;
-        });
-        y+=4;doc.setDrawColor(220,220,220);doc.line(8,y-2,202,y-2);
+
+        const statusLabel=it.status==='Concluído'?'RECEBIDA':it.status==='Comprado'?'AGUARDANDO ENTREGA':it.status==='Doado'?'DOADA':'PENDENTE DE COMPRA';
+
+        doc.setFont('helvetica','bold');
+        doc.setFontSize(8);
+        doc.setTextColor(0,0,0);
+        doc.text(`${ii+1}. ${it.description||''}  [${statusLabel}]`,14,y);
+
+        doc.setFont('helvetica','normal');
+        doc.setFontSize(7);
+        doc.setTextColor(80,80,80);
+        const det=`Qtd:${it.quantity||1}  Fornecedor:${it.supplier||'—'}  Valor:${it.price?'R$'+Number(it.price).toLocaleString('pt-BR',{minimumFractionDigits:2}):'—'}  Prazo:${it.deliveryDate?new Date(it.deliveryDate+'T00:00:00').toLocaleDateString('pt-BR'):'—'}  Entrega Real:${it.actualDeliveryDate?new Date(it.actualDeliveryDate+'T00:00:00').toLocaleDateString('pt-BR'):'—'}`;
+        const ls=doc.splitTextToSize(det,180);
+        doc.text(ls,16,y+5);
+        doc.setTextColor(0,0,0);
+        y+=5+ls.length*4+2;
       });
-      doc.save(`VRZ_Limpeza_Veiculos_${hoje.replace(/\//g,'-')}.pdf`);
-    }catch(e){alert('Erro ao gerar PDF: '+e.message);}
-    setExportando(false);
-  };
+
+      zip.file(`OS_${v.os}.pdf`,doc.output('blob'));
+    }
+
+    const content=await zip.generateAsync({type:'blob'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(content);
+    a.download=`VRZ_Limpeza_Veiculos_${hoje.replace(/\//g,'-')}.zip`;
+    a.click();
+  }catch(e){
+    alert('Erro ao gerar ZIP: '+e.message);
+  }
+
+  setExportando(false);
+};
+
 
   const ItemStatusRow=({it})=>{
     const bg=it.status==='Concluído'?'#F0FBF5':it.status==='Doado'?'#FFF5F5':it.status==='Comprado'?'#F8F4FF':'#FFF8F0';
@@ -5915,7 +5975,8 @@ const corrigirPedidosDeVeiculosJaApagados=async()=>{
             {selecionados.length>0&&(
               <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
                 <button onClick={exportarPDF} disabled={exportando} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 16px',background:'#2563EB',color:'#fff',border:'none',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
-                  {exportando?<Icon name="refresh-cw" size={13} className="spin"/>:<Icon name="file-down" size={13}/>} Baixar PDF ({selecionados.length})
+                  {exportando?<Icon name="refresh-cw" size={13} className="spin"/>:<Icon name="file-down" size={13}/>} Baixar ZIP ({selecionados.length})
+
                 </button>
                 <button onClick={()=>setConfirmando(true)} disabled={excluindo} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 16px',background:'var(--red)',color:'#fff',border:'none',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
                   <Icon name="trash-2" size={13}/> Excluir {selecionados.length} selecionado(s)
@@ -5999,10 +6060,17 @@ const corrigirPedidosDeVeiculosJaApagados=async()=>{
             </div>
             <div style={{padding:20}}>
               <p style={{fontSize:11,color:'var(--muted)',textAlign:'center',marginBottom:16}}>Isso remove o cadastro destes veículos do Portal. Os pedidos de peças vinculados NÃO serão apagados.</p>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-                <button onClick={()=>setConfirmando(false)} className="btn-ghost">Cancelar</button>
-                <button onClick={executarExclusao} className="btn-primary">Confirmar</button>
-              </div>
+             <div style={{display:'flex',flexDirection:'column',gap:10}}>
+  <button onClick={exportarPDF} disabled={exportando} className="btn-primary" style={{background:'#2563EB'}}>
+    {exportando?<Icon name="refresh-cw" size={14} className="spin"/>:<Icon name="file-down" size={14}/>} Baixar ZIP antes de excluir
+  </button>
+
+  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+    <button onClick={()=>setConfirmando(false)} className="btn-ghost">Cancelar</button>
+    <button onClick={executarExclusao} className="btn-primary">Confirmar exclusão</button>
+  </div>
+</div>
+
             </div>
           </div>
         </div>
