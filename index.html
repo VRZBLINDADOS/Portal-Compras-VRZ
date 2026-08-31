@@ -591,10 +591,9 @@ const stats=useMemo(()=>{
       if(!porLinha[linha])porLinha[linha]={ajuste:0,martelinho:0,pintura:0,vidro:0,outro:0,instalacaoPecas:0,total:0,inspecoes:0};
       porLinha[linha].inspecoes++;
       let problemasDaInspecao=0,solucionadosDaInspecao=0,ultimaResolucao=null;
-      CATS.forEach(([key])=>{
+            CATS.forEach(([key])=>{
         const items=fin[key]||[];
         const visivel=!categoriasVisiveis||categoriasVisiveis.includes(key);
-        problemasDaInspecao+=items.length;
         porCategoria[key].total+=items.length;
         if(items.length>0)porCategoria[key].osComProblema++;
        porModelo[modelo][key]+=items.length;
@@ -603,6 +602,7 @@ const stats=useMemo(()=>{
           totalProblemas+=items.length;
           porModelo[modelo].total+=items.length;
           porLinha[linha].total+=items.length;
+          problemasDaInspecao+=items.length;
         }
     items.forEach(p=>{
           if(TIPO_CATS.includes(key)){
@@ -610,8 +610,7 @@ const stats=useMemo(()=>{
             porCategoria[key].porTipo[tipo]++;
           }
           if(p.status==='Solucionado'){
-            if(visivel)totalSolucionados++;
-            solucionadosDaInspecao++;
+            if(visivel){totalSolucionados++;solucionadosDaInspecao++;}
             porCategoria[key].solucionado++;
             if(p.resolvidoEm&&(!ultimaResolucao||p.resolvidoEm>ultimaResolucao))ultimaResolucao=p.resolvidoEm;
           }
@@ -897,21 +896,26 @@ const stats=useMemo(()=>{
                   {finalizacoesPorLinha.map(fin=>{
                     const vInfo=vehicleMap[String(fin.os).trim()];
                     const modelo=vInfo?.modelo||fin.vehicleData?.modelo||'N/D';
-                    const problemasDoCarro=[];
-                    CATS.forEach(([key,label,color,icon])=>{
+                                        const problemasDoCarro=[];
+                    CATS_VIS.forEach(([key,label,color,icon])=>{
                       (fin[key]||[]).forEach(p=>problemasDoCarro.push({categoria:label,color,icon,...p}));
                     });
+                    const pecasItemsCarro=requests?getPecasParaOS(fin.os,requests):[];
+                    const pecasPendentesCarro=pecasItemsCarro.filter(it=>!it.excedente&&it.status!=='Concluído');
                     return(
                       <div key={fin.id} className="card" style={{padding:14}}>
-                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:problemasDoCarro.length?10:0,flexWrap:'wrap',gap:6}}>
+                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:(problemasDoCarro.length||pecasPendentesCarro.length)?10:0,flexWrap:'wrap',gap:6}}>
                           <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
                             <span style={{fontSize:13,fontWeight:800}}>OS #{fin.os}</span>
                             <span style={{fontSize:9,color:'var(--muted)',fontWeight:700,textTransform:'uppercase'}}>{modelo}</span>
                           </div>
-                          <span style={{fontSize:9,fontWeight:800,padding:'2px 9px',borderRadius:999,background:problemasDoCarro.length===0?'#EDFAF3':'var(--red-light)',color:problemasDoCarro.length===0?'#059669':'var(--red)',border:`1px solid ${problemasDoCarro.length===0?'#AAE6C5':'#FFBDBD'}`}}>{problemasDoCarro.length} problema{problemasDoCarro.length!==1?'s':''}</span>
+                          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                            <span style={{fontSize:9,fontWeight:800,padding:'2px 9px',borderRadius:999,background:problemasDoCarro.length===0?'#EDFAF3':'var(--red-light)',color:problemasDoCarro.length===0?'#059669':'var(--red)',border:`1px solid ${problemasDoCarro.length===0?'#AAE6C5':'#FFBDBD'}`}}>{problemasDoCarro.length} problema{problemasDoCarro.length!==1?'s':''}</span>
+                            {pecasPendentesCarro.length>0&&<span style={{fontSize:9,fontWeight:800,padding:'2px 9px',borderRadius:999,background:'#FFF4E6',color:'#C45E00',border:'1px solid #FFD9A8'}}>{pecasPendentesCarro.length} peça(s) pendente(s)</span>}
+                          </div>
                         </div>
                         {problemasDoCarro.length>0&&(
-                          <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                          <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:pecasPendentesCarro.length?8:0}}>
                           {problemasDoCarro.map((p,i)=>(
                               <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',background:p.status==='Solucionado'?'#F0FBF5':'var(--smoke)',border:`1px solid ${p.status==='Solucionado'?'#AAE6C5':'var(--border)'}`,borderRadius:8}}>
                                 <span style={{fontSize:8,fontWeight:800,padding:'2px 7px',borderRadius:5,background:p.color+'18',color:p.color,border:`1px solid ${p.color}55`,flexShrink:0}}>{p.categoria}</span>
@@ -922,14 +926,21 @@ const stats=useMemo(()=>{
                             ))}
                           </div>
                         )}
+                        {pecasPendentesCarro.length>0&&(
+                          <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                            {pecasPendentesCarro.map((it,i)=>(
+                              <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',background:'#FFF4E6',border:'1px solid #FFD9A8',borderRadius:8}}>
+                                <span style={{fontSize:8,fontWeight:800,padding:'2px 7px',borderRadius:5,background:'#C45E0018',color:'#C45E00',border:'1px solid #C45E0055',flexShrink:0}}>Peça</span>
+                                <span style={{fontSize:10,fontWeight:600,color:'var(--ink)',flex:1,minWidth:0}}>{it.quantity}× {it.description||'(sem descrição)'} — {it.statusOriginal||it.status||'Pendente'}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
                 </div>
-              )}
-            </div>
-            <div style={{padding:'14px 20px',background:'var(--smoke)',borderTop:'1px solid var(--border)',flexShrink:0}}>
-           <button onClick={()=>setLinhaSelecionada(null)} className="btn-primary" style={{width:'100%'}}>Fechar</button>
+              </div>
             </div>
           </div>
         </div>
@@ -970,27 +981,42 @@ const stats=useMemo(()=>{
                   {finalizacoesDrillFiltered.map(fin=>{
                     const vInfo=vehicleMap[String(fin.os).trim()];
                     const modelo=vInfo?.modelo||fin.vehicleData?.modelo||'N/D';
-                    const problemasDoCarro=[];
-                   CATS.filter(([key])=>!drill.categoriaFiltro||key===drill.categoriaFiltro).forEach(([key,label,color,icon])=>{
+                                        const problemasDoCarro=[];
+                   CATS_VIS.filter(([key])=>!drill.categoriaFiltro||key===drill.categoriaFiltro).forEach(([key,label,color,icon])=>{
                       (fin[key]||[]).filter(p=>!drill.tipoFiltro||p.tipo===drill.tipoFiltro).forEach(p=>problemasDoCarro.push({categoria:label,color,icon,...p}));
                     });
+                    const pecasItemsCarro=requests?getPecasParaOS(fin.os,requests):[];
+                    const pecasPendentesCarro=drill.categoriaFiltro?[]:pecasItemsCarro.filter(it=>!it.excedente&&it.status!=='Concluído');
                     return(
                       <div key={fin.id} className="card" style={{padding:14}}>
-                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:problemasDoCarro.length?10:0,flexWrap:'wrap',gap:6}}>
+                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:(problemasDoCarro.length||pecasPendentesCarro.length)?10:0,flexWrap:'wrap',gap:6}}>
                           <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
                             <span style={{fontSize:13,fontWeight:800}}>OS #{fin.os}</span>
                             <span style={{fontSize:9,color:'var(--muted)',fontWeight:700,textTransform:'uppercase'}}>{modelo}</span>
                           </div>
-                          <span style={{fontSize:9,fontWeight:800,padding:'2px 9px',borderRadius:999,background:problemasDoCarro.length===0?'#EDFAF3':'var(--red-light)',color:problemasDoCarro.length===0?'#059669':'var(--red)',border:`1px solid ${problemasDoCarro.length===0?'#AAE6C5':'#FFBDBD'}`}}>{problemasDoCarro.length} problema{problemasDoCarro.length!==1?'s':''}</span>
+                          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                            <span style={{fontSize:9,fontWeight:800,padding:'2px 9px',borderRadius:999,background:problemasDoCarro.length===0?'#EDFAF3':'var(--red-light)',color:problemasDoCarro.length===0?'#059669':'var(--red)',border:`1px solid ${problemasDoCarro.length===0?'#AAE6C5':'#FFBDBD'}`}}>{problemasDoCarro.length} problema{problemasDoCarro.length!==1?'s':''}</span>
+                            {pecasPendentesCarro.length>0&&<span style={{fontSize:9,fontWeight:800,padding:'2px 9px',borderRadius:999,background:'#FFF4E6',color:'#C45E00',border:'1px solid #FFD9A8'}}>{pecasPendentesCarro.length} peça(s) pendente(s)</span>}
+                          </div>
                         </div>
                         {problemasDoCarro.length>0&&(
-                          <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                          <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:pecasPendentesCarro.length?8:0}}>
                            {problemasDoCarro.map((p,i)=>(
                               <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',background:p.status==='Solucionado'?'#F0FBF5':'var(--smoke)',border:`1px solid ${p.status==='Solucionado'?'#AAE6C5':'var(--border)'}`,borderRadius:8}}>
                                 <span style={{fontSize:8,fontWeight:800,padding:'2px 7px',borderRadius:5,background:p.color+'18',color:p.color,border:`1px solid ${p.color}55`,flexShrink:0}}>{p.categoria}</span>
                                 {p.tipo&&<span style={{fontSize:8,fontWeight:800,padding:'2px 7px',borderRadius:5,background:p.tipo==='Interno'?'#EAF0FF':'#FFF4E6',color:p.tipo==='Interno'?'#1A4EC2':'#C45E00',border:`1px solid ${p.tipo==='Interno'?'#C0D0F5':'#FFD9A8'}`,flexShrink:0}}>{p.tipo}</span>}
                                 <span style={{fontSize:10,fontWeight:600,color:'var(--ink)',flex:1,minWidth:0}}>{p.descricao||'(sem descrição)'}</span>
                                 {p.status==='Solucionado'&&<Icon name="check-circle" size={13} style={{color:'#059669',flexShrink:0}}/>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {pecasPendentesCarro.length>0&&(
+                          <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                            {pecasPendentesCarro.map((it,i)=>(
+                              <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',background:'#FFF4E6',border:'1px solid #FFD9A8',borderRadius:8}}>
+                                <span style={{fontSize:8,fontWeight:800,padding:'2px 7px',borderRadius:5,background:'#C45E0018',color:'#C45E00',border:'1px solid #C45E0055',flexShrink:0}}>Peça</span>
+                                <span style={{fontSize:10,fontWeight:600,color:'var(--ink)',flex:1,minWidth:0}}>{it.quantity}× {it.description||'(sem descrição)'} — {it.statusOriginal||it.status||'Pendente'}</span>
                               </div>
                             ))}
                           </div>
@@ -1474,30 +1500,45 @@ function FinalizacaoAnalyticsReuniaoView({finalizacoes,requests,vehicles,linhasF
                 <p style={{fontSize:10,color:'var(--muted)',textAlign:'center',padding:'30px 0'}}>Nenhum carro encontrado para esta linha no período selecionado.</p>
               ):(
                 <div style={{display:'flex',flexDirection:'column',gap:14}}>
-                  {finalizacoesPorLinha.map(fin=>{
+                                    {finalizacoesPorLinha.map(fin=>{
                     const vInfo=vehicleMap[String(fin.os).trim()];
                     const modelo=vInfo?.modelo||fin.vehicleData?.modelo||'N/D';
                     const problemasDoCarro=[];
                     CATS_VIS.forEach(([key,label,color,icon])=>{
                       (fin[key]||[]).forEach(p=>problemasDoCarro.push({categoria:label,color,icon,...p}));
                     });
+                    const pecasItemsCarro=requests?getPecasParaOS(fin.os,requests):[];
+                    const pecasPendentesCarro=pecasItemsCarro.filter(it=>!it.excedente&&it.status!=='Concluído');
                     return(
                       <div key={fin.id} className="card" style={{padding:14}}>
-                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:problemasDoCarro.length?10:0,flexWrap:'wrap',gap:6}}>
+                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:(problemasDoCarro.length||pecasPendentesCarro.length)?10:0,flexWrap:'wrap',gap:6}}>
                           <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
                             <span style={{fontSize:13,fontWeight:800}}>OS #{fin.os}</span>
                             <span style={{fontSize:9,color:'var(--muted)',fontWeight:700,textTransform:'uppercase'}}>{modelo}</span>
                           </div>
-                          <span style={{fontSize:9,fontWeight:800,padding:'2px 9px',borderRadius:999,background:problemasDoCarro.length===0?'#EDFAF3':'var(--red-light)',color:problemasDoCarro.length===0?'#059669':'var(--red)',border:`1px solid ${problemasDoCarro.length===0?'#AAE6C5':'#FFBDBD'}`}}>{problemasDoCarro.length} problema{problemasDoCarro.length!==1?'s':''}</span>
+                          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                            <span style={{fontSize:9,fontWeight:800,padding:'2px 9px',borderRadius:999,background:problemasDoCarro.length===0?'#EDFAF3':'var(--red-light)',color:problemasDoCarro.length===0?'#059669':'var(--red)',border:`1px solid ${problemasDoCarro.length===0?'#AAE6C5':'#FFBDBD'}`}}>{problemasDoCarro.length} problema{problemasDoCarro.length!==1?'s':''}</span>
+                            {pecasPendentesCarro.length>0&&<span style={{fontSize:9,fontWeight:800,padding:'2px 9px',borderRadius:999,background:'#FFF4E6',color:'#C45E00',border:'1px solid #FFD9A8'}}>{pecasPendentesCarro.length} peça(s) pendente(s)</span>}
+                          </div>
                         </div>
                         {problemasDoCarro.length>0&&(
-                          <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                          <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:pecasPendentesCarro.length?8:0}}>
                             {problemasDoCarro.map((p,i)=>(
                               <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',background:p.status==='Solucionado'?'#F0FBF5':'var(--smoke)',border:`1px solid ${p.status==='Solucionado'?'#AAE6C5':'var(--border)'}`,borderRadius:8}}>
                                 <span style={{fontSize:8,fontWeight:800,padding:'2px 7px',borderRadius:5,background:p.color+'18',color:p.color,border:`1px solid ${p.color}55`,flexShrink:0}}>{p.categoria}</span>
                                 {p.tipo&&<span style={{fontSize:8,fontWeight:800,padding:'2px 7px',borderRadius:5,background:p.tipo==='Interno'?'#EAF0FF':'#FFF4E6',color:p.tipo==='Interno'?'#1A4EC2':'#C45E00',border:`1px solid ${p.tipo==='Interno'?'#C0D0F5':'#FFD9A8'}`,flexShrink:0}}>{p.tipo}</span>}
                                 <span style={{fontSize:10,fontWeight:600,color:'var(--ink)',flex:1,minWidth:0}}>{p.descricao||'(sem descrição)'}</span>
                                 {p.status==='Solucionado'&&<Icon name="check-circle" size={13} style={{color:'#059669',flexShrink:0}}/>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {pecasPendentesCarro.length>0&&(
+                          <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                            {pecasPendentesCarro.map((it,i)=>(
+                              <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',background:'#FFF4E6',border:'1px solid #FFD9A8',borderRadius:8}}>
+                                <span style={{fontSize:8,fontWeight:800,padding:'2px 7px',borderRadius:5,background:'#C45E0018',color:'#C45E00',border:'1px solid #C45E0055',flexShrink:0}}>Peça</span>
+                                <span style={{fontSize:10,fontWeight:600,color:'var(--ink)',flex:1,minWidth:0}}>{it.quantity}× {it.description||'(sem descrição)'} — {it.statusOriginal||it.status||'Pendente'}</span>
                               </div>
                             ))}
                           </div>
@@ -1544,30 +1585,45 @@ function FinalizacaoAnalyticsReuniaoView({finalizacoes,requests,vehicles,linhasF
                 <p style={{fontSize:10,color:'var(--muted)',textAlign:'center',padding:'30px 0'}}>{drillSearch.trim()?'Nenhum resultado para essa busca.':'Nenhum veículo encontrado para este filtro no período selecionado.'}</p>
               ):(
                 <div style={{display:'flex',flexDirection:'column',gap:14}}>
-                  {finalizacoesDrillFiltered.map(fin=>{
+                                   {finalizacoesDrillFiltered.map(fin=>{
                     const vInfo=vehicleMap[String(fin.os).trim()];
                     const modelo=vInfo?.modelo||fin.vehicleData?.modelo||'N/D';
                     const problemasDoCarro=[];
                     CATS_VIS.filter(([key])=>!drill.categoriaFiltro||key===drill.categoriaFiltro).forEach(([key,label,color,icon])=>{
                       (fin[key]||[]).filter(p=>!drill.tipoFiltro||p.tipo===drill.tipoFiltro).forEach(p=>problemasDoCarro.push({categoria:label,color,icon,...p}));
                     });
+                    const pecasItemsCarro=requests?getPecasParaOS(fin.os,requests):[];
+                    const pecasPendentesCarro=drill.categoriaFiltro?[]:pecasItemsCarro.filter(it=>!it.excedente&&it.status!=='Concluído');
                     return(
                       <div key={fin.id} className="card" style={{padding:14}}>
-                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:problemasDoCarro.length?10:0,flexWrap:'wrap',gap:6}}>
+                        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:(problemasDoCarro.length||pecasPendentesCarro.length)?10:0,flexWrap:'wrap',gap:6}}>
                           <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
                             <span style={{fontSize:13,fontWeight:800}}>OS #{fin.os}</span>
                             <span style={{fontSize:9,color:'var(--muted)',fontWeight:700,textTransform:'uppercase'}}>{modelo}</span>
                           </div>
-                          <span style={{fontSize:9,fontWeight:800,padding:'2px 9px',borderRadius:999,background:problemasDoCarro.length===0?'#EDFAF3':'var(--red-light)',color:problemasDoCarro.length===0?'#059669':'var(--red)',border:`1px solid ${problemasDoCarro.length===0?'#AAE6C5':'#FFBDBD'}`}}>{problemasDoCarro.length} problema{problemasDoCarro.length!==1?'s':''}</span>
+                          <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                            <span style={{fontSize:9,fontWeight:800,padding:'2px 9px',borderRadius:999,background:problemasDoCarro.length===0?'#EDFAF3':'var(--red-light)',color:problemasDoCarro.length===0?'#059669':'var(--red)',border:`1px solid ${problemasDoCarro.length===0?'#AAE6C5':'#FFBDBD'}`}}>{problemasDoCarro.length} problema{problemasDoCarro.length!==1?'s':''}</span>
+                            {pecasPendentesCarro.length>0&&<span style={{fontSize:9,fontWeight:800,padding:'2px 9px',borderRadius:999,background:'#FFF4E6',color:'#C45E00',border:'1px solid #FFD9A8'}}>{pecasPendentesCarro.length} peça(s) pendente(s)</span>}
+                          </div>
                         </div>
                         {problemasDoCarro.length>0&&(
-                          <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                          <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:pecasPendentesCarro.length?8:0}}>
                             {problemasDoCarro.map((p,i)=>(
                               <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',background:p.status==='Solucionado'?'#F0FBF5':'var(--smoke)',border:`1px solid ${p.status==='Solucionado'?'#AAE6C5':'var(--border)'}`,borderRadius:8}}>
                                 <span style={{fontSize:8,fontWeight:800,padding:'2px 7px',borderRadius:5,background:p.color+'18',color:p.color,border:`1px solid ${p.color}55`,flexShrink:0}}>{p.categoria}</span>
                                 {p.tipo&&<span style={{fontSize:8,fontWeight:800,padding:'2px 7px',borderRadius:5,background:p.tipo==='Interno'?'#EAF0FF':'#FFF4E6',color:p.tipo==='Interno'?'#1A4EC2':'#C45E00',border:`1px solid ${p.tipo==='Interno'?'#C0D0F5':'#FFD9A8'}`,flexShrink:0}}>{p.tipo}</span>}
                                 <span style={{fontSize:10,fontWeight:600,color:'var(--ink)',flex:1,minWidth:0}}>{p.descricao||'(sem descrição)'}</span>
                                 {p.status==='Solucionado'&&<Icon name="check-circle" size={13} style={{color:'#059669',flexShrink:0}}/>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {pecasPendentesCarro.length>0&&(
+                          <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                            {pecasPendentesCarro.map((it,i)=>(
+                              <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',background:'#FFF4E6',border:'1px solid #FFD9A8',borderRadius:8}}>
+                                <span style={{fontSize:8,fontWeight:800,padding:'2px 7px',borderRadius:5,background:'#C45E0018',color:'#C45E00',border:'1px solid #C45E0055',flexShrink:0}}>Peça</span>
+                                <span style={{fontSize:10,fontWeight:600,color:'var(--ink)',flex:1,minWidth:0}}>{it.quantity}× {it.description||'(sem descrição)'} — {it.statusOriginal||it.status||'Pendente'}</span>
                               </div>
                             ))}
                           </div>
