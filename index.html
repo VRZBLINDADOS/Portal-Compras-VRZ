@@ -4483,8 +4483,17 @@ const[ajuste,setAjuste]=useState([]);
   const[existingFin,setExistingFin]=useState(null);
   const[readOnly,setReadOnly]=useState(false);
 const[showFotoAlert,setShowFotoAlert]=useState(false);
+  const[outrasEtapasFiltro,setOutrasEtapasFiltro]=useState('todas');
 
     const disabled=!vehicle||readOnly||!etapaInspecao;
+
+  const outrasInspecoesDaOS=useMemo(()=>{
+    const t=os.trim();if(!t)return[];
+    return finalizacoes.filter(f=>String(f.os).trim()===t&&!f.arquivada&&etapaOf(f)!==etapaInspecao);
+  },[finalizacoes,os,etapaInspecao]);
+  const CATS_OUTRAS=[['ajuste','Ajuste','#F59E0B','wrench'],['martelinho','Martelinho','#DC1F1F','hammer'],['pintura','Pintura','#2563EB','paintbrush'],['vidro','Vidro','#0EA5E9','square'],['outro','Estética','#6B7280','more-horizontal'],['instalacaoPecas','Instalação Peças','#10B981','package']];
+  const outrasEtapasDisponiveis=useMemo(()=>Array.from(new Set(outrasInspecoesDaOS.map(f=>etapaOf(f)))),[outrasInspecoesDaOS]);
+  const outrasInspecoesFiltradas=useMemo(()=>outrasEtapasFiltro==='todas'?outrasInspecoesDaOS:outrasInspecoesDaOS.filter(f=>etapaOf(f)===outrasEtapasFiltro),[outrasInspecoesDaOS,outrasEtapasFiltro]);
 
   // Rascunho automático em localStorage — protege contra perda de dados por erro/fechamento acidental
 useEffect(()=>{
@@ -4774,7 +4783,7 @@ const executarSalvar=async()=>{
                 ))}
               </div>
             </div>
-          ):(
+                   ):(
             <div style={{width:'100%',textAlign:'center',padding:'8px 0'}}>
               <Icon name="car" size={26} style={{margin:'0 auto 6px',display:'block',color:'rgba(255,255,255,.15)'}}/>
               <p style={{fontSize:9,color:'rgba(255,255,255,.25)',fontWeight:700,textTransform:'uppercase',margin:0}}>Digite a OS para carregar o veículo e habilitar os campos</p>
@@ -4782,6 +4791,45 @@ const executarSalvar=async()=>{
           )}
         </div>
       </div>
+
+      {vehicle&&outrasInspecoesDaOS.length>0&&(
+        <div className="card" style={{marginBottom:16,padding:18}}>
+          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8,marginBottom:12}}>
+            <p style={{fontSize:10,fontWeight:800,textTransform:'uppercase',color:'var(--red)',margin:0}}>Apontamentos de outras inspeções desta OS</p>
+            <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:3,borderRadius:10,border:'1px solid var(--border)',flexWrap:'wrap'}}>
+              {[{k:'todas',l:'Todas'},...outrasEtapasDisponiveis.map(et=>({k:et,l:et}))].map(t=>(
+                <button key={t.k} type="button" onClick={()=>setOutrasEtapasFiltro(t.k)} style={{padding:'6px 12px',borderRadius:7,fontSize:8,fontWeight:800,textTransform:'uppercase',border:'none',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif',background:outrasEtapasFiltro===t.k?'#fff':'transparent',color:outrasEtapasFiltro===t.k?'var(--red)':'var(--muted)',boxShadow:outrasEtapasFiltro===t.k?'0 2px 6px rgba(0,0,0,.08)':'none'}}>{t.l}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:10}}>
+            {outrasInspecoesFiltradas.map(f=>{
+              const pontos=[];
+              CATS_OUTRAS.forEach(([key,label,color,icon])=>(f[key]||[]).forEach(p=>pontos.push({label,color,icon,...p})));
+              return(
+                <div key={f.id} style={{background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:10,padding:12}}>
+                  <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--ink)',margin:'0 0 8px',display:'flex',alignItems:'center',gap:6}}>
+                    <span style={{padding:'2px 8px',borderRadius:999,background:'var(--ink)',color:'#fff',fontSize:8}}>{etapaOf(f)}</span> por {f.criadoPor} em {f.criadoEm?new Date(f.criadoEm).toLocaleDateString('pt-BR'):'—'}
+                  </p>
+                  {pontos.length===0?(
+                    <p style={{fontSize:9,color:'var(--muted)',margin:0}}>Nenhum problema registrado nesta etapa.</p>
+                  ):(
+                    <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                      {pontos.map((p,i)=>(
+                        <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',background:p.status==='Solucionado'?'#F0FBF5':'#fff',border:`1px solid ${p.status==='Solucionado'?'#AAE6C5':'var(--border)'}`,borderRadius:8}}>
+                          <span style={{fontSize:8,fontWeight:800,padding:'2px 7px',borderRadius:5,background:p.color+'18',color:p.color,border:`1px solid ${p.color}55`,flexShrink:0}}>{p.label}</span>
+                          <span style={{fontSize:10,fontWeight:600,color:'var(--ink)',flex:1}}>{p.descricao||'(sem descrição)'}</span>
+                          {p.status==='Solucionado'&&<Icon name="check-circle" size={13} style={{color:'#059669',flexShrink:0}}/>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
   <div style={{background:limiteAtingido?'var(--red-light)':'var(--smoke)',border:`1px solid ${limiteAtingido?'#FFBDBD':'var(--border)'}`,borderRadius:12,padding:'10px 16px',marginBottom:16,display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}>
       <div style={{display:'flex',alignItems:'center',gap:8}}>
@@ -4894,6 +4942,9 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
   const[obsResolucao,setObsResolucao]=useState('');
   const[salvandoResolucao,setSalvandoResolucao]=useState(false);
   const[verHistorico,setVerHistorico]=useState({});
+  const[modoSelecaoPrint,setModoSelecaoPrint]=useState(false);
+  const[selecionadosPrint,setSelecionadosPrint]=useState({});
+  const[imprimindoZip,setImprimindoZip]=useState(false);
 
   const podeVerTodos=isMaster||loggedInUser?.role==='comercial'||ADMIN_ESPECIAL.includes(loggedInUser?.user);
 
@@ -5001,6 +5052,29 @@ const exportarPDF=async(fin,comFoto=true)=>{
     doc.save(`Finalizacao_OS_${fin.os}.pdf`);
   };
 
+  const idsSelecionadosPrint=Object.entries(selecionadosPrint).filter(([,v])=>v).map(([id])=>id);
+
+  const exportarZipSelecionados=async()=>{
+    const finsParaImprimir=baseVisiveis.filter(f=>idsSelecionadosPrint.includes(f.id));
+    if(!finsParaImprimir.length)return alert('Selecione ao menos uma inspeção para imprimir.');
+    setImprimindoZip(true);
+    try{
+      const zip=new JSZip();
+      for(const fin of finsParaImprimir){
+        const pecasItems=getPecasParaOS(fin.os,requests);
+        const doc=await buildFinalizacaoPDF(fin,pecasItems,true);
+        zip.file(`OS_${fin.os}_${etapaOf(fin)}.pdf`,doc.output('blob'));
+      }
+      const content=await zip.generateAsync({type:'blob'});
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(content);
+      a.download=`Inspecoes_Selecionadas_VRZ_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.zip`;
+      a.click();
+      setSelecionadosPrint({});setModoSelecaoPrint(false);
+    }catch(e){alert('Erro ao gerar ZIP: '+e.message);}
+    setImprimindoZip(false);
+  };
+
   const exportarExcel=()=>{
     const csvCell=(v)=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
 const rows=[[csvCell('OS'),csvCell('Etapa Inspeção'),csvCell('Chassi'),csvCell('Modelo'),csvCell('Ajustes'),csvCell('Martelinho'),csvCell('Pintura'),csvCell('Vidro'),csvCell('Estética'),csvCell('Instalação Peças'),csvCell('Peças'),csvCell('Responsável')].join(';')];
@@ -5030,19 +5104,31 @@ const rows=[[csvCell('OS'),csvCell('Etapa Inspeção'),csvCell('Chassi'),csvCell
   return(
     <>
     <div className="fade-up" style={{paddingBottom:30}}>
-           <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center',marginBottom:16}}>
+                     <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center',marginBottom:12}}>
         <div style={{position:'relative',flex:1,minWidth:200}}>
           <input type="text" placeholder="Buscar OS / Modelo / Usuário..." value={search} onChange={e=>setSearch(e.target.value)} className="input" style={{paddingLeft:36}}/>
           <div style={{position:'absolute',left:11,top:'50%',transform:'translateY(-50%)',color:'var(--muted)'}}><Icon name="search" size={14}/></div>
         </div>
-        <select value={etapaFiltro} onChange={e=>setEtapaFiltro(e.target.value)} className="input" style={{width:'auto',padding:'10px 14px',fontSize:10,fontWeight:700,appearance:'auto'}}>
-          <option value="todas">Todas as Etapas</option>
-          {ETAPAS_INSPECAO.map(et=><option key={et} value={et}>{et}</option>)}
-        </select>
         <button onClick={exportarExcel} style={{display:'flex',alignItems:'center',gap:6,padding:'10px 16px',background:'#059669',color:'#fff',border:'none',borderRadius:10,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif',whiteSpace:'nowrap'}}>
           <Icon name="file-spreadsheet" size={14}/> Exportar Excel
         </button>
+        <button onClick={()=>{setModoSelecaoPrint(p=>!p);setSelecionadosPrint({});}} style={{display:'flex',alignItems:'center',gap:6,padding:'10px 16px',background:modoSelecaoPrint?'var(--red)':'var(--ink)',color:'#fff',border:'none',borderRadius:10,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif',whiteSpace:'nowrap'}}>
+          <Icon name={modoSelecaoPrint?'x':'printer'} size={14}/> {modoSelecaoPrint?'Cancelar Seleção':'Selecionar p/ Imprimir'}
+        </button>
       </div>
+      <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)',width:'fit-content',marginBottom:16,flexWrap:'wrap'}}>
+        {[{k:'todas',l:'Geral'},...ETAPAS_INSPECAO.map(et=>({k:et,l:et}))].map(t=>(
+          <button key={t.k} onClick={()=>setEtapaFiltro(t.k)} style={{padding:'8px 16px',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',border:'none',cursor:'pointer',letterSpacing:'.06em',fontFamily:'Plus Jakarta Sans,sans-serif',background:etapaFiltro===t.k?'#fff':'transparent',color:etapaFiltro===t.k?'var(--red)':'var(--muted)',boxShadow:etapaFiltro===t.k?'0 2px 8px rgba(0,0,0,.08)':'none'}}>{t.l}</button>
+        ))}
+      </div>
+      {modoSelecaoPrint&&(
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,flexWrap:'wrap',background:'var(--red-light)',border:'1px solid #FFBDBD',borderRadius:12,padding:'10px 14px',marginBottom:16}}>
+          <span style={{fontSize:10,fontWeight:800,textTransform:'uppercase',color:'var(--red)'}}>{idsSelecionadosPrint.length} inspeção(ões) selecionada(s)</span>
+          <button onClick={exportarZipSelecionados} disabled={imprimindoZip||!idsSelecionadosPrint.length} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 16px',background:imprimindoZip||!idsSelecionadosPrint.length?'var(--smoke)':'#2563EB',color:imprimindoZip||!idsSelecionadosPrint.length?'var(--muted)':'#fff',border:'none',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:imprimindoZip||!idsSelecionadosPrint.length?'not-allowed':'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
+            {imprimindoZip?<Icon name="refresh-cw" size={13} className="spin"/>:<Icon name="file-down" size={13}/>} Baixar ZIP com Selecionadas
+          </button>
+        </div>
+      )}
       <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)',width:'fit-content',marginBottom:16,flexWrap:'wrap'}}>
         {[{k:'pendentes',l:`Pendentes (${countPendentes})`},{k:'concluidos',l:`Concluídos (${countConcluidos})`}].map(t=>(
           <button key={t.k} onClick={()=>setSubTab(t.k)} style={{padding:'8px 16px',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',border:'none',cursor:'pointer',letterSpacing:'.06em',fontFamily:'Plus Jakarta Sans,sans-serif',background:subTab===t.k?'#fff':'transparent',color:subTab===t.k?'var(--red)':'var(--muted)',boxShadow:subTab===t.k?'0 2px 8px rgba(0,0,0,.08)':'none'}}>{t.l}</button>
@@ -5072,9 +5158,10 @@ const rows=[[csvCell('OS'),csvCell('Etapa Inspeção'),csvCell('Chassi'),csvCell
               return times.length?Math.max(...times):fin.criadoEm;
             })();
             return(
-              <div key={fin.id} className="card" style={{borderLeft:`3px solid ${totalPend>0?'var(--red)':'#059669'}`}}>
+                          <div key={fin.id} className="card" style={{borderLeft:`3px solid ${modoSelecaoPrint&&selecionadosPrint[fin.id]?'#2563EB':totalPend>0?'var(--red)':'#059669'}`}}>
                 <div style={{padding:'14px 16px',borderBottom:'1px solid var(--border)',background:'var(--smoke)',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
                                   <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                    {modoSelecaoPrint&&<input type="checkbox" checked={!!selecionadosPrint[fin.id]} onChange={()=>setSelecionadosPrint(p=>({...p,[fin.id]:!p[fin.id]}))} style={{width:16,height:16,accentColor:'#2563EB',flexShrink:0}}/>}
                     <span style={{fontSize:14,fontWeight:800}}>OS #{fin.os}</span>
                     <span className="pill">{fin.unidade||'Unidade 1'}</span>
                     <span style={{fontSize:8,fontWeight:800,padding:'2px 9px',borderRadius:999,background:'var(--ink)',color:'#fff',textTransform:'uppercase',letterSpacing:'.04em'}}>{etapaOf(fin)}</span>
