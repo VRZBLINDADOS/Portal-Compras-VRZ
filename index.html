@@ -2673,8 +2673,8 @@ const exportCSV=()=>{
 
   // Status Semáforo — 1 linha por OS, todas as peças concatenadas em UMA célula, para uso com PROCV
   const csvCell=(v)=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
-  const exportSemaforo=()=>{
-    const rows=[[csvCell('OS'),csvCell('Unidade'),csvCell('Veiculo'),csvCell('Chassi'),csvCell('Status Semáforo')].join(';')];
+ const exportSemaforo=()=>{
+    const rows=[[csvCell('OS'),csvCell('Unidade'),csvCell('Veiculo'),csvCell('Chassi'),csvCell('Status Semáforo'),csvCell('Valor Total (R$)')].join(';')];
     filtered.forEach(r=>{
       const linhas=(r.items||[]).map(it=>{
         const desc=it.description||'(sem descrição)';
@@ -2696,7 +2696,9 @@ const exportCSV=()=>{
         return `${qtd}x ${desc} — ${situacao}`;
       });
       const celula=linhas.join('\n');
-      rows.push([csvCell(r.os),csvCell(r.unidade||'Unidade 1'),csvCell(r.vehicleData?.modelo||'-'),csvCell(r.vehicleData?.chassi||'-'),csvCell(celula)].join(';'));
+      const valorTotal=(r.items||[]).reduce((s,it)=>s+parsePrice(it.price),0);
+      const valorFormatado=valorTotal>0?valorTotal.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}):'0,00';
+      rows.push([csvCell(r.os),csvCell(r.unidade||'Unidade 1'),csvCell(r.vehicleData?.modelo||'-'),csvCell(r.vehicleData?.chassi||'-'),csvCell(celula),csvCell(valorFormatado)].join(';'));
     });
     const blob=new Blob(['\uFEFF'+rows.join('\r\n')],{type:'text/csv;charset=utf-8;'});
     const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`Status_Semaforo_VRZ_${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.csv`;a.click();
