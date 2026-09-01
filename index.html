@@ -4293,6 +4293,72 @@ async function buildFinalizacaoPDF(fin, pecasItems, comFoto=true){
     if(it.status==='Concluído')info+=`  ·  Recebido em ${it.actualDeliveryDate?new Date(it.actualDeliveryDate+'T00:00:00').toLocaleDateString('pt-BR'):'—'}`;
     doc.text(info,14,y);y+=7;
   });
+   return doc;
+}
+
+async function buildFinalizacaoPDFGeral(os, fins, requests, comFoto=true){
+  const{jsPDF}=window.jspdf;const doc=new jsPDF();
+  const finsOrdenados=[...(fins||[])].sort((a,b)=>ETAPAS_INSPECAO.indexOf(etapaOf(a))-ETAPAS_INSPECAO.indexOf(etapaOf(b)));
+  const primeiro=finsOrdenados[0]||{};
+  doc.setFillColor(13,13,13);doc.rect(0,0,210,34,'F');
+  doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(15);
+  doc.text('VRZ — INSPEÇÃO DE FINALIZAÇÃO (GERAL)',10,15);
+  doc.setFont('helvetica','normal');doc.setFontSize(8);
+  doc.text(`OS #${os}  ·  Gerado em ${new Date().toLocaleString('pt-BR')}  ·  Etapas: ${finsOrdenados.map(f=>etapaOf(f)).join(', ')||'—'}`,10,24);
+  doc.setTextColor(0,0,0);
+  let y=44;
+  doc.setFont('helvetica','bold');doc.setFontSize(11);doc.text('Dados do Veículo',10,y);y+=7;
+  doc.setFont('helvetica','normal');doc.setFontSize(9);
+  const vd=primeiro.vehicleData||{};
+  [['Modelo',vd.modelo],['Chassi',vd.chassi],['Cor',vd.cor],['Etapa Produção',vd.etapa]].forEach(([l,v])=>{doc.text(`${l}: ${v||'—'}`,10,y);y+=6;});
+  y+=4;
+
+  const secao=async(titulo,items)=>{
+    if(y>260){doc.addPage();y=15;}
+    doc.setFont('helvetica','bold');doc.setFontSize(11);doc.text(titulo,10,y);y+=7;
+    if(!items||!items.length){doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text('Nenhum problema registrado.',12,y);y+=8;return;}
+    for(const[i,p] of items.entries()){
+      if(y>255){doc.addPage();y=15;}
+      doc.setFont('helvetica','bold');doc.setFontSize(9);
+      doc.text(`${i+1}. ${p.status==='Solucionado'?'[SOLUCIONADO] ':'[PENDENTE] '}${p.descricao||'(sem descrição)'}${p.tipo?' ['+p.tipo+']':''}`,12,y);y+=6;
+      if(p.status==='Solucionado'&&p.resolvidoPor){doc.setFont('helvetica','normal');doc.setFontSize(8);doc.text(`Resolvido por ${p.resolvidoPor} em ${p.resolvidoEm?new Date(p.resolvidoEm).toLocaleString('pt-BR'):''}`,14,y);y+=6;}
+      if(comFoto&&p.foto){
+        const dataUrl=await fotoParaDataURL(p.foto);
+        if(dataUrl){try{doc.addImage(dataUrl,'JPEG',12,y,40,26);y+=30;}catch(e){}}
+      }
+    }
+    y+=4;
+  };
+
+  for(const fin of finsOrdenados){
+    if(y>245){doc.addPage();y=15;}
+    doc.setFillColor(220,31,31);doc.rect(8,y-5,194,11,'F');
+    doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(11);
+    doc.text(`Etapa: ${etapaOf(fin)}  ·  Criado por ${fin.criadoPor||'—'}  ·  ${fin.criadoEm?new Date(fin.criadoEm).toLocaleDateString('pt-BR'):''}`,12,y+3);
+    doc.setTextColor(0,0,0);
+    y+=16;
+    await secao('Ajuste',fin.ajuste);
+    await secao('Martelinho',fin.martelinho);
+    await secao('Pintura',fin.pintura);
+    await secao('Vidro',fin.vidro);
+    await secao('Estética',fin.outro);
+    await secao('Instalação Peças',fin.instalacaoPecas);
+  }
+
+  const pecasItems=getPecasParaOS(os,requests||[]);
+  if(y>250){doc.addPage();y=15;}
+  doc.setFont('helvetica','bold');doc.setFontSize(11);doc.text('Peças',10,y);y+=7;
+  if(!pecasItems||!pecasItems.length){doc.setFont('helvetica','normal');doc.setFontSize(9);doc.text('Nenhuma peça vinculada.',12,y);y+=8;}
+  else pecasItems.forEach((it,i)=>{
+    if(y>255){doc.addPage();y=15;}
+    doc.setFont('helvetica','bold');doc.setFontSize(9);
+    doc.text(`${i+1}. ${it.description||''} (Qtd ${it.quantity||1})${it.excedente?' [EXCEDENTE]':''}`,12,y);y+=5;
+    doc.setFont('helvetica','normal');doc.setFontSize(8);
+    let info=`Status: ${it.statusOriginal||it.status||'Pendente'}  ·  Solicitado por ${it._responsavel||'—'}`;
+    if(it.status==='Comprado')info+=`  ·  Comprado em ${it.boughtAt?new Date(it.boughtAt+'T00:00:00').toLocaleDateString('pt-BR'):'—'}  ·  Previsão ${it.deliveryDate?new Date(it.deliveryDate+'T00:00:00').toLocaleDateString('pt-BR'):'—'}`;
+    if(it.status==='Concluído')info+=`  ·  Recebido em ${it.actualDeliveryDate?new Date(it.actualDeliveryDate+'T00:00:00').toLocaleDateString('pt-BR'):'—'}`;
+    doc.text(info,14,y);y+=7;
+  });
   return doc;
 }
 const CATEGORIA_LABELS_HIST={ajuste:'Ajuste',martelinho:'Martelinho',pintura:'Pintura',vidro:'Vidro',outro:'Estética',instalacaoPecas:'Instalação Peças'};
@@ -4992,7 +5058,8 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
   const[subTab,setSubTab]=useState('pendentes');
   const[confirmDelFin,setConfirmDelFin]=useState(null);
   const[confirmDelProb,setConfirmDelProb]=useState(null);
-  const[pdfConfirmFin,setPdfConfirmFin]=useState(null);
+    const[pdfConfirmFin,setPdfConfirmFin]=useState(null);
+  const[pdfEscopo,setPdfEscopo]=useState(null);
   const[editandoFin,setEditandoFin]=useState(null);
   const[resolvendoPendencia,setResolvendoPendencia]=useState(null);
   const[obsResolucao,setObsResolucao]=useState('');
@@ -5105,7 +5172,13 @@ const comStatus=useMemo(()=>baseVisiveis.map(fin=>{
 const exportarPDF=async(fin,comFoto=true)=>{
     const pecasItems=getPecasParaOS(fin.os,requests);
     const doc=await buildFinalizacaoPDF(fin,pecasItems,comFoto);
-    doc.save(`Finalizacao_OS_${fin.os}.pdf`);
+    doc.save(`Finalizacao_OS_${fin.os}_${etapaOf(fin)}.pdf`);
+  };
+
+  const exportarPDFGeral=async(fin,comFoto=true)=>{
+    const finsDaOS=finalizacoes.filter(f=>String(f.os).trim()===String(fin.os).trim()&&!f.arquivada);
+    const doc=await buildFinalizacaoPDFGeral(fin.os,finsDaOS,requests,comFoto);
+    doc.save(`Finalizacao_OS_${fin.os}_GERAL.pdf`);
   };
 
   const idsSelecionadosPrint=Object.entries(selecionadosPrint).filter(([,v])=>v).map(([id])=>id);
@@ -5228,7 +5301,7 @@ const rows=[[csvCell('OS'),csvCell('Etapa Inspeção'),csvCell('Chassi'),csvCell
                   </div>
                   <div style={{display:'flex',alignItems:'center',gap:8}}>
                     <span style={{fontSize:9,fontWeight:800,padding:'3px 10px',borderRadius:999,background:totalPend>0?'var(--red-light)':'#EDFAF3',color:totalPend>0?'var(--red)':'#059669',border:`1px solid ${totalPend>0?'#FFBDBD':'#AAE6C5'}`}}>{totalPend>0?`${totalPend} pendente(s)`:'Tudo solucionado'}</span>
-                   <button onClick={()=>setPdfConfirmFin(fin)} style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',background:'#2563EB',color:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}><Icon name="file-down" size={12}/> PDF</button>
+                                      <button onClick={()=>{setPdfConfirmFin(fin);setPdfEscopo(null);}} style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',background:'#2563EB',color:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}><Icon name="file-down" size={12}/> PDF</button>
                     {editar&&<button onClick={()=>setEditandoFin(fin)} style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',background:'#F59E0B',color:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}><Icon name="edit-3" size={12}/> Editar</button>}
                     {isMaster&&(
                       confirmDelFin===fin.id?(
@@ -5354,21 +5427,34 @@ const rows=[[csvCell('OS'),csvCell('Etapa Inspeção'),csvCell('Chassi'),csvCell
       )}
     </div>
 
-     {pdfConfirmFin&&ReactDOM.createPortal(
+         {pdfConfirmFin&&ReactDOM.createPortal(
         <div style={{position:'fixed',inset:0,zIndex:550,background:'rgba(0,0,0,.8)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
           <div style={{background:'#fff',borderRadius:20,overflow:'hidden',maxWidth:380,width:'100%'}}>
             <div style={{background:'#2563EB',padding:'24px 20px',textAlign:'center',color:'#fff'}}>
-              <div style={{width:48,height:48,background:'rgba(255,255,255,.2)',borderRadius:14,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 12px'}}><Icon name="file-down" size={22}/></div>
+              <div style={{width:48,height:48,background:'rgba(255,255,255,.2)',borderRadius:14,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 12px'}}><Icon name={pdfEscopo?'image':'layers'} size={22}/></div>
               <h3 style={{margin:0,fontSize:16,fontWeight:800}}>Exportar PDF</h3>
               <p style={{margin:0,fontSize:9,color:'rgba(255,255,255,.75)',marginTop:4}}>OS #{pdfConfirmFin.os}</p>
             </div>
             <div style={{padding:20}}>
-              <p style={{fontSize:11,color:'var(--muted)',textAlign:'center',marginBottom:16}}>Deseja incluir as fotos dos problemas no PDF?</p>
-              <div style={{display:'flex',flexDirection:'column',gap:10}}>
-                <button onClick={()=>{exportarPDF(pdfConfirmFin,true);setPdfConfirmFin(null);}} className="btn-primary" style={{background:'#2563EB'}}><Icon name="image" size={14}/> Com Fotos</button>
-                <button onClick={()=>{exportarPDF(pdfConfirmFin,false);setPdfConfirmFin(null);}} className="btn-ghost">Sem Fotos</button>
-                <button onClick={()=>setPdfConfirmFin(null)} style={{background:'none',border:'none',color:'var(--muted)',fontSize:10,fontWeight:700,textTransform:'uppercase',cursor:'pointer',padding:6}}>Cancelar</button>
-              </div>
+              {!pdfEscopo?(
+                <>
+                  <p style={{fontSize:11,color:'var(--muted)',textAlign:'center',marginBottom:16}}>Qual PDF você deseja exportar?</p>
+                  <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                    <button onClick={()=>setPdfEscopo('etapa')} className="btn-primary" style={{background:'#2563EB'}}><Icon name="file-text" size={14}/> Apenas esta inspeção ({etapaOf(pdfConfirmFin)})</button>
+                    <button onClick={()=>setPdfEscopo('geral')} className="btn-ghost"><Icon name="layers" size={14}/> Geral (QA1 · QA2 · FN1 · FN2)</button>
+                    <button onClick={()=>{setPdfConfirmFin(null);setPdfEscopo(null);}} style={{background:'none',border:'none',color:'var(--muted)',fontSize:10,fontWeight:700,textTransform:'uppercase',cursor:'pointer',padding:6}}>Cancelar</button>
+                  </div>
+                </>
+              ):(
+                <>
+                  <p style={{fontSize:11,color:'var(--muted)',textAlign:'center',marginBottom:16}}>Deseja incluir as fotos dos problemas no PDF?</p>
+                  <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                    <button onClick={()=>{(pdfEscopo==='geral'?exportarPDFGeral:exportarPDF)(pdfConfirmFin,true);setPdfConfirmFin(null);setPdfEscopo(null);}} className="btn-primary" style={{background:'#2563EB'}}><Icon name="image" size={14}/> Com Fotos</button>
+                    <button onClick={()=>{(pdfEscopo==='geral'?exportarPDFGeral:exportarPDF)(pdfConfirmFin,false);setPdfConfirmFin(null);setPdfEscopo(null);}} className="btn-ghost">Sem Fotos</button>
+                    <button onClick={()=>setPdfEscopo(null)} style={{background:'none',border:'none',color:'var(--muted)',fontSize:10,fontWeight:700,textTransform:'uppercase',cursor:'pointer',padding:6}}>← Voltar</button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
        </div>,
