@@ -1225,16 +1225,15 @@ function FinalizacaoAnalyticsReuniaoView({finalizacoes,requests,vehicles,linhasF
           }
         });
       });
-      const pecasItems=requests?getPecasParaOS(fin.os,requests):[];
+          const pecasItems=requests?getPecasParaOS(fin.os,requests):[];
       const pecasAtivas=pecasItems.filter(it=>!it.excedente);
-      const pecasSolucionadas=pecasAtivas.length===0||pecasAtivas.every(it=>it.status==='Concluído');
       pecasAtivas.forEach(it=>{
         if(it.actualDeliveryDate){
           const t=new Date(it.actualDeliveryDate+'T00:00:00').getTime();
           if(!ultimaResolucao||t>ultimaResolucao)ultimaResolucao=t;
         }
       });
-      const inspecaoConcluida=problemasDaInspecao===solucionadosDaInspecao&&pecasSolucionadas;
+      const inspecaoConcluida=problemasDaInspecao===solucionadosDaInspecao;
       if(inspecaoConcluida){
         inspecoesSolucionadas++;
         if(fin.criadoEm&&ultimaResolucao)temposResolucaoInspecao.push((ultimaResolucao-fin.criadoEm)/86400000);
@@ -1302,7 +1301,7 @@ function FinalizacaoAnalyticsReuniaoView({finalizacoes,requests,vehicles,linhasF
 
   const maxCatOS=Math.max(...CATS_VIS.map(([key])=>stats.porCategoria[key].osComProblema),1);
   const maxRecl=stats.rankReclamacoes[0]?.[1]?.count||1;
-  const maxMod=Math.max(...stats.rankModelos.map(([,d])=>d.totalProblemas),1);
+    const maxMod=Math.max(...stats.rankModelos.map(([,d])=>d.total),1);
 
   const inspecaoConcluidaCheck=(fin)=>{
     let problemasDaInspecao=0,solucionadosDaInspecao=0;
@@ -1311,10 +1310,7 @@ function FinalizacaoAnalyticsReuniaoView({finalizacoes,requests,vehicles,linhasF
       problemasDaInspecao+=items.length;
       solucionadosDaInspecao+=items.filter(p=>p.status==='Solucionado').length;
     });
-    const pecasItems=requests?getPecasParaOS(fin.os,requests):[];
-    const pecasAtivas=pecasItems.filter(it=>!it.excedente);
-    const pecasSolucionadas=pecasAtivas.length===0||pecasAtivas.every(it=>it.status==='Concluído');
-    return problemasDaInspecao===solucionadosDaInspecao&&pecasSolucionadas;
+    return problemasDaInspecao===solucionadosDaInspecao;
   };
 
   return(
