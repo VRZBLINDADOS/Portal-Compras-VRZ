@@ -621,17 +621,16 @@ const stats=useMemo(()=>{
           }
         });
       });
-      // Peças vinculadas à OS também precisam estar concluídas para a inspeção contar como solucionada
+          // Peças pendentes/a caminho não deixam a inspeção "em aberto" — só os problemas (ajuste, pintura etc) contam
       const pecasItems=requests?getPecasParaOS(fin.os,requests):[];
       const pecasAtivas=pecasItems.filter(it=>!it.excedente);
-      const pecasSolucionadas=pecasAtivas.length===0||pecasAtivas.every(it=>it.status==='Concluído');
       pecasAtivas.forEach(it=>{
         if(it.actualDeliveryDate){
           const t=new Date(it.actualDeliveryDate+'T00:00:00').getTime();
           if(!ultimaResolucao||t>ultimaResolucao)ultimaResolucao=t;
         }
       });
-      const inspecaoConcluida=problemasDaInspecao===solucionadosDaInspecao&&pecasSolucionadas;
+      const inspecaoConcluida=problemasDaInspecao===solucionadosDaInspecao;
       if(inspecaoConcluida){
         inspecoesSolucionadas++;
         if(fin.criadoEm&&ultimaResolucao)temposResolucaoInspecao.push((ultimaResolucao-fin.criadoEm)/86400000);
@@ -700,7 +699,7 @@ const stats=useMemo(()=>{
 
   const maxCatOS=Math.max(...CATS_VIS.map(([key])=>stats.porCategoria[key].osComProblema),1);
   const maxRecl=stats.rankReclamacoes[0]?.[1]?.count||1;
-  const maxMod=Math.max(...stats.rankModelos.map(([,d])=>d.totalProblemas),1);
+  const maxMod=Math.max(...stats.rankModelos.map(([,d])=>d.total),1);
 
   const inspecaoConcluidaCheck=(fin)=>{
     let problemasDaInspecao=0,solucionadosDaInspecao=0;
@@ -709,10 +708,7 @@ const stats=useMemo(()=>{
       problemasDaInspecao+=items.length;
       solucionadosDaInspecao+=items.filter(p=>p.status==='Solucionado').length;
     });
-    const pecasItems=requests?getPecasParaOS(fin.os,requests):[];
-    const pecasAtivas=pecasItems.filter(it=>!it.excedente);
-    const pecasSolucionadas=pecasAtivas.length===0||pecasAtivas.every(it=>it.status==='Concluído');
-    return problemasDaInspecao===solucionadosDaInspecao&&pecasSolucionadas;
+    return problemasDaInspecao===solucionadosDaInspecao;
   };
 
   return(
@@ -1087,7 +1083,8 @@ function FinalizacaoAnalyticsReuniaoView({finalizacoes,requests,vehicles,linhasF
   const TIPO_CATS=['pintura','vidro'];
   const[periodo,setPeriodo]=useState('mensal');
   const[offset,setOffset]=useState(0);
-  const[linhaSelecionada,setLinhaSelecionada]=useState(null);
+    const[linhaSelecionada,setLinhaSelecionada]=useState(null);
+  const[etapaFiltroFeedback,setEtapaFiltroFeedback]=useState('todas');
   const[drill,setDrill]=useState(null);
   const[drillSearch,setDrillSearch]=useState('');
   useEffect(()=>{setDrillSearch('');},[drill]);
@@ -1130,10 +1127,12 @@ function FinalizacaoAnalyticsReuniaoView({finalizacoes,requests,vehicles,linhasF
       if(!linhasFiltro||!linhasFiltro.length)return true;
       const vInfo=vehicleMap[String(f.os).trim()];
       const linha=vInfo?.linhaProducao||f.vehicleData?.linhaProducao||'N/D';
-      return linhasFiltro.some(l=>normEstoqueTxt(l)===normEstoqueTxt(linha));
+           return linhasFiltro.some(l=>normEstoqueTxt(l)===normEstoqueTxt(linha));
+    }).filter(f=>{
+      if(etapaFiltroFeedback==='todas')return true;
+      return etapaOf(f)===etapaFiltroFeedback;
     });
-  },[finalizacoes,inicioPeriodo,fimPeriodo,linhasFiltro,vehicleMap]);
-
+  },[finalizacoes,inicioPeriodo,fimPeriodo,linhasFiltro,vehicleMap,etapaFiltroFeedback]);
   const finalizacoesPorLinha=useMemo(()=>{
     if(!linhaSelecionada)return[];
     return ativasFiltradas.filter(fin=>{
@@ -1264,8 +1263,13 @@ function FinalizacaoAnalyticsReuniaoView({finalizacoes,requests,vehicles,linhasF
         </div>
       )}
       <div style={{display:'flex',background:'var(--smoke)',padding:4,borderRadius:12,border:'1.5px solid var(--border)',width:'fit-content',marginBottom:12}}>
-        {['diario','semanal','quinzenal','mensal'].map(p=>(
+               {['diario','semanal','quinzenal','mensal'].map(p=>(
           <button key={p} onClick={()=>{setPeriodo(p);setOffset(0);}} style={{padding:'7px 16px',borderRadius:8,border:'none',fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',background:periodo===p?'#fff':'transparent',color:periodo===p?'var(--red)':'var(--muted)',boxShadow:periodo===p?'0 2px 8px rgba(0,0,0,.05)':'none',fontFamily:'Plus Jakarta Sans,sans-serif'}}>{p}</button>
+        ))}
+      </div>
+      <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,borderRadius:12,border:'1.5px solid var(--border)',width:'fit-content',marginBottom:12,flexWrap:'wrap'}}>
+        {[{k:'todas',l:'Geral'},...ETAPAS_INSPECAO.map(et=>({k:et,l:et}))].map(t=>(
+          <button key={t.k} onClick={()=>setEtapaFiltroFeedback(t.k)} style={{padding:'7px 14px',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',border:'none',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif',background:etapaFiltroFeedback===t.k?'#fff':'transparent',color:etapaFiltroFeedback===t.k?'var(--red)':'var(--muted)',boxShadow:etapaFiltroFeedback===t.k?'0 2px 8px rgba(0,0,0,.08)':'none'}}>{t.l}</button>
         ))}
       </div>
       <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
