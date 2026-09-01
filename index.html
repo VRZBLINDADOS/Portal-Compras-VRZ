@@ -957,7 +957,7 @@ const stats=useMemo(()=>{
                 )}
               </div>
              <div style={{display:'flex',gap:8,flexShrink:0}}>
-                <button onClick={()=>imprimirLista(drill.titulo,`${finalizacoesDrillFiltered.length} OS's encontradas`,buildPrintList(finalizacoesDrillFiltered,drill.categoriaFiltro,drill.tipoFiltro))} style={{width:36,height:36,background:'rgba(255,255,255,.08)',border:'none',borderRadius:10,cursor:'pointer',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center'}} title="Imprimir"><Icon name="printer" size={17}/></button>
+                                <button onClick={async()=>{const doc=await buildResumoInspecoesPDF(drill.titulo,`${finalizacoesDrillFiltered.length} OS's encontradas`,finalizacoesDrillFiltered,CATS_VIS.filter(([key])=>!drill.categoriaFiltro||key===drill.categoriaFiltro));doc.save(`Feedback_Finalizacao_${String(drill.titulo).replace(/[^a-zA-Z0-9]+/g,'_')}.pdf`);}} style={{width:36,height:36,background:'rgba(255,255,255,.08)',border:'none',borderRadius:10,cursor:'pointer',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center'}} title="Exportar PDF"><Icon name="file-down" size={17}/></button>
                 <button onClick={()=>{setDrill(null);setDrillSearch('');}} style={{width:36,height:36,background:'rgba(255,255,255,.08)',border:'none',borderRadius:10,cursor:'pointer',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="x" size={18}/></button>
               </div>
             </div>
@@ -1574,7 +1574,10 @@ function FinalizacaoAnalyticsReuniaoView({finalizacoes,requests,vehicles,linhasF
                   </div>
                 )}
               </div>
-              <button onClick={()=>{setDrill(null);setDrillSearch('');}} style={{width:36,height:36,background:'rgba(255,255,255,.08)',border:'none',borderRadius:10,cursor:'pointer',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name="x" size={18}/></button>
+                            <div style={{display:'flex',gap:8,flexShrink:0}}>
+                <button onClick={async()=>{const doc=await buildResumoInspecoesPDF(drill.titulo,`${finalizacoesDrillFiltered.length} OS's encontradas`,finalizacoesDrillFiltered,CATS_VIS.filter(([key])=>!drill.categoriaFiltro||key===drill.categoriaFiltro));doc.save(`Feedback_Finalizacao_Reuniao_${String(drill.titulo).replace(/[^a-zA-Z0-9]+/g,'_')}.pdf`);}} style={{width:36,height:36,background:'rgba(255,255,255,.08)',border:'none',borderRadius:10,cursor:'pointer',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center'}} title="Exportar PDF"><Icon name="file-down" size={17}/></button>
+                <button onClick={()=>{setDrill(null);setDrillSearch('');}} style={{width:36,height:36,background:'rgba(255,255,255,.08)',border:'none',borderRadius:10,cursor:'pointer',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="x" size={18}/></button>
+              </div>
             </div>
             {finalizacoesDrill.length>5&&(
               <div style={{padding:'12px 20px 0',flexShrink:0}}>
@@ -4362,6 +4365,58 @@ async function buildFinalizacaoPDFGeral(os, fins, requests, comFoto=true){
     if(it.status==='Comprado')info+=`  ·  Comprado em ${it.boughtAt?new Date(it.boughtAt+'T00:00:00').toLocaleDateString('pt-BR'):'—'}  ·  Previsão ${it.deliveryDate?new Date(it.deliveryDate+'T00:00:00').toLocaleDateString('pt-BR'):'—'}`;
     if(it.status==='Concluído')info+=`  ·  Recebido em ${it.actualDeliveryDate?new Date(it.actualDeliveryDate+'T00:00:00').toLocaleDateString('pt-BR'):'—'}`;
     doc.text(info,14,y);y+=7;
+  });
+    return doc;
+}
+
+async function buildResumoInspecoesPDF(titulo, subtitulo, lista, categorias){
+  const{jsPDF}=window.jspdf;const doc=new jsPDF();
+  doc.setFillColor(13,13,13);doc.rect(0,0,210,32,'F');
+  doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(14);
+  const tituloLs=doc.splitTextToSize(String(titulo||''),190);
+  doc.text(tituloLs,10,14);
+  doc.setFont('helvetica','normal');doc.setFontSize(8);
+  doc.text(`${subtitulo||''}  ·  Gerado em ${new Date().toLocaleString('pt-BR')}`,10,27);
+  doc.setTextColor(0,0,0);
+  let y=44;
+  if(!lista||!lista.length){
+    doc.setFont('helvetica','normal');doc.setFontSize(10);
+    doc.text('Nenhuma inspeção encontrada para este filtro.',10,y);
+    return doc;
+  }
+  lista.forEach((fin,idx)=>{
+    if(y>270){doc.addPage();y=15;}
+    doc.setFillColor(245,242,240);doc.rect(8,y-4,194,11,'F');
+    doc.setFont('helvetica','bold');doc.setFontSize(9);
+    doc.text(`${idx+1}. OS #${fin.os}  ·  ${etapaOf(fin)}  ·  ${fin.vehicleData?.modelo||'—'}`,12,y+3);
+    y+=13;
+    doc.setFont('helvetica','normal');doc.setFontSize(7);
+    doc.setTextColor(90,90,90);
+    doc.text(`Criado por ${fin.criadoPor||'—'} em ${fin.criadoEm?new Date(fin.criadoEm).toLocaleDateString('pt-BR'):'—'}`,12,y);
+    doc.setTextColor(0,0,0);y+=6;
+    let temProblema=false;
+    (categorias||[]).forEach(([key,label])=>{
+      const items=fin[key]||[];
+      if(!items.length)return;
+      temProblema=true;
+      if(y>270){doc.addPage();y=15;}
+      doc.setFont('helvetica','bold');doc.setFontSize(8);
+      doc.text(label+':',14,y);y+=5;
+      items.forEach(p=>{
+        if(y>275){doc.addPage();y=15;}
+        doc.setFont('helvetica','normal');doc.setFontSize(7.5);
+        const status=p.status==='Solucionado'?'[SOLUCIONADO]':'[PENDENTE]';
+        const linha=`${status} ${p.descricao||'(sem descrição)'}${p.tipo?' ['+p.tipo+']':''}`;
+        const ls=doc.splitTextToSize(linha,180);
+        doc.text(ls,16,y);y+=ls.length*4+1;
+      });
+      y+=2;
+    });
+    if(!temProblema){
+      doc.setFont('helvetica','italic');doc.setFontSize(7.5);
+      doc.text('Nenhum problema registrado nesta inspeção.',14,y);y+=6;
+    }
+    y+=6;
   });
   return doc;
 }
