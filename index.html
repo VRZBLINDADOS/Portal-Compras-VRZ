@@ -327,6 +327,21 @@ function apenasProprioCustom(role){
   const cr=getCustomRole(role.slice(7));
   return cr?.escopoDados==='proprio';
 }
+function defaultAccessForRole(r){
+  const todasTelas=['request','status','chegadas','estoque','finalizacao','feedbackFinalizacao','feedbackFinalizacaoReuniao','donor','admin','dashboard','resumo'];
+  if(r==='master')return{telas:todasTelas,escopoLinha:'todas',escopoDados:'todos',permissoes:{newReq:true,history:true,donor:true,delete:true,manage:true,users:true}};
+  if(r==='admin')return{telas:['request','status','chegadas','estoque','donor'],escopoLinha:'todas',escopoDados:'todos',permissoes:{newReq:true,history:true,donor:true,delete:false,manage:false,users:false}};
+  if(r==='solicitante')return{telas:['request','status','chegadas','estoque'],escopoLinha:'todas',escopoDados:'todos',permissoes:{newReq:true,history:true,donor:false,delete:false,manage:false,users:false}};
+  if(r==='leitor')return{telas:['status','chegadas','estoque'],escopoLinha:'todas',escopoDados:'todos',permissoes:{newReq:false,history:true,donor:false,delete:false,manage:false,users:false}};
+  if(r==='comercial')return{telas:['status','chegadas','estoque'],escopoLinha:'todas',escopoDados:'todos',permissoes:{newReq:false,history:true,donor:false,delete:false,manage:false,users:false}};
+  return{telas:['status'],escopoLinha:'todas',escopoDados:'todos',permissoes:{newReq:false,history:true,donor:false,delete:false,manage:false,users:false}};
+}
+function resolveEffectiveRole(u){
+  if(!u)return 'solicitante';
+  if(u.accessOverride)return 'custom:user:'+(u.id||u.user);
+  if(u.role==='custom')return 'custom:'+u.customRoleId;
+  return u.role||'solicitante';
+}
 
 function getPecasParaOS(os, requests){
   if(!os)return[];
@@ -2632,7 +2647,7 @@ function StatusView({requests,loggedInUser,vehicles}){
   const[statusTab,setStatusTab]=useState('geral');
   const[toDelete,setToDelete]=useState(null);
   const[pdfConfirm,setPdfConfirm]=useState(null);
-  const role=loggedInUser?.role==='custom'?('custom:'+loggedInUser.customRoleId):(loggedInUser?.role||'solicitante');
+   const role=resolveEffectiveRole(loggedInUser);
   const canDelete=canDo(role,'delete')&&!ADMIN_ESPECIAL.includes(loggedInUser?.user);
   const escopoApenasProprio=apenasProprioCustom(role);
 
@@ -3103,11 +3118,107 @@ function CustomRolesManager({customRoles,onSave,onDelete}){
   );
 }
 
+function UserAccessModal({user,customRoles,onClose,onSave,onReset}){
+  const seedBase=useMemo(()=>{
+    if(user.role==='custom'){
+      const cr=(customRoles||[]).find(c=>c.id===user.customRoleId);
+      return cr||defaultAccessForRole('solicitante');
+    }
+    return defaultAccessForRole(user.role||'solicitante');
+  },[user,customRoles]);
+  const seed=user.accessOverride||seedBase;
+  const[telas,setTelas]=useState(seed.telas||[]);
+  const[escopoLinha,setEscopoLinha]=useState((seed.escopoLinha==='todas'||!seed.escopoLinha)?'todas':'especifica');
+  const[linhasSel,setLinhasSel]=useState(Array.isArray(seed.escopoLinha)?seed.escopoLinha:[]);
+  const[escopoDados,setEscopoDados]=useState(seed.escopoDados||'todos');
+  const[permissoes,setPermissoes]=useState(seed.permissoes||{});
+  const toggleTela=k=>setTelas(p=>p.includes(k)?p.filter(x=>x!==k):[...p,k]);
+  const toggleLinha=l=>setLinhasSel(p=>p.includes(l)?p.filter(x=>x!==l):[...p,l]);
+  const togglePerm=k=>setPermissoes(p=>({...p,[k]:!p[k]}));
+
+  const salvar=()=>{
+    onSave(user,{telas,escopoLinha:escopoLinha==='todas'?'todas':linhasSel,escopoDados,permissoes});
+    onClose();
+  };
+  const restaurar=()=>{onReset(user);onClose();};
+
+  return ReactDOM.createPortal((
+    <div style={{position:'fixed',inset:0,zIndex:800,background:'rgba(0,0,0,.9)',display:'flex',alignItems:'center',justifyContent:'center',padding:16,overflowY:'auto'}} className="fade-in">
+      <div style={{background:'#fff',borderRadius:24,overflow:'hidden',maxWidth:640,width:'100%',maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 40px 80px rgba(0,0,0,.4)'}}>
+        <div style={{background:'var(--ink)',padding:'22px 26px',display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:'4px solid var(--red)',flexShrink:0}}>
+          <div>
+            <h3 style={{margin:0,fontSize:17,fontWeight:800,color:'#fff'}}>Acessos de {user.user}</h3>
+            <p style={{margin:0,fontSize:9,color:'rgba(255,255,255,.4)',textTransform:'uppercase',letterSpacing:'.08em',marginTop:2}}>{user.accessOverride?'Acesso personalizado ativo':`Baseado em: ${user.role==='custom'?'categoria personalizada':user.role||'solicitante'}`}</p>
+          </div>
+          <button onClick={onClose} style={{width:36,height:36,background:'rgba(255,255,255,.08)',border:'none',borderRadius:10,cursor:'pointer',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center'}}><Icon name="x" size={18}/></button>
+        </div>
+        <div className="scroll-y" style={{padding:24,overflowY:'auto',flex:1,display:'flex',flexDirection:'column',gap:18}}>
+          <div>
+            <label style={{fontSize:8,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',display:'block',marginBottom:8}}>Telas que ele pode ver</label>
+            <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+              {TELAS_DISPONIVEIS.map(t=>(
+                <label key={t.key} style={{display:'flex',alignItems:'center',gap:6,padding:'6px 12px',borderRadius:8,border:`1.5px solid ${telas.includes(t.key)?'var(--red)':'var(--border)'}`,background:telas.includes(t.key)?'var(--red-light)':'#fff',cursor:'pointer',fontSize:10,fontWeight:700}}>
+                  <input type="checkbox" checked={telas.includes(t.key)} onChange={()=>toggleTela(t.key)} style={{accentColor:'var(--red)'}}/>{t.label}
+                </label>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label style={{fontSize:8,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',display:'block',marginBottom:8}}>Quais linhas de produção pode ver</label>
+            <div style={{display:'flex',gap:14,marginBottom:escopoLinha==='especifica'?10:0,flexWrap:'wrap'}}>
+              {[{v:'todas',l:'Todas as linhas'},{v:'especifica',l:'Linhas específicas'}].map(o=>(
+                <label key={o.v} style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:10,fontWeight:700}}>
+                  <input type="radio" checked={escopoLinha===o.v} onChange={()=>setEscopoLinha(o.v)} style={{accentColor:'var(--red)'}}/>{o.l}
+                </label>
+              ))}
+            </div>
+            {escopoLinha==='especifica'&&(
+              <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+                {LINHAS_DISPONIVEIS.map(l=>(
+                  <label key={l} style={{display:'flex',alignItems:'center',gap:6,padding:'6px 12px',borderRadius:8,border:`1.5px solid ${linhasSel.includes(l)?'var(--red)':'var(--border)'}`,background:linhasSel.includes(l)?'var(--red-light)':'#fff',cursor:'pointer',fontSize:10,fontWeight:700}}>
+                    <input type="checkbox" checked={linhasSel.includes(l)} onChange={()=>toggleLinha(l)} style={{accentColor:'var(--red)'}}/>{l}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+          <div>
+            <label style={{fontSize:8,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',display:'block',marginBottom:8}}>O que ele pode enxergar</label>
+            <div style={{display:'flex',gap:14,flexWrap:'wrap'}}>
+              {[{v:'todos',l:'Dados de todos os usuários'},{v:'proprio',l:'Só os próprios pedidos/inspeções'}].map(o=>(
+                <label key={o.v} style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:10,fontWeight:700}}>
+                  <input type="radio" checked={escopoDados===o.v} onChange={()=>setEscopoDados(o.v)} style={{accentColor:'var(--red)'}}/>{o.l}
+                </label>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label style={{fontSize:8,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',display:'block',marginBottom:8}}>Permissões</label>
+            <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+              {PERMISSOES_DISPONIVEIS.map(p=>(
+                <label key={p.key} style={{display:'flex',alignItems:'center',gap:6,padding:'6px 12px',borderRadius:8,border:`1.5px solid ${permissoes[p.key]?'var(--red)':'var(--border)'}`,background:permissoes[p.key]?'var(--red-light)':'#fff',cursor:'pointer',fontSize:10,fontWeight:700}}>
+                  <input type="checkbox" checked={!!permissoes[p.key]} onChange={()=>togglePerm(p.key)} style={{accentColor:'var(--red)'}}/>{p.label}
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div style={{padding:'16px 24px',background:'var(--smoke)',borderTop:'1px solid var(--border)',display:'flex',gap:10,flexShrink:0,flexWrap:'wrap'}}>
+          {user.accessOverride&&<button onClick={restaurar} style={{padding:'11px 16px',background:'#fff',border:'1px solid var(--border)',borderRadius:10,fontSize:10,fontWeight:800,textTransform:'uppercase',cursor:'pointer',color:'var(--muted)',fontFamily:'Plus Jakarta Sans,sans-serif'}}>Restaurar Padrão</button>}
+          <button onClick={onClose} className="btn-ghost" style={{flex:1}}>Cancelar</button>
+          <button onClick={salvar} className="btn-primary" style={{flex:2}}><Icon name="save" size={14}/> Salvar Acessos deste Usuário</button>
+        </div>
+      </div>
+    </div>
+  ),document.body);
+}
+
 // ── User Management — MELHORIA 3: 4 categorias (master fixo) ─────────────
-function UserManagement({users,onAdd,onDelete,onToggle,onRole,onFinalizacaoAccess,onCleanDuplicates,loggedInUser,customRoles,onSaveCustomRole,onDeleteCustomRole,onAssignCustomRole}){
+function UserManagement({users,onAdd,onDelete,onToggle,onRole,onFinalizacaoAccess,onCleanDuplicates,loggedInUser,customRoles,onSaveCustomRole,onDeleteCustomRole,onAssignCustomRole,onSaveAccess,onResetAccess}){
   const[nu,setNu]=useState('');const[np,setNp]=useState('');const[nr,setNr]=useState('solicitante');const[showP,setShowP]=useState(false);
   const[ncr,setNcr]=useState('');
   const[usersTab,setUsersTab]=useState('usuarios');
+  const[accessUser,setAccessUser]=useState(null);
   const isMaster=loggedInUser?.role==='master';
   const uniqueUsers=useMemo(()=>{
     const seen={};
@@ -3251,23 +3362,37 @@ function UserManagement({users,onAdd,onDelete,onToggle,onRole,onFinalizacaoAcces
                     <span style={{fontSize:9,fontWeight:700,color:u.acessoFinalizacao===true?'#0A6B34':'var(--muted)'}}>{u.acessoFinalizacao===true?'Liberado':'Bloqueado'}</span>
                   )}
                 </td>
-                <td style={{textAlign:'right'}}>
-                  {isMasterUser?(
-                    <span style={{fontSize:9,color:'var(--muted)',fontStyle:'italic'}}>★ Protegido</span>
-                  ):isMaster?(
-                    <button onClick={()=>onDelete(u.id||u.user,u)} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'5px 12px',background:'var(--red)',color:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}><Icon name="trash-2" size={12}/> Excluir</button>
-                  ):(
-                    <span style={{fontSize:9,color:'var(--muted)',fontStyle:'italic'}}>—</span>
-                  )}
+                               <td style={{textAlign:'right'}}>
+                  <div style={{display:'flex',gap:6,justifyContent:'flex-end',flexWrap:'wrap'}}>
+                    {!isMasterUser&&isMaster&&(
+                      <button onClick={()=>setAccessUser(u)} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'5px 12px',background:u.accessOverride?'#7C3AED':'var(--ink)',color:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}><Icon name="shield" size={12}/> {u.accessOverride?'Acesso Custom':'Ver Acessos'}</button>
+                    )}
+                    {isMasterUser?(
+                      <span style={{fontSize:9,color:'var(--muted)',fontStyle:'italic'}}>★ Protegido</span>
+                    ):isMaster?(
+                      <button onClick={()=>onDelete(u.id||u.user,u)} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'5px 12px',background:'var(--red)',color:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}><Icon name="trash-2" size={12}/> Excluir</button>
+                    ):(
+                      <span style={{fontSize:9,color:'var(--muted)',fontStyle:'italic'}}>—</span>
+                    )}
+                  </div>
                 </td>
               </tr>
               );
             })}
           </tbody>
-               </table>
+                    </table>
         </div>
       </div>
       </>)}
+      {accessUser&&(
+        <UserAccessModal
+          user={accessUser}
+          customRoles={customRoles}
+          onClose={()=>setAccessUser(null)}
+          onSave={onSaveAccess}
+          onReset={onResetAccess}
+        />
+      )}
     </div>
   );
 }
@@ -8321,7 +8446,10 @@ const{data:requests,loading:reqLoad}=useFirestore('requests');
   const{data:estoqueMovimentos,loading:movLoad}=useFirestore('estoqueMovimentos',{orderBy:'timestamp',direction:'desc',limit:300});
   const{data:finalizacoesApp,loading:finLoad}=useFirestore('finalizacoes');
 const{data:customRolesData,loading:croLoad}=useFirestore('customRoles');
-useEffect(()=>{setCustomRolesCache(customRolesData);},[customRolesData]);
+useEffect(()=>{
+  const sinteticos=(users||[]).filter(u=>u.accessOverride).map(u=>({id:'user:'+(u.id||u.user),...u.accessOverride}));
+  setCustomRolesCache([...(customRolesData||[]),...sinteticos]);
+},[customRolesData,users]);
   // Live + arquivado — usado SOMENTE nos gráficos (Análises e Resumo Reunião), pra não perder histórico ao excluir em Capacidade
   const requestsComHistorico=useMemo(()=>[...requests,...requestsArquivados],[requests,requestsArquivados]);
   const[users,setUsers]=useState([]);
@@ -8369,14 +8497,14 @@ useEffect(()=>{setCustomRolesCache(customRolesData);},[customRolesData]);
   },[]);
   const fmtHora=d=>d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
 
-  const role=loggedIn?.role==='custom'?('custom:'+loggedIn.customRoleId):(loggedIn?.role||'solicitante');
+   const role=resolveEffectiveRole(loggedIn);
   const isMaster=loggedIn?.role==='master';
   const isAdminEspecial=ADMIN_ESPECIAL.includes(loggedIn?.user);
   const isAdmin=role==='admin'||isMaster||isAdminEspecial;
   const isSol=canDo(role,'newReq')||isAdminEspecial;
   const canAccessFinalizacao=isMaster||loggedIn?.acessoFinalizacao===true||isAdminEspecial||loggedIn?.user==='Rogerio.Arruda';
 
-   const addUser=async(u,p,r='solicitante',customRoleId=null)=>{
+    const addUser=async(u,p,r='solicitante',customRoleId=null)=>{
     // Só o Master 1 (Lucas.Sabino) pode criar masters
     if(r==='master'&&loggedIn?.user!==MASTER_USER)return alert('Somente o Master 1 pode criar usuários Master.');
     try{await col('users').add({user:u,pass:p,active:true,role:r,customRoleId:r==='custom'?customRoleId:null});}catch{alert('Erro ao criar usuário.');}
@@ -8384,6 +8512,14 @@ useEffect(()=>{setCustomRolesCache(customRolesData);},[customRolesData]);
   const assignCustomRole=async(u,customRoleId)=>{
     if(!u.id){setUsers(p=>p.map(x=>x.user===u.user?{...x,customRoleId}:x));return;}
     try{await col('users').doc(u.id).update({customRoleId});}catch(e){alert('Erro ao atribuir categoria: '+e.message);}
+  };
+  const saveUserAccess=async(u,access)=>{
+    if(!u.id){setUsers(p=>p.map(x=>x.user===u.user?{...x,accessOverride:access}:x));return;}
+    try{await col('users').doc(u.id).update({accessOverride:access});}catch(e){alert('Erro ao salvar acessos: '+e.message);}
+  };
+  const resetUserAccess=async(u)=>{
+    if(!u.id){setUsers(p=>p.map(x=>x.user===u.user?{...x,accessOverride:undefined}:x));return;}
+    try{await col('users').doc(u.id).update({accessOverride:firebase.firestore.FieldValue.delete()});}catch(e){alert('Erro ao restaurar padrão: '+e.message);}
   };
   const saveCustomRole=async(cr)=>{
     try{
@@ -8719,7 +8855,7 @@ const navItems=[
                       ))}
                     </div>
 
-                                {subView==='users'&&isMaster&&<UserManagement users={users} onAdd={addUser} onDelete={deleteUser} onToggle={toggleUser} onRole={changeRole} onFinalizacaoAccess={toggleFinalizacaoAccess} onCleanDuplicates={cleanDuplicateUsers} loggedInUser={loggedIn} customRoles={customRolesData} onSaveCustomRole={saveCustomRole} onDeleteCustomRole={deleteCustomRole} onAssignCustomRole={assignCustomRole}/>}
+                                                {subView==='users'&&isMaster&&<UserManagement users={users} onAdd={addUser} onDelete={deleteUser} onToggle={toggleUser} onRole={changeRole} onFinalizacaoAccess={toggleFinalizacaoAccess} onCleanDuplicates={cleanDuplicateUsers} loggedInUser={loggedIn} customRoles={customRolesData} onSaveCustomRole={saveCustomRole} onDeleteCustomRole={deleteCustomRole} onAssignCustomRole={assignCustomRole} onSaveAccess={saveUserAccess} onResetAccess={resetUserAccess}/>}
 {subView==='storage'&&isMaster&&<StorageView requests={requests} loggedInUser={loggedIn}/>}
 {subView==='cancelDonation'&&isMaster&&<CancelDonationView requests={requests} loggedInUser={loggedIn}/>}
 {subView==='deletedItems'&&isMaster&&<DeletedItemsView loggedInUser={loggedIn}/>}
