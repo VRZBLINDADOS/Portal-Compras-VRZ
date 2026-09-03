@@ -7319,18 +7319,17 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
         ctx.fillText(`${dtParts[2]}/${dtParts[1]}`, x + bw / 2, displayH - 57);
       }
 
-       // Rótulo abaixo da barra: itens + OS's que geraram o valor — oculto quando há muitas barras (mensal),
-      // pois o texto não cabe e sobrepõe; nesse caso, clique na barra pra ver o detalhe do dia
-      if ((count > 0 || val > 0) && !manyBars) {
+       // Rótulo abaixo da barra: OS's (e itens, no gráfico de valor) — sempre visível, com fonte reduzida quando há muitas barras (mensal)
+      if (count > 0 || val > 0) {
+        const osQtd = d.osSet ? d.osSet.size : count;
         ctx.fillStyle = '#DC1F1F';
-        ctx.font = 'bold 9px Plus Jakarta Sans';
+        ctx.font = (manyBars ? '800 6px' : 'bold 9px') + ' Plus Jakarta Sans';
         ctx.textAlign = 'center';
         if (type === 'valor') {
-          const osQtd = d.osSet ? d.osSet.size : 0;
           ctx.fillText(`${count} item${count !== 1 ? 's' : ''}`, x + bw / 2, displayH - 30);
           ctx.fillText(`${osQtd} OS${osQtd !== 1 ? "'s" : ''}`, x + bw / 2, displayH - 15);
         } else {
-          ctx.fillText(`${count} OS${count !== 1 ? "'s" : ''}`, x + bw / 2, displayH - 15);
+          ctx.fillText(`${osQtd} OS${osQtd !== 1 ? "'s" : ''}`, x + bw / 2, displayH - 15);
         }
       }
     });
