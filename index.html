@@ -289,64 +289,20 @@ function fmtBRL(v){
 function fmtBytes(b){return b>=1073741824?(b/1073741824).toFixed(2)+'GB':b>=1048576?(b/1048576).toFixed(1)+'MB':(b/1024).toFixed(0)+'KB';}
 function estimarBytes(r){return r.reduce((a,x)=>a+(x.items?.some(i=>i.photo)?800000:30000),0);}
 
-// ── Permissões fixas + categorias personalizadas ───────────────────────────
-const USER_SCREEN_LABELS={
-  request:'Nova Peça',
-  status:'Histórico',
-  chegadas:'Chegadas',
-  estoque:'Estoque',
-  finalizacao:'Inspeção',
-  feedbackFinalizacao:'Feedback Finalização',
-  feedbackFinalizacaoReuniao:'Feedback Finalização Reunião',
-  donor:'Doações',
-  admin:'Gestão',
-  dashboard:'Análises',
-  resumo:'Resumo Reunião'
-};
-
-const ROLE_SCREEN_PERMS={
-  master:Object.keys(USER_SCREEN_LABELS),
-  admin:['request','status','chegadas','estoque','admin'],
-  solicitante:['request','status','chegadas'],
-  leitor:['status'],
-  comercial:['status','chegadas','finalizacao']
-};
-
-function canDo(role,action){
+// ── Permissões por role ───────────────────────────────────────────────────
+// master: tudo
+// admin: Nova Req, Histórico, Doações — sem Excluir, Gestão, Usuários
+// solicitante: Nova Req, Histórico
+// leitor: só Histórico
+function canDo(role, action){
   const perms={
-    master:{newReq:true,history:true,donor:true,delete:true,manage:true,users:true},
-    admin:{newReq:true,history:true,donor:true,delete:false,manage:false,users:false},
-    solicitante:{newReq:true,history:true,donor:false,delete:false,manage:false,users:false},
-    leitor:{newReq:false,history:true,donor:false,delete:false,manage:false,users:false},
-    comercial:{newReq:false,history:true,donor:false,delete:false,manage:false,users:false}
+    master:  {newReq:true, history:true, donor:true, delete:true, manage:true, users:true},
+    admin:   {newReq:true, history:true, donor:true, delete:false, manage:false, users:false},
+    solicitante:{newReq:true, history:true, donor:false, delete:false, manage:false, users:false},
+    leitor:  {newReq:false, history:true, donor:false, delete:false, manage:false, users:false},
+    comercial:{newReq:false, history:true, donor:false, delete:false, manage:false, users:false},
   };
-  return !!perms[role||'solicitante']?.[action];
-}
-
-function getUserPolicy(user,categories){
-  if(!user)return {screens:[],scope:'own',lines:[]};
-  if(user.user===MASTER_USER||user.role==='master')return {screens:Object.keys(USER_SCREEN_LABELS),scope:'all',lines:[]};
-  const category=(categories||[]).find(c=>c.id===user.categoryId);
-  if(category)return {screens:category.screens||[],scope:category.scope||'own',lines:category.lines||[]};
-  return {screens:ROLE_SCREEN_PERMS[user.role]||['status'],scope:user.role==='admin'?'all':'own',lines:[]};
-}
-
-function userCanSee(user,categories,screen){
-  return getUserPolicy(user,categories).screens.includes(screen);
-}
-
-function filterRequestsForUser(requests,user,categories,vehicles){
-  const policy=getUserPolicy(user,categories);
-  if(policy.scope==='all'&&!policy.lines.length)return requests;
-  const vehicleMap={};(vehicles||[]).forEach(v=>vehicleMap[String(v.os).trim()]=v);
-  return (requests||[]).filter(r=>{
-    const own=String(r.responsavel||'').trim().toLowerCase()===String(user?.user||'').trim().toLowerCase();
-    const vehicle=vehicleMap[String(r.os).trim()]||r.vehicleData||{};
-    const line=String(vehicle.linhaProducao||'').trim().toLowerCase();
-    const lineOk=!policy.lines.length||policy.lines.some(x=>String(x).trim().toLowerCase()===line);
-    if(policy.scope==='own')return own&&lineOk;
-    return lineOk;
-  });
+  return !!(perms[role||'solicitante']?.[action]);
 }
 
 function getPecasParaOS(os, requests){
@@ -2986,44 +2942,140 @@ const exportCSV=()=>{
   );
 }
 
-// ── User Management — categorias e permissões personalizadas ───────────────
-function UserManagement({users,categories,onAdd,onDelete,onToggle,onRole,onCategory,onAddCategory,onCleanDuplicates,loggedInUser}){
-  const[nu,setNu]=useState('');const[np,setNp]=useState('');const[nr,setNr]=useState('solicitante');const[nc,setNc]=useState('');const[showP,setShowP]=useState(false);
-  const[catName,setCatName]=useState('');const[catScreens,setCatScreens]=useState(['status']);const[catScope,setCatScope]=useState('own');const[catLines,setCatLines]=useState('');
+// ── User Management — MELHORIA 3: 4 categorias (master fixo) ─────────────
+function UserManagement({users,onAdd,onDelete,onToggle,onRole,onFinalizacaoAccess,onCleanDuplicates,loggedInUser}){
+  const[nu,setNu]=useState('');const[np,setNp]=useState('');const[nr,setNr]=useState('solicitante');const[showP,setShowP]=useState(false);
   const isMaster=loggedInUser?.role==='master';
-  const uniqueUsers=useMemo(()=>{const seen={};return users.filter(u=>{const k=(u.user||'').trim().toLowerCase();if(!k||seen[k])return false;seen[k]=true;return true;});},[users]);
-  const toggleScreen=s=>setCatScreens(p=>p.includes(s)?p.filter(x=>x!==s):[...p,s]);
-  const createCategory=()=>{
-    const name=catName.trim();
-    if(!name)return alert('Informe o nome da categoria.');
-    if(!catScreens.length)return alert('Escolha pelo menos uma tela.');
-    onAddCategory({
-  name,
-  screens:catScreens,
-  scope:catScope,
-  lines:catScope==='lines'?catLines.split(',').map(x=>x.trim()).filter(Boolean):[],
-  createdAt:Date.now()
-});
 
-    setCatName('');setCatScreens(['status']);setCatScope('own');setCatLines('');
-  };
-  return <div className="fade-in" style={{display:'flex',flexDirection:'column',gap:20}}>
-    <div className="card" style={{padding:20,display:'flex',flexDirection:'column',gap:14}}>
-      <h3 style={{fontSize:11,fontWeight:800,textTransform:'uppercase',color:'var(--red)',margin:0}}>Criar categoria personalizada</h3>
-      <input className="input" value={catName} onChange={e=>setCatName(e.target.value)} placeholder="Ex.: Comprador Linha 1"/>
-      <div><p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',margin:'0 0 8px'}}>Telas permitidas</p><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:7}}>{Object.entries(USER_SCREEN_LABELS).map(([key,label])=><label key={key} style={{fontSize:10,fontWeight:700,display:'flex',gap:6,alignItems:'center'}}><input type="checkbox" checked={catScreens.includes(key)} onChange={()=>toggleScreen(key)}/>{label}</label>)}</div></div>
-      <div className="grid-2col" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
-        <div><label style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',display:'block',marginBottom:6}}>Alcance dos registros</label><select className="input" value={catScope} onChange={e=>setCatScope(e.target.value)}><option value="own">Somente os meus</option><option value="all">Todos</option><option value="lines">Somente linhas específicas</option></select></div>
-        <div><label style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',display:'block',marginBottom:6}}>Linhas, separadas por vírgula</label><input className="input" value={catLines} onChange={e=>setCatLines(e.target.value)} placeholder="Linha 1, Linha 2" disabled={catScope!=='lines'}/></div>
+  const uniqueUsers=useMemo(()=>{
+    const seen={};
+    return users.filter(u=>{
+      const key=(u.user||'').trim().toLowerCase();
+      if(!key||seen[key])return false;
+      seen[key]=true;
+      return true;
+    });
+  },[users]);
+  const hasDuplicates=uniqueUsers.length<users.length;
+
+  return(
+    <div className="fade-in" style={{display:'flex',flexDirection:'column',gap:20}}>
+      {/* Tabela de permissões — 4 colunas */}
+   <div className="grid-4col" style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:10}}>
+        {[
+          {role:'master',items:['✓ Nova Req.','✓ Histórico','✓ Doações','✓ Excluir','✓ Gestão','✓ Usuários'],note:'Único: Lucas.Sabino'},
+          {role:'admin',items:['✓ Nova Req.','✓ Histórico','✓ Doações','✗ Excluir','✗ Gestão','✗ Usuários']},
+          {role:'solicitante',items:['✓ Nova Req.','✓ Histórico','✗ Doações','✗ Excluir','✗ Gestão','✗ Usuários']},
+          {role:'leitor',items:['✗ Nova Req.','✓ Histórico','✗ Doações','✗ Excluir','✗ Gestão','✗ Usuários']},
+          {role:'comercial',items:['✗ Nova Req.','✓ Histórico','✗ Doações','✗ Excluir','✗ Gestão','⚙ Finalização (por usuário)'],note:'Vê todos os carros em Meus Carros'},
+        ].map(({role,items,note})=>{
+          const bg={master:'#0D0D0D',admin:'var(--red-light)',solicitante:'#EAF0FF',leitor:'var(--smoke)',comercial:'#E6F7FC'}[role];
+          const border={master:'#8B6914',admin:'#FFBDBD',solicitante:'#C0D0F5',leitor:'var(--border)',comercial:'#A5E4F5'}[role];
+          const txt={master:'rgba(255,255,255,.7)',admin:'#A81515',solicitante:'#1A4EC2',leitor:'var(--muted)',comercial:'#0369A1'}[role];
+          return(
+          <div key={role} style={{borderRadius:12,padding:12,background:bg,border:`1px solid ${border}`}}>
+            <RoleBadge role={role}/>
+            {note&&<p style={{fontSize:8,color:role==='master'?'#FFD700':'var(--muted)',fontWeight:700,margin:'4px 0 0',fontStyle:'italic'}}>{note}</p>}
+            <ul style={{fontSize:9,fontWeight:700,listStyle:'none',margin:'8px 0 0',padding:0,color:txt}}>
+              {items.map((p,i)=><li key={i} style={{marginBottom:2,opacity:p.startsWith('✗')?.4:1}}>{p}</li>)}
+            </ul>
+          </div>
+          );
+        })}
       </div>
-      <button className="btn-primary" onClick={createCategory}>+ Criar categoria</button>
-      {categories.length>0&&<p style={{fontSize:9,color:'var(--muted)',margin:0}}>Categorias criadas: {categories.map(c=>c.name).join(' · ')}</p>}
+
+      {hasDuplicates&&isMaster&&(
+        <div style={{background:'#FFFBE6',border:'1px solid #FFE680',borderRadius:12,padding:'14px 16px',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
+          <Icon name="alert-triangle" size={18} style={{color:'#856A00',flexShrink:0}}/>
+          <p style={{fontSize:10,fontWeight:700,color:'#856A00',margin:0,flex:1,minWidth:200}}>Foram encontradas contas de usuário duplicadas (mesmo nome). Isso pode acontecer se o portal foi aberto em vários lugares ao mesmo tempo.</p>
+          <button onClick={onCleanDuplicates} style={{padding:'8px 16px',background:'#856A00',color:'#fff',border:'none',borderRadius:8,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif',whiteSpace:'nowrap'}}>Limpar Duplicados</button>
+        </div>
+      )}
+
+      {/* Criar novo acesso — apenas master pode criar */}
+      {isMaster&&(
+        <div className="card" style={{padding:20,display:'flex',flexDirection:'column',gap:16}}>
+          <h3 style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--red)',margin:0}}>Cadastrar Novo Acesso</h3>
+          <div className="grid-3col" style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12}}>
+            <div><label style={{fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',display:'block',marginBottom:6}}>Usuário</label><input type="text" value={nu} onChange={e=>setNu(e.target.value)} className="input" placeholder="Nome.Sobrenome" style={{fontSize:12}}/></div>
+            <div><label style={{fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',display:'block',marginBottom:6}}>Senha</label>
+              <div style={{position:'relative'}}><input type={showP?'text':'password'} value={np} onChange={e=>setNp(e.target.value)} className="input" placeholder="Senha" style={{fontSize:12,paddingRight:36}}/><button type="button" onClick={()=>setShowP(!showP)} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',fontSize:12}}>{showP?'👁':'👁‍🗨'}</button></div></div>
+            <div><label style={{fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',display:'block',marginBottom:6}}>Categoria</label>
+           <select value={nr} onChange={e=>setNr(e.target.value)} className="input" style={{fontSize:12,appearance:'auto'}}>
+                <option value="solicitante">Solicitante</option>
+                <option value="leitor">Leitor</option>
+                <option value="admin">Admin</option>
+                <option value="comercial">Comercial</option>
+                {loggedInUser?.user===MASTER_USER&&<option value="master">★ Master</option>}
+              </select></div>
+          </div>
+          <button onClick={()=>{if(!nu||!np)return alert('Preencha todos os campos.');onAdd(nu,np,nr);setNu('');setNp('');setNr('solicitante');}} className="btn-primary" style={{width:'100%'}}>+ Criar Conta</button>
+        </div>
+      )}
+
+      <div className="card" style={{overflow:'hidden'}}>
+        <div className="table-scroll">
+        <table className="vtable w-full" style={{minWidth:700}}>
+          <thead><tr><th>Usuário</th><th>Categoria</th><th>Status</th><th>Finalização</th><th style={{textAlign:'right'}}>Ação</th></tr></thead>
+          <tbody>
+            {uniqueUsers.map((u,i)=>{
+              const isMasterUser=u.user===MASTER_USER;
+              return(
+              <tr key={i}>
+                <td style={{fontWeight:700,textTransform:'uppercase',fontSize:12}}>{u.user}{isMasterUser&&<span style={{marginLeft:6,fontSize:8,color:'#FFD700',fontWeight:800}}>★</span>}</td>
+                <td>
+                  {/* Master não pode ter seu role alterado */}
+                  {isMasterUser?(
+                    <RoleBadge role={u.role||'master'}/>
+                  ):isMaster?(
+                  <select value={u.role||'solicitante'} onChange={e=>onRole(u,e.target.value)}
+                      className="badge"
+                      style={{cursor:'pointer',border:'none',outline:'none',fontFamily:'Plus Jakarta Sans,sans-serif',background:u.role==='master'?'#0D0D0D':u.role==='admin'?'var(--red)':u.role==='leitor'?'var(--muted)':u.role==='comercial'?'#0EA5E9':'#1A4EC2',color:u.role==='master'?'#FFD700':'#fff'}}>
+                      {loggedInUser?.user===MASTER_USER&&<option value="master">★ Master</option>}
+                      <option value="admin">Admin</option>
+                      <option value="solicitante">Solicitante</option>
+                      <option value="leitor">Leitor</option>
+                      <option value="comercial">Comercial</option>
+                    </select>
+                  ):(
+                    <RoleBadge role={u.role||'solicitante'}/>
+                  )}
+                </td>
+                <td>
+                  {isMaster&&!isMasterUser?(
+                    <button onClick={()=>onToggle(u)} style={{fontSize:9,fontWeight:800,textTransform:'uppercase',padding:'3px 10px',borderRadius:999,cursor:'pointer',border:'1px solid',background:u.active!==false?'#EDFAF3':'#FFF0F0',color:u.active!==false?'#0A6B34':'var(--red)',borderColor:u.active!==false?'#AAE6C5':'#FFBDBD'}}>{u.active!==false?'Ativo':'Desativado'}</button>
+                  ):(
+                    <span style={{fontSize:9,fontWeight:800,textTransform:'uppercase',padding:'3px 10px',borderRadius:999,background:u.active!==false?'#EDFAF3':'#FFF0F0',color:u.active!==false?'#0A6B34':'var(--red)',border:`1px solid ${u.active!==false?'#AAE6C5':'#FFBDBD'}`}}>{u.active!==false?'Ativo':'Desativado'}</span>
+                  )}
+                </td>
+                <td>
+                  {isMasterUser?(
+                    <span style={{fontSize:9,color:'var(--muted)',fontWeight:700}}>Sempre</span>
+                  ):isMaster?(
+                    <button onClick={()=>onFinalizacaoAccess(u)} style={{fontSize:9,fontWeight:800,textTransform:'uppercase',padding:'3px 10px',borderRadius:999,cursor:'pointer',border:'1px solid',background:u.acessoFinalizacao===true?'#EDFAF3':'var(--smoke)',color:u.acessoFinalizacao===true?'#0A6B34':'var(--muted)',borderColor:u.acessoFinalizacao===true?'#AAE6C5':'var(--border)'}}>{u.acessoFinalizacao===true?'Liberado':'Bloqueado'}</button>
+                  ):(
+                    <span style={{fontSize:9,fontWeight:700,color:u.acessoFinalizacao===true?'#0A6B34':'var(--muted)'}}>{u.acessoFinalizacao===true?'Liberado':'Bloqueado'}</span>
+                  )}
+                </td>
+                <td style={{textAlign:'right'}}>
+                  {isMasterUser?(
+                    <span style={{fontSize:9,color:'var(--muted)',fontStyle:'italic'}}>★ Protegido</span>
+                  ):isMaster?(
+                    <button onClick={()=>onDelete(u.id||u.user,u)} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'5px 12px',background:'var(--red)',color:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}><Icon name="trash-2" size={12}/> Excluir</button>
+                  ):(
+                    <span style={{fontSize:9,color:'var(--muted)',fontStyle:'italic'}}>—</span>
+                  )}
+                </td>
+              </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        </div>
+      </div>
     </div>
-    {isMaster&&<div className="card" style={{padding:20,display:'flex',flexDirection:'column',gap:12}}><h3 style={{fontSize:11,fontWeight:800,textTransform:'uppercase',color:'var(--red)',margin:0}}>Cadastrar novo acesso</h3><div className="grid-4col" style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:10}}><input className="input" value={nu} onChange={e=>setNu(e.target.value)} placeholder="Usuário"/><input className="input" type={showP?'text':'password'} value={np} onChange={e=>setNp(e.target.value)} placeholder="Senha"/><select className="input" value={nr} onChange={e=>setNr(e.target.value)}><option value="solicitante">Solicitante</option><option value="leitor">Leitor</option><option value="admin">Admin</option><option value="comercial">Comercial</option>{loggedInUser?.user===MASTER_USER&&<option value="master">★ Master</option>}</select><select className="input" value={nc} onChange={e=>setNc(e.target.value)}><option value="">Categoria padrão</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div><button className="btn-primary" onClick={()=>{if(!nu||!np)return alert('Preencha usuário e senha.');onAdd(nu,np,nr,nc);setNu('');setNp('');setNc('');}}>+ Criar conta</button></div>}
-    <div className="card" style={{overflow:'hidden'}}><div className="table-scroll"><table className="vtable w-full" style={{minWidth:980}}><thead><tr><th>Usuário</th><th>Categoria atual</th><th>Categoria personalizada</th><th>Status</th><th style={{textAlign:'right'}}>Ação</th></tr></thead><tbody>{uniqueUsers.map((u,i)=>{const masterUser=u.user===MASTER_USER;return <tr key={i}><td style={{fontWeight:700}}>{u.user}{masterUser&&' ★'}</td><td><RoleBadge role={u.role||'solicitante'}/></td><td>{masterUser?<span style={{fontSize:9,color:'var(--muted)'}}>Tudo liberado</span>:isMaster?<select className="input" style={{padding:'6px 8px',fontSize:10}} value={u.categoryId||''} onChange={e=>onCategory(u,e.target.value)}><option value="">Usar categoria padrão</option>{categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select>:<span style={{fontSize:9}}>{categories.find(c=>c.id===u.categoryId)?.name||'Padrão'}</span>}</td><td>{isMaster&&!masterUser?<button onClick={()=>onToggle(u)} className="pill">{u.active!==false?'Ativo':'Desativado'}</button>:<span className="pill">{u.active!==false?'Ativo':'Desativado'}</span>}</td><td style={{textAlign:'right'}}>{masterUser?<span style={{fontSize:9,color:'var(--muted)'}}>Protegido</span>:isMaster?<button onClick={()=>onDelete(u.id||u.user,u)} className="btn-primary" style={{padding:'6px 10px'}}>Excluir</button>:null}</td></tr>})}</tbody></table></div></div>
-  </div>;
+  );
 }
-  
 // ── Storage View ──────────────────────────────────────────────────────────
 function StorageView({requests,loggedInUser}){
   const LIM=1000;
@@ -8070,7 +8122,6 @@ const{data:requests,loading:reqLoad}=useFirestore('requests');
   const{data:requestsArquivados,loading:arqLoad}=useFirestore('requestsArquivados');
   const{data:vehicles,loading:vehLoad}=useFirestore('vehicles');
   const{data:usersData,loading:usrLoad}=useFirestore('users');
-const{data:userCategories,loading:catLoad}=useFirestore('userCategories');
   const{data:estoque,loading:estLoad}=useFirestore('estoque');
   const{data:estoqueMovimentos,loading:movLoad}=useFirestore('estoqueMovimentos',{orderBy:'timestamp',direction:'desc',limit:300});
   const{data:finalizacoesApp,loading:finLoad}=useFirestore('finalizacoes');
@@ -8127,23 +8178,12 @@ const{data:userCategories,loading:catLoad}=useFirestore('userCategories');
   const isAdmin=role==='admin'||isMaster||isAdminEspecial;
   const isSol=canDo(role,'newReq')||isAdminEspecial;
   const canAccessFinalizacao=isMaster||loggedIn?.acessoFinalizacao===true||isAdminEspecial||loggedIn?.user==='Rogerio.Arruda';
-  const policy=getUserPolicy(loggedIn,userCategories);
-const hasCustomCategory=!!userCategories.find(c=>c.id===loggedIn?.categoryId);
-const requestsVisiveis=useMemo(()=>filterRequestsForUser(requests,loggedIn,userCategories,vehicles),[requests,loggedIn,userCategories,vehicles]);
-const canSee=screen=>isMaster||userCanSee(loggedIn,userCategories,screen);
-const canCreateRequest=hasCustomCategory?canSee('request'):isSol;
-const canAccessFinalizacaoCustom=hasCustomCategory?canSee('finalizacao'):canAccessFinalizacao;
-const canAccessFeedbackCustom=hasCustomCategory
-  ?(canSee('feedbackFinalizacao')||canSee('feedbackFinalizacaoReuniao'))
-  :(isMaster||loggedIn?.user==='Cleber.Zonta'||loggedIn?.user==='Leonardo.Teixeira'||loggedIn?.user==='Rogerio.Arruda'||loggedIn?.user==='Rafael.Oliveira');
 
-
- const addUser=async(u,p,r='solicitante',categoryId='')=>{
-  if(r==='master'&&loggedIn?.user!==MASTER_USER)return alert('Somente o Master 1 pode criar usuários Master.');
-  try{
-    await col('users').add({user:u,pass:p,active:true,role:r,categoryId:categoryId||null});
-  }catch{alert('Erro ao criar usuário.');}
-};
+  const addUser=async(u,p,r='solicitante')=>{
+    // Só o Master 1 (Lucas.Sabino) pode criar masters
+    if(r==='master'&&loggedIn?.user!==MASTER_USER)return alert('Somente o Master 1 pode criar usuários Master.');
+    try{await col('users').add({user:u,pass:p,active:true,role:r});}catch{alert('Erro ao criar usuário.');}
+  };
   const deleteUser=async(id,userObj)=>{
     // Ninguém pode excluir o próprio Master 1
     if(userObj?.user===MASTER_USER)return alert('O usuário Master 1 (Lucas.Sabino) não pode ser excluído.');
@@ -8174,18 +8214,6 @@ const changeRole=async(u,r)=>{
     if(!u.id){setUsers(p=>p.map(x=>x.user===u.user?{...x,acessoFinalizacao:novo}:x));return;}
     try{await col('users').doc(u.id).update({acessoFinalizacao:novo});}catch(e){console.error(e);alert('Erro ao alterar acesso à Finalização.');}
   };
-  const changeUserCategory=async(u,categoryId)=>{
-  if(!isMaster)return;
-  if(!u.id){setUsers(p=>p.map(x=>x.user===u.user?{...x,categoryId}:x));return;}
-  try{await col('users').doc(u.id).update({categoryId:categoryId||null});}
-  catch(e){console.error(e);alert('Erro ao alterar a categoria personalizada.');}
-};
-
-const addUserCategory=async(category)=>{
-  if(!isMaster)return;
-  try{await col('userCategories').add(category);alert('Categoria criada com sucesso.');}
-  catch(e){console.error(e);alert('Erro ao criar categoria.');}
-};
   const cleanDuplicateUsers=async()=>{
     if(!isMaster)return;
     const groups={};
@@ -8330,21 +8358,20 @@ const addUserCategory=async(category)=>{
 
 const canAccessFeedbackFinalizacao=isMaster||loggedIn?.user==='Cleber.Zonta'||loggedIn?.user==='Leonardo.Teixeira'||loggedIn?.user==='Rogerio.Arruda'||loggedIn?.user==='Rafael.Oliveira';
 const navItems=[
-  canSee('request')&&canCreateRequest&&{key:'request',icon:'plus-circle',label:'Nova Peça'},
-  canSee('status')&&{key:'status',icon:'search',label:'Histórico'},
-  canSee('chegadas')&&{key:'chegadas',icon:'package-check',label:'Chegadas',badge:chegadasNaoLidas},
-  canSee('estoque')&&{key:'estoque',icon:'boxes',label:'Estoque'},
-  canSee('finalizacao')&&canAccessFinalizacaoCustom&&{key:'finalizacao',icon:'clipboard-check',label:'Inspeção'},
-  canSee('feedbackFinalizacao')&&canAccessFeedbackCustom&&{key:'feedbackFinalizacao',icon:'message-square',label:'Feedback Finalização'},
-  canSee('feedbackFinalizacaoReuniao')&&canAccessFeedbackCustom&&{key:'feedbackFinalizacaoReuniao',icon:'presentation',label:'Feedback Finalização Reunião'},
-  canSee('donor')&&(canDo(role,'donor')||hasCustomCategory)&&{key:'donor',icon:'git-merge',label:'Doações'},
-  canSee('admin')&&canDo(role,'manage')&&{key:'admin',icon:'settings',label:'Gestão'},
-  canSee('dashboard')&&(isMaster||isAdmin||hasCustomCategory)&&{key:'dashboard',icon:'bar-chart-2',label:'Análises'},
-  canSee('resumo')&&(loggedIn?.user===MASTER_USER||loggedIn?.user==='Matheus.Ransi'||hasCustomCategory)&&{key:'resumo',icon:'presentation',label:'Resumo Reunião'}
+    isSol&&{key:'request',icon:'plus-circle',label:'Nova Peça'},
+    {key:'status',icon:'search',label:'Histórico'},
+    {key:'chegadas',icon:'package-check',label:'Chegadas',badge:chegadasNaoLidas},
+    {key:'estoque',icon:'boxes',label:'Estoque'},
+        canAccessFinalizacao&&{key:'finalizacao',icon:'clipboard-check',label:'Inspeção'},
+    canAccessFeedbackFinalizacao&&{key:'feedbackFinalizacao',icon:'message-square',label:'Feedback Finalização'},
+    canAccessFeedbackFinalizacao&&{key:'feedbackFinalizacaoReuniao',icon:'presentation',label:'Feedback Finalização Reunião'},
+        (loggedIn?.user===MASTER_USER||loggedIn?.user==='Matheus.Ransi')&&{key:'donor',icon:'git-merge',label:'Doações'},
+    canDo(role,'manage')&&{key:'admin',icon:'settings',label:'Gestão'},
+    (isMaster||isAdmin)&&{key:'dashboard',icon:'bar-chart-2',label:'Análises'},
+    (loggedIn?.user===MASTER_USER||loggedIn?.user==='Matheus.Ransi')&&{key:'resumo',icon:'presentation',label:'Resumo Reunião'},
+  ].filter(Boolean);
 
-].filter(Boolean);
-
-    const loading=reqLoad||arqLoad||vehLoad||usrLoad||catLoad||estLoad||movLoad||finLoad;
+    const loading=reqLoad||arqLoad||vehLoad||usrLoad||estLoad||movLoad||finLoad;
 
   // ── Return condicional APÓS todos os hooks ────────────────────────────────
   if(!loggedIn)return <LoginView onLogin={login} usersList={users} loadingUsers={usrLoad}/>;
@@ -8431,19 +8458,16 @@ const navItems=[
           <div style={{maxWidth:1100,margin:'0 auto'}}>
             {loading?<Skeleton/>:(
               <>
-                             {view==='dashboard'&&canSee('dashboard')&&(isMaster||isAdmin||hasCustomCategory)&&<DashboardView requests={requestsVisiveis} vehicles={vehicles}/>}
-
-{view==='resumo'&&canSee('resumo')&&(loggedIn?.user===MASTER_USER||loggedIn?.user==='Matheus.Ransi'||hasCustomCategory)&&<ResumoReuniaoView requests={requestsVisiveis} vehicles={vehicles}/>} 
-
-{view==='request'&&canSee('request')&&canCreateRequest&&<RequestForm user={user} loggedInUser={loggedIn} vehiclesDB={vehicles} requests={requestsVisiveis}/>}
-              {view==='status'&&canSee('status')&&<StatusView requests={requestsVisiveis} loggedInUser={loggedIn} vehicles={vehicles}/>}
-{view==='chegadas'&&canSee('chegadas')&&<ChegadasView requests={requestsVisiveis} loggedInUser={loggedIn} vehicles={vehicles}/>}
-              {view==='estoque'&&canSee('estoque')&&<EstoqueView estoque={estoque} movimentos={estoqueMovimentos} requests={requestsVisiveis} loggedInUser={loggedIn} isMaster={isMaster}/>}
-                              {view==='donor'&&canSee('donor')&&(canDo(role,'donor')||loggedIn?.user==='Matheus.Ransi'||hasCustomCategory)&&<DonorSystem requests={requestsVisiveis} vehicles={vehicles} loggedInUser={loggedIn}/>}
-
-               {view==='finalizacao'&&canSee('finalizacao')&&canAccessFinalizacaoCustom&&<FinalizacaoView vehiclesDB={vehicles} requests={requestsVisiveis} loggedInUser={loggedIn} isMaster={isMaster}/>}
-{view==='feedbackFinalizacao'&&canSee('feedbackFinalizacao')&&canAccessFeedbackCustom&&<FeedbackFinalizacaoView finalizacoes={finalizacoesApp} requests={requestsVisiveis} vehicles={vehicles} loggedInUser={loggedIn}/>}
-{view==='feedbackFinalizacaoReuniao'&&canSee('feedbackFinalizacaoReuniao')&&canAccessFeedbackCustom&&<FeedbackFinalizacaoReuniaoView finalizacoes={finalizacoesApp} requests={requestsVisiveis} vehicles={vehicles} loggedInUser={loggedIn}/>}
+                                {view==='dashboard'&&(isMaster||isAdmin)&&<DashboardView requests={requestsComHistorico} vehicles={vehicles}/>}
+{view==='resumo'&&(loggedIn?.user===MASTER_USER||loggedIn?.user==='Matheus.Ransi')&&<ResumoReuniaoView requests={requestsComHistorico} vehicles={vehicles}/>}
+                {view==='request'&&isSol&&<RequestForm user={user} loggedInUser={loggedIn} vehiclesDB={vehicles} requests={requests}/>}
+                {view==='status'&&<StatusView requests={requests} loggedInUser={loggedIn} vehicles={vehicles}/>}
+                {view==='chegadas'&&<ChegadasView requests={requests} loggedInUser={loggedIn} vehicles={vehicles}/>}
+                {view==='estoque'&&<EstoqueView estoque={estoque} movimentos={estoqueMovimentos} requests={requests} loggedInUser={loggedIn} isMaster={isMaster}/>}
+                              {view==='donor'&&(canDo(role,'donor')||loggedIn?.user==='Matheus.Ransi')&&<DonorSystem requests={requests} vehicles={vehicles} loggedInUser={loggedIn}/>}
+                {view==='finalizacao'&&canAccessFinalizacao&&<FinalizacaoView vehiclesDB={vehicles} requests={requests} loggedInUser={loggedIn} isMaster={isMaster}/>}
+               {view==='feedbackFinalizacao'&&canAccessFeedbackFinalizacao&&<FeedbackFinalizacaoView finalizacoes={finalizacoesApp} requests={requests} vehicles={vehicles} loggedInUser={loggedIn}/>}
+                {view==='feedbackFinalizacaoReuniao'&&canAccessFeedbackFinalizacao&&<FeedbackFinalizacaoReuniaoView finalizacoes={finalizacoesApp} requests={requests} vehicles={vehicles} loggedInUser={loggedIn}/>}
                 {view==='admin'&&canDo(role,'manage')&&(
                   <div className="fade-up" style={{paddingBottom:40}}>
                     <div style={{marginBottom:16}}>
@@ -8484,7 +8508,8 @@ const navItems=[
                       ))}
                     </div>
 
-                {subView==='users'&&isMaster&&<UserManagement users={users} categories={userCategories} onAdd={addUser} onDelete={deleteUser} onToggle={toggleUser} onRole={changeRole} onCategory={changeUserCategory} onAddCategory={addUserCategory} onCleanDuplicates={cleanDuplicateUsers} loggedInUser={loggedIn}/>} 
+                {subView==='users'&&isMaster&&<UserManagement users={users} onAdd={addUser} onDelete={deleteUser} onToggle={toggleUser} onRole={changeRole} onFinalizacaoAccess={toggleFinalizacaoAccess} onCleanDuplicates={cleanDuplicateUsers} loggedInUser={loggedIn}/>}
+{subView==='storage'&&isMaster&&<StorageView requests={requests} loggedInUser={loggedIn}/>}
 {subView==='cancelDonation'&&isMaster&&<CancelDonationView requests={requests} loggedInUser={loggedIn}/>}
 {subView==='deletedItems'&&isMaster&&<DeletedItemsView loggedInUser={loggedIn}/>}
 {subView==='excedentes'&&isMaster&&<PedidosExcedentesView requests={requests}/>}
