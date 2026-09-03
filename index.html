@@ -8444,16 +8444,17 @@ const{data:requests,loading:reqLoad}=useFirestore('requests');
   const{data:usersData,loading:usrLoad}=useFirestore('users');
   const{data:estoque,loading:estLoad}=useFirestore('estoque');
   const{data:estoqueMovimentos,loading:movLoad}=useFirestore('estoqueMovimentos',{orderBy:'timestamp',direction:'desc',limit:300});
-  const{data:finalizacoesApp,loading:finLoad}=useFirestore('finalizacoes');
+ const{data:finalizacoesApp,loading:finLoad}=useFirestore('finalizacoes');
 const{data:customRolesData,loading:croLoad}=useFirestore('customRoles');
+  // Live + arquivado — usado SOMENTE nos gráficos (Análises e Resumo Reunião), pra não perder histórico ao excluir em Capacidade
+  const requestsComHistorico=useMemo(()=>[...requests,...requestsArquivados],[requests,requestsArquivados]);
+ const[users,setUsers]=useState([]);
+const[initDone,setInitDone]=useState(false);
+
 useEffect(()=>{
   const sinteticos=(users||[]).filter(u=>u.accessOverride).map(u=>({id:'user:'+(u.id||u.user),...u.accessOverride}));
   setCustomRolesCache([...(customRolesData||[]),...sinteticos]);
 },[customRolesData,users]);
-  // Live + arquivado — usado SOMENTE nos gráficos (Análises e Resumo Reunião), pra não perder histórico ao excluir em Capacidade
-  const requestsComHistorico=useMemo(()=>[...requests,...requestsArquivados],[requests,requestsArquivados]);
-  const[users,setUsers]=useState([]);
-  const[initDone,setInitDone]=useState(false);
 
   useEffect(()=>{
     if(usrLoad)return;
