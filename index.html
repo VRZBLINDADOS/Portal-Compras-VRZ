@@ -294,7 +294,14 @@ function estimarBytes(r){return r.reduce((a,x)=>a+(x.items?.some(i=>i.photo)?800
 // admin: Nova Req, Histórico, Doações — sem Excluir, Gestão, Usuários
 // solicitante: Nova Req, Histórico
 // leitor: só Histórico
+let __customRolesCache=[];
+function setCustomRolesCache(list){__customRolesCache=list||[];}
+function getCustomRole(customRoleId){return __customRolesCache.find(c=>c.id===customRoleId);}
 function canDo(role, action){
+  if(typeof role==='string'&&role.startsWith('custom:')){
+    const cr=getCustomRole(role.slice(7));
+    return !!(cr?.permissoes?.[action]);
+  }
   const perms={
     master:  {newReq:true, history:true, donor:true, delete:true, manage:true, users:true},
     admin:   {newReq:true, history:true, donor:true, delete:false, manage:false, users:false},
@@ -303,6 +310,22 @@ function canDo(role, action){
     comercial:{newReq:false, history:true, donor:false, delete:false, manage:false, users:false},
   };
   return !!(perms[role||'solicitante']?.[action]);
+}
+function telaLiberadaCustom(role,key){
+  if(typeof role!=='string'||!role.startsWith('custom:'))return true;
+  const cr=getCustomRole(role.slice(7));
+  return !!(cr?.telas?.includes(key));
+}
+function linhaLiberadaCustom(role,linha){
+  if(typeof role!=='string'||!role.startsWith('custom:'))return true;
+  const cr=getCustomRole(role.slice(7));
+  if(!cr||cr.escopoLinha==='todas'||!cr.escopoLinha)return true;
+  return (cr.escopoLinha||[]).includes(linha);
+}
+function apenasProprioCustom(role){
+  if(typeof role!=='string'||!role.startsWith('custom:'))return false;
+  const cr=getCustomRole(role.slice(7));
+  return cr?.escopoDados==='proprio';
 }
 
 function getPecasParaOS(os, requests){
@@ -415,8 +438,8 @@ const StatusBadge=({status,orig})=>{
 };
 const RoleBadge=({role})=>{
   const r=role||'solicitante';
-  const map={master:'badge-master',admin:'badge-admin',solicitante:'badge-sol',leitor:'badge-reader',comercial:'badge-comercial'};
-  const labels={master:'★ Master',admin:'Admin',solicitante:'Solicitante',leitor:'Leitor',comercial:'Comercial'};
+  const map={master:'badge-master',admin:'badge-admin',solicitante:'badge-sol',leitor:'badge-reader',comercial:'badge-comercial',custom:'badge-comercial'};
+  const labels={master:'★ Master',admin:'Admin',solicitante:'Solicitante',leitor:'Leitor',comercial:'Comercial',custom:'⚙ Personalizado'};
   return <span className={`badge ${map[r]||'badge-sol'}`}>{labels[r]||r}</span>;
 };
 
@@ -2609,8 +2632,9 @@ function StatusView({requests,loggedInUser,vehicles}){
   const[statusTab,setStatusTab]=useState('geral');
   const[toDelete,setToDelete]=useState(null);
   const[pdfConfirm,setPdfConfirm]=useState(null);
- const role=loggedInUser?.role||'solicitante';
+  const role=loggedInUser?.role==='custom'?('custom:'+loggedInUser.customRoleId):(loggedInUser?.role||'solicitante');
   const canDelete=canDo(role,'delete')&&!ADMIN_ESPECIAL.includes(loggedInUser?.user);
+  const escopoApenasProprio=apenasProprioCustom(role);
 
   // Cria mapa de veículos por OS para lookup rápido
   const vehicleMap=useMemo(()=>{
@@ -2629,8 +2653,11 @@ function StatusView({requests,loggedInUser,vehicles}){
     else if(statusTab==='comprado')ms=r.items?.some(it=>it.status==='Comprado');
     else if(statusTab==='concluido')ms=r.items?.every(it=>it.status==='Concluído'||it.status==='Doado');
     else if(statusTab==='doado')ms=r.items?.some(it=>it.status==='Doado'||it.receivedFrom||it.donatedTo);
-    return mb&&mu&&ms;
-  }),[merged,search,unidadeFilter,statusTab]);
+    const vInfoScope=vehicleMap[String(r.os).trim()]||{};
+    const mLinha=linhaLiberadaCustom(role,vInfoScope.linhaProducao||r.vehicleData?.linhaProducao||'');
+    const mProprio=!escopoApenasProprio||r.responsavel===loggedInUser?.user;
+    return mb&&mu&&ms&&mLinha&&mProprio;
+  }),[merged,search,unidadeFilter,statusTab,vehicleMap,role,escopoApenasProprio,loggedInUser]);
 
   const counts=useMemo(()=>({
     geral:merged.length,
@@ -2942,11 +2969,146 @@ const exportCSV=()=>{
   );
 }
 
-// ── User Management — MELHORIA 3: 4 categorias (master fixo) ─────────────
-function UserManagement({users,onAdd,onDelete,onToggle,onRole,onFinalizacaoAccess,onCleanDuplicates,loggedInUser}){
-  const[nu,setNu]=useState('');const[np,setNp]=useState('');const[nr,setNr]=useState('solicitante');const[showP,setShowP]=useState(false);
-  const isMaster=loggedInUser?.role==='master';
+const TELAS_DISPONIVEIS=[
+  {key:'request',label:'Nova Peça'},{key:'status',label:'Histórico'},
+  {key:'chegadas',label:'Chegadas'},{key:'estoque',label:'Estoque'},
+  {key:'finalizacao',label:'Inspeção'},{key:'feedbackFinalizacao',label:'Feedback Finalização'},
+  {key:'feedbackFinalizacaoReuniao',label:'Feedback Finalização Reunião'},
+  {key:'donor',label:'Doações'},{key:'admin',label:'Gestão'},
+  {key:'dashboard',label:'Análises'},{key:'resumo',label:'Resumo Reunião'},
+];
+const LINHAS_DISPONIVEIS=['Linha 1','Linha 2','Linha 3','Linha 4','Linha 5','Linha 6','Linha 7'];
+const PERMISSOES_DISPONIVEIS=[
+  {key:'newReq',label:'Criar Nova Peça'},{key:'history',label:'Ver Histórico'},
+  {key:'donor',label:'Fazer Doações'},{key:'delete',label:'Excluir Registros'},
+  {key:'manage',label:'Gestão de Compras'},{key:'users',label:'Gerenciar Usuários'},
+];
 
+function CustomRolesManager({customRoles,onSave,onDelete}){
+  const[editando,setEditando]=useState(null);
+  const[nome,setNome]=useState('');
+  const[telas,setTelas]=useState([]);
+  const[escopoLinha,setEscopoLinha]=useState('todas');
+  const[linhasSel,setLinhasSel]=useState([]);
+  const[escopoDados,setEscopoDados]=useState('todos');
+  const[permissoes,setPermissoes]=useState({});
+
+  const carregarEdicao=(cr)=>{
+    setEditando(cr);setNome(cr.nome||'');setTelas(cr.telas||[]);
+    setEscopoLinha(cr.escopoLinha==='todas'?'todas':'especifica');
+    setLinhasSel(Array.isArray(cr.escopoLinha)?cr.escopoLinha:[]);
+    setEscopoDados(cr.escopoDados||'todos');setPermissoes(cr.permissoes||{});
+  };
+  const limpar=()=>{setEditando(null);setNome('');setTelas([]);setEscopoLinha('todas');setLinhasSel([]);setEscopoDados('todos');setPermissoes({});};
+  const toggleTela=(k)=>setTelas(p=>p.includes(k)?p.filter(x=>x!==k):[...p,k]);
+  const toggleLinha=(l)=>setLinhasSel(p=>p.includes(l)?p.filter(x=>x!==l):[...p,l]);
+  const togglePerm=(k)=>setPermissoes(p=>({...p,[k]:!p[k]}));
+
+  const salvar=()=>{
+    if(!nome.trim())return alert('Dê um nome para a categoria.');
+    if(!telas.length)return alert('Selecione ao menos uma tela.');
+    onSave({id:editando?.id,nome:nome.trim(),telas,escopoLinha:escopoLinha==='todas'?'todas':linhasSel,escopoDados,permissoes});
+    limpar();
+  };
+
+  return(
+    <div style={{display:'flex',flexDirection:'column',gap:16}}>
+      <div className="card" style={{padding:20,display:'flex',flexDirection:'column',gap:16}}>
+        <h3 style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--red)',margin:0}}>{editando?'Editar Categoria':'Nova Categoria Personalizada'}</h3>
+        <div>
+          <label style={{fontSize:8,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',display:'block',marginBottom:6}}>Nome da Categoria</label>
+          <input type="text" value={nome} onChange={e=>setNome(sanitize(e.target.value))} className="input" placeholder="Ex: Supervisor Linha 4-7"/>
+        </div>
+        <div>
+          <label style={{fontSize:8,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',display:'block',marginBottom:8}}>Telas que pode ver</label>
+          <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+            {TELAS_DISPONIVEIS.map(t=>(
+              <label key={t.key} style={{display:'flex',alignItems:'center',gap:6,padding:'6px 12px',borderRadius:8,border:`1.5px solid ${telas.includes(t.key)?'var(--red)':'var(--border)'}`,background:telas.includes(t.key)?'var(--red-light)':'#fff',cursor:'pointer',fontSize:10,fontWeight:700}}>
+                <input type="checkbox" checked={telas.includes(t.key)} onChange={()=>toggleTela(t.key)} style={{accentColor:'var(--red)'}}/>{t.label}
+              </label>
+            ))}
+          </div>
+        </div>
+        <div>
+          <label style={{fontSize:8,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',display:'block',marginBottom:8}}>Quais linhas de produção pode ver</label>
+          <div style={{display:'flex',gap:8,marginBottom:linhasSel.length||escopoLinha==='especifica'?10:0,flexWrap:'wrap'}}>
+            {[{v:'todas',l:'Todas as linhas'},{v:'especifica',l:'Linhas específicas'}].map(o=>(
+              <label key={o.v} style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:10,fontWeight:700}}>
+                <input type="radio" checked={escopoLinha===o.v} onChange={()=>setEscopoLinha(o.v)} style={{accentColor:'var(--red)'}}/>{o.l}
+              </label>
+            ))}
+          </div>
+          {escopoLinha==='especifica'&&(
+            <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+              {LINHAS_DISPONIVEIS.map(l=>(
+                <label key={l} style={{display:'flex',alignItems:'center',gap:6,padding:'6px 12px',borderRadius:8,border:`1.5px solid ${linhasSel.includes(l)?'var(--red)':'var(--border)'}`,background:linhasSel.includes(l)?'var(--red-light)':'#fff',cursor:'pointer',fontSize:10,fontWeight:700}}>
+                  <input type="checkbox" checked={linhasSel.includes(l)} onChange={()=>toggleLinha(l)} style={{accentColor:'var(--red)'}}/>{l}
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+        <div>
+          <label style={{fontSize:8,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',display:'block',marginBottom:8}}>O que pode enxergar</label>
+          <div style={{display:'flex',gap:14,flexWrap:'wrap'}}>
+            {[{v:'todos',l:'Dados de todos os usuários'},{v:'proprio',l:'Só os próprios pedidos/inspeções'}].map(o=>(
+              <label key={o.v} style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',fontSize:10,fontWeight:700}}>
+                <input type="radio" checked={escopoDados===o.v} onChange={()=>setEscopoDados(o.v)} style={{accentColor:'var(--red)'}}/>{o.l}
+              </label>
+            ))}
+          </div>
+        </div>
+        <div>
+          <label style={{fontSize:8,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',display:'block',marginBottom:8}}>Permissões</label>
+          <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+            {PERMISSOES_DISPONIVEIS.map(p=>(
+              <label key={p.key} style={{display:'flex',alignItems:'center',gap:6,padding:'6px 12px',borderRadius:8,border:`1.5px solid ${permissoes[p.key]?'var(--red)':'var(--border)'}`,background:permissoes[p.key]?'var(--red-light)':'#fff',cursor:'pointer',fontSize:10,fontWeight:700}}>
+                <input type="checkbox" checked={!!permissoes[p.key]} onChange={()=>togglePerm(p.key)} style={{accentColor:'var(--red)'}}/>{p.label}
+              </label>
+            ))}
+          </div>
+        </div>
+        <div style={{display:'flex',gap:10}}>
+          {editando&&<button onClick={limpar} className="btn-ghost" style={{flex:1}}>Cancelar Edição</button>}
+          <button onClick={salvar} className="btn-primary" style={{flex:2}}>{editando?'Salvar Alterações':'+ Criar Categoria'}</button>
+        </div>
+      </div>
+
+      <div className="card" style={{overflow:'hidden'}}>
+        <div className="table-scroll">
+          <table className="vtable w-full" style={{minWidth:600}}>
+            <thead><tr><th>Nome</th><th>Telas</th><th>Linhas</th><th>Escopo</th><th style={{textAlign:'right'}}>Ação</th></tr></thead>
+            <tbody>
+              {(customRoles||[]).length===0?(
+                <tr><td colSpan="5" style={{padding:30,textAlign:'center',fontSize:10,color:'var(--muted)',fontWeight:700,textTransform:'uppercase'}}>Nenhuma categoria criada ainda</td></tr>
+              ):customRoles.map(cr=>(
+                <tr key={cr.id}>
+                  <td style={{fontWeight:800}}>{cr.nome}</td>
+                  <td style={{fontSize:9}}>{(cr.telas||[]).length} tela(s)</td>
+                  <td style={{fontSize:9}}>{cr.escopoLinha==='todas'?'Todas':(cr.escopoLinha||[]).join(', ')||'—'}</td>
+                  <td style={{fontSize:9}}>{cr.escopoDados==='proprio'?'Só o próprio':'Todos'}</td>
+                  <td style={{textAlign:'right'}}>
+                    <div style={{display:'flex',gap:6,justifyContent:'flex-end'}}>
+                      <button onClick={()=>carregarEdicao(cr)} style={{padding:'5px 12px',background:'#F59E0B',color:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}>Editar</button>
+                      <button onClick={()=>{if(window.confirm('Excluir a categoria "'+cr.nome+'"? Usuários com essa categoria perderão o acesso até serem reatribuídos.'))onDelete(cr.id);}} style={{padding:'5px 12px',background:'var(--red)',color:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}>Excluir</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── User Management — MELHORIA 3: 4 categorias (master fixo) ─────────────
+function UserManagement({users,onAdd,onDelete,onToggle,onRole,onFinalizacaoAccess,onCleanDuplicates,loggedInUser,customRoles,onSaveCustomRole,onDeleteCustomRole,onAssignCustomRole}){
+  const[nu,setNu]=useState('');const[np,setNp]=useState('');const[nr,setNr]=useState('solicitante');const[showP,setShowP]=useState(false);
+  const[ncr,setNcr]=useState('');
+  const[usersTab,setUsersTab]=useState('usuarios');
+  const isMaster=loggedInUser?.role==='master';
   const uniqueUsers=useMemo(()=>{
     const seen={};
     return users.filter(u=>{
@@ -2981,9 +3143,22 @@ function UserManagement({users,onAdd,onDelete,onToggle,onRole,onFinalizacaoAcces
             </ul>
           </div>
           );
-        })}
+             })}
       </div>
 
+      {isMaster&&(
+        <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)',width:'fit-content'}}>
+          {[{k:'usuarios',l:'Usuários'},{k:'categorias',l:'Categorias Personalizadas'}].map(t=>(
+            <button key={t.k} onClick={()=>setUsersTab(t.k)} style={{padding:'8px 16px',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',border:'none',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif',background:usersTab===t.k?'#fff':'transparent',color:usersTab===t.k?'var(--red)':'var(--muted)',boxShadow:usersTab===t.k?'0 2px 8px rgba(0,0,0,.08)':'none'}}>{t.l}</button>
+          ))}
+        </div>
+      )}
+
+      {isMaster&&usersTab==='categorias'&&(
+        <CustomRolesManager customRoles={customRoles||[]} onSave={onSaveCustomRole} onDelete={onDeleteCustomRole}/>
+      )}
+
+      {(usersTab==='usuarios'||!isMaster)&&(<>
       {hasDuplicates&&isMaster&&(
         <div style={{background:'#FFFBE6',border:'1px solid #FFE680',borderRadius:12,padding:'14px 16px',display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}>
           <Icon name="alert-triangle" size={18} style={{color:'#856A00',flexShrink:0}}/>
@@ -3000,16 +3175,26 @@ function UserManagement({users,onAdd,onDelete,onToggle,onRole,onFinalizacaoAcces
             <div><label style={{fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',display:'block',marginBottom:6}}>Usuário</label><input type="text" value={nu} onChange={e=>setNu(e.target.value)} className="input" placeholder="Nome.Sobrenome" style={{fontSize:12}}/></div>
             <div><label style={{fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',display:'block',marginBottom:6}}>Senha</label>
               <div style={{position:'relative'}}><input type={showP?'text':'password'} value={np} onChange={e=>setNp(e.target.value)} className="input" placeholder="Senha" style={{fontSize:12,paddingRight:36}}/><button type="button" onClick={()=>setShowP(!showP)} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',fontSize:12}}>{showP?'👁':'👁‍🗨'}</button></div></div>
-            <div><label style={{fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',display:'block',marginBottom:6}}>Categoria</label>
+                        <div><label style={{fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',display:'block',marginBottom:6}}>Categoria</label>
            <select value={nr} onChange={e=>setNr(e.target.value)} className="input" style={{fontSize:12,appearance:'auto'}}>
                 <option value="solicitante">Solicitante</option>
                 <option value="leitor">Leitor</option>
                 <option value="admin">Admin</option>
                 <option value="comercial">Comercial</option>
                 {loggedInUser?.user===MASTER_USER&&<option value="master">★ Master</option>}
+                {customRoles?.length>0&&<option value="custom">⚙ Personalizada</option>}
               </select></div>
+            {nr==='custom'&&(
+              <div>
+                <label style={{fontSize:8,fontWeight:700,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',display:'block',marginBottom:6}}>Qual categoria?</label>
+                <select value={ncr} onChange={e=>setNcr(e.target.value)} className="input" style={{fontSize:12,appearance:'auto'}}>
+                  <option value="">Selecione...</option>
+                  {(customRoles||[]).map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}
+                </select>
+              </div>
+            )}
           </div>
-          <button onClick={()=>{if(!nu||!np)return alert('Preencha todos os campos.');onAdd(nu,np,nr);setNu('');setNp('');setNr('solicitante');}} className="btn-primary" style={{width:'100%'}}>+ Criar Conta</button>
+          <button onClick={()=>{if(!nu||!np)return alert('Preencha todos os campos.');if(nr==='custom'&&!ncr)return alert('Selecione a categoria personalizada.');onAdd(nu,np,nr,nr==='custom'?ncr:null);setNu('');setNp('');setNr('solicitante');setNcr('');}} className="btn-primary" style={{width:'100%'}}>+ Criar Conta</button>
         </div>
       )}
 
@@ -3028,15 +3213,24 @@ function UserManagement({users,onAdd,onDelete,onToggle,onRole,onFinalizacaoAcces
                   {isMasterUser?(
                     <RoleBadge role={u.role||'master'}/>
                   ):isMaster?(
+                                  <div style={{display:'flex',flexDirection:'column',gap:4}}>
                   <select value={u.role||'solicitante'} onChange={e=>onRole(u,e.target.value)}
                       className="badge"
-                      style={{cursor:'pointer',border:'none',outline:'none',fontFamily:'Plus Jakarta Sans,sans-serif',background:u.role==='master'?'#0D0D0D':u.role==='admin'?'var(--red)':u.role==='leitor'?'var(--muted)':u.role==='comercial'?'#0EA5E9':'#1A4EC2',color:u.role==='master'?'#FFD700':'#fff'}}>
+                      style={{cursor:'pointer',border:'none',outline:'none',fontFamily:'Plus Jakarta Sans,sans-serif',background:u.role==='master'?'#0D0D0D':u.role==='admin'?'var(--red)':u.role==='leitor'?'var(--muted)':u.role==='comercial'?'#0EA5E9':u.role==='custom'?'#7C3AED':'#1A4EC2',color:u.role==='master'?'#FFD700':'#fff'}}>
                       {loggedInUser?.user===MASTER_USER&&<option value="master">★ Master</option>}
                       <option value="admin">Admin</option>
                       <option value="solicitante">Solicitante</option>
                       <option value="leitor">Leitor</option>
                       <option value="comercial">Comercial</option>
+                      {(customRoles||[]).length>0&&<option value="custom">⚙ Personalizada</option>}
                     </select>
+                    {u.role==='custom'&&(
+                      <select value={u.customRoleId||''} onChange={e=>onAssignCustomRole(u,e.target.value)} className="input" style={{fontSize:9,padding:'4px 8px'}}>
+                        <option value="">Selecione a categoria...</option>
+                        {(customRoles||[]).map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}
+                      </select>
+                    )}
+                  </div>
                   ):(
                     <RoleBadge role={u.role||'solicitante'}/>
                   )}
@@ -3070,9 +3264,10 @@ function UserManagement({users,onAdd,onDelete,onToggle,onRole,onFinalizacaoAcces
               );
             })}
           </tbody>
-        </table>
+               </table>
         </div>
       </div>
+      </>)}
     </div>
   );
 }
@@ -8125,6 +8320,8 @@ const{data:requests,loading:reqLoad}=useFirestore('requests');
   const{data:estoque,loading:estLoad}=useFirestore('estoque');
   const{data:estoqueMovimentos,loading:movLoad}=useFirestore('estoqueMovimentos',{orderBy:'timestamp',direction:'desc',limit:300});
   const{data:finalizacoesApp,loading:finLoad}=useFirestore('finalizacoes');
+const{data:customRolesData,loading:croLoad}=useFirestore('customRoles');
+useEffect(()=>{setCustomRolesCache(customRolesData);},[customRolesData]);
   // Live + arquivado — usado SOMENTE nos gráficos (Análises e Resumo Reunião), pra não perder histórico ao excluir em Capacidade
   const requestsComHistorico=useMemo(()=>[...requests,...requestsArquivados],[requests,requestsArquivados]);
   const[users,setUsers]=useState([]);
@@ -8172,17 +8369,30 @@ const{data:requests,loading:reqLoad}=useFirestore('requests');
   },[]);
   const fmtHora=d=>d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
 
- const role=loggedIn?.role||'solicitante';
-  const isMaster=role==='master';
+  const role=loggedIn?.role==='custom'?('custom:'+loggedIn.customRoleId):(loggedIn?.role||'solicitante');
+  const isMaster=loggedIn?.role==='master';
   const isAdminEspecial=ADMIN_ESPECIAL.includes(loggedIn?.user);
   const isAdmin=role==='admin'||isMaster||isAdminEspecial;
   const isSol=canDo(role,'newReq')||isAdminEspecial;
   const canAccessFinalizacao=isMaster||loggedIn?.acessoFinalizacao===true||isAdminEspecial||loggedIn?.user==='Rogerio.Arruda';
 
-  const addUser=async(u,p,r='solicitante')=>{
+   const addUser=async(u,p,r='solicitante',customRoleId=null)=>{
     // Só o Master 1 (Lucas.Sabino) pode criar masters
     if(r==='master'&&loggedIn?.user!==MASTER_USER)return alert('Somente o Master 1 pode criar usuários Master.');
-    try{await col('users').add({user:u,pass:p,active:true,role:r});}catch{alert('Erro ao criar usuário.');}
+    try{await col('users').add({user:u,pass:p,active:true,role:r,customRoleId:r==='custom'?customRoleId:null});}catch{alert('Erro ao criar usuário.');}
+  };
+  const assignCustomRole=async(u,customRoleId)=>{
+    if(!u.id){setUsers(p=>p.map(x=>x.user===u.user?{...x,customRoleId}:x));return;}
+    try{await col('users').doc(u.id).update({customRoleId});}catch(e){alert('Erro ao atribuir categoria: '+e.message);}
+  };
+  const saveCustomRole=async(cr)=>{
+    try{
+      if(cr.id){const{id,...rest}=cr;await col('customRoles').doc(id).update(stripUndefined(rest));}
+      else{const{id,...rest}=cr;await col('customRoles').add(stripUndefined(rest));}
+    }catch(e){alert('Erro ao salvar categoria: '+e.message);}
+  };
+  const deleteCustomRole=async(id)=>{
+    try{await col('customRoles').doc(id).delete();}catch(e){alert('Erro ao excluir categoria: '+e.message);}
   };
   const deleteUser=async(id,userObj)=>{
     // Ninguém pode excluir o próprio Master 1
@@ -8357,18 +8567,19 @@ const changeRole=async(u,r)=>{
   },[requests,lidasNav]);
 
 const canAccessFeedbackFinalizacao=isMaster||loggedIn?.user==='Cleber.Zonta'||loggedIn?.user==='Leonardo.Teixeira'||loggedIn?.user==='Rogerio.Arruda'||loggedIn?.user==='Rafael.Oliveira';
+const ehCustom=loggedIn?.role==='custom';
 const navItems=[
-    isSol&&{key:'request',icon:'plus-circle',label:'Nova Peça'},
-    {key:'status',icon:'search',label:'Histórico'},
-    {key:'chegadas',icon:'package-check',label:'Chegadas',badge:chegadasNaoLidas},
-    {key:'estoque',icon:'boxes',label:'Estoque'},
-        canAccessFinalizacao&&{key:'finalizacao',icon:'clipboard-check',label:'Inspeção'},
-    canAccessFeedbackFinalizacao&&{key:'feedbackFinalizacao',icon:'message-square',label:'Feedback Finalização'},
-    canAccessFeedbackFinalizacao&&{key:'feedbackFinalizacaoReuniao',icon:'presentation',label:'Feedback Finalização Reunião'},
-        (loggedIn?.user===MASTER_USER||loggedIn?.user==='Matheus.Ransi')&&{key:'donor',icon:'git-merge',label:'Doações'},
+    isSol&&(!ehCustom||telaLiberadaCustom(role,'request'))&&{key:'request',icon:'plus-circle',label:'Nova Peça'},
+    (!ehCustom||telaLiberadaCustom(role,'status'))&&{key:'status',icon:'search',label:'Histórico'},
+    (!ehCustom||telaLiberadaCustom(role,'chegadas'))&&{key:'chegadas',icon:'package-check',label:'Chegadas',badge:chegadasNaoLidas},
+    (!ehCustom||telaLiberadaCustom(role,'estoque'))&&{key:'estoque',icon:'boxes',label:'Estoque'},
+        (canAccessFinalizacao||ehCustom)&&(!ehCustom||telaLiberadaCustom(role,'finalizacao'))&&{key:'finalizacao',icon:'clipboard-check',label:'Inspeção'},
+    canAccessFeedbackFinalizacao&&(!ehCustom||telaLiberadaCustom(role,'feedbackFinalizacao'))&&{key:'feedbackFinalizacao',icon:'message-square',label:'Feedback Finalização'},
+    canAccessFeedbackFinalizacao&&(!ehCustom||telaLiberadaCustom(role,'feedbackFinalizacaoReuniao'))&&{key:'feedbackFinalizacaoReuniao',icon:'presentation',label:'Feedback Finalização Reunião'},
+        ((loggedIn?.user===MASTER_USER||loggedIn?.user==='Matheus.Ransi')||ehCustom)&&(!ehCustom||telaLiberadaCustom(role,'donor'))&&{key:'donor',icon:'git-merge',label:'Doações'},
     canDo(role,'manage')&&{key:'admin',icon:'settings',label:'Gestão'},
-    (isMaster||isAdmin)&&{key:'dashboard',icon:'bar-chart-2',label:'Análises'},
-    (loggedIn?.user===MASTER_USER||loggedIn?.user==='Matheus.Ransi')&&{key:'resumo',icon:'presentation',label:'Resumo Reunião'},
+    ((isMaster||isAdmin)||ehCustom)&&(!ehCustom||telaLiberadaCustom(role,'dashboard'))&&{key:'dashboard',icon:'bar-chart-2',label:'Análises'},
+    ((loggedIn?.user===MASTER_USER||loggedIn?.user==='Matheus.Ransi')||ehCustom)&&(!ehCustom||telaLiberadaCustom(role,'resumo'))&&{key:'resumo',icon:'presentation',label:'Resumo Reunião'},
   ].filter(Boolean);
 
     const loading=reqLoad||arqLoad||vehLoad||usrLoad||estLoad||movLoad||finLoad;
@@ -8508,7 +8719,7 @@ const navItems=[
                       ))}
                     </div>
 
-                {subView==='users'&&isMaster&&<UserManagement users={users} onAdd={addUser} onDelete={deleteUser} onToggle={toggleUser} onRole={changeRole} onFinalizacaoAccess={toggleFinalizacaoAccess} onCleanDuplicates={cleanDuplicateUsers} loggedInUser={loggedIn}/>}
+                                {subView==='users'&&isMaster&&<UserManagement users={users} onAdd={addUser} onDelete={deleteUser} onToggle={toggleUser} onRole={changeRole} onFinalizacaoAccess={toggleFinalizacaoAccess} onCleanDuplicates={cleanDuplicateUsers} loggedInUser={loggedIn} customRoles={customRolesData} onSaveCustomRole={saveCustomRole} onDeleteCustomRole={deleteCustomRole} onAssignCustomRole={assignCustomRole}/>}
 {subView==='storage'&&isMaster&&<StorageView requests={requests} loggedInUser={loggedIn}/>}
 {subView==='cancelDonation'&&isMaster&&<CancelDonationView requests={requests} loggedInUser={loggedIn}/>}
 {subView==='deletedItems'&&isMaster&&<DeletedItemsView loggedInUser={loggedIn}/>}
