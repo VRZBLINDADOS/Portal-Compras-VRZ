@@ -7123,13 +7123,13 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
       .sort((a, b) => b.valor - a.valor || b.requisitadas - a.requisitadas);
   }, [requests, inicioPeriodo, fimPeriodo]);
 
-  const exportarAuditoriaPecas = () => {
+   const exportarAuditoriaPecas = () => {
     const rows = [[csvCellRR('Peça'), csvCellRR('OS'), csvCellRR('Qtd'), csvCellRR('Valor'), csvCellRR('Status'), csvCellRR('Data Solicitação')].join(';')];
     pedidosConsolidados(requests).forEach(r => {
       if (!r.timestamp) return;
       const dt = new Date(r.timestamp);
       if (dt < inicioPeriodo || dt > fimPeriodo) return;
-      
+      (r.items || []).forEach(it => {
         rows.push([
           csvCellRR(it.description || '(sem descrição)'),
           csvCellRR(r.os),
