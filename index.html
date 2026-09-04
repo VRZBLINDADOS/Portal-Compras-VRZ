@@ -7276,11 +7276,11 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
     // Coordenadas das barras para detecção de clique
     const barRects = [];
 
-   data.forEach((d, i) => {
+    data.forEach((d, i) => {
       // Para 'pedidos', a barra mostra o total de PEÇAS solicitadas no dia;
-      // 'count' mostra quantos pedidos/OS geraram essas peças (rótulo abaixo da barra)
+      // 'count' mostra quantas peças (soma de quantidade, igual ao card "Itens Comprados") ou OS's geraram essas peças
        const val = type === 'valor' ? d.valor : d.pedidos.reduce((a, p) => a + (p.items || []).reduce((s, it) => s + (Number(it.quantity) || 1), 0), 0);
-      const count = type === 'valor' ? d.itens.length : d.osSet.size;
+      const count = type === 'valor' ? d.itens.reduce((s, it) => s + (Number(it.quantity) || 1), 0) : d.osSet.size;
       const x = offsetX + i * bw;
       const bh = maxValue > 0 ? (val / maxValue) * chartH : 0;
       const bx = x + bw * barGap, bwidth = bw * (1 - barGap * 2);
