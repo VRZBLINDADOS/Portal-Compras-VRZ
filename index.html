@@ -6809,12 +6809,16 @@ function ResumoReuniaoView({requests, vehicles}){
     // Usa a mesma consolidação de partes/doações da aba Análises, pra bater 100% com ela.
     const pedidos = pedidosConsolidados(requests);
 
-    pedidos.forEach(r => {
+      pedidos.forEach(r => {
       if (!r.timestamp) return;
       const dt = new Date(r.timestamp);
       const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
       if (map[key]) {
-        map[key].pedidos.push(r);
+        // Itens com donatedTo são cópias automáticas geradas por doação (a OS doadora repondo a
+        // peça que deu) — não são uma requisição nova, já contam na OS que pediu a peça originalmente.
+        const itensValidos = (r.items || []).filter(it => !it.donatedTo);
+        if (!itensValidos.length) return;
+        map[key].pedidos.push({ ...r, items: itensValidos });
         if (r.os) map[key].osSet.add(String(r.os).trim());
       }
     });
@@ -6864,17 +6868,23 @@ const maxPedDia = Math.max(...dadosDia.map(d => d.pedidos.reduce((s, p) => s + (
       if (!r.timestamp) return;
       const dt = new Date(r.timestamp);
       if (dt < inicioPeriodo || dt > fimPeriodo) return;
-      const todasDoadas = r.items?.length > 0 && r.items.every(it => it.donatedTo);
+          const todasDoadas = r.items?.length > 0 && r.items.every(it => it.donatedTo);
+      const itensValidos = (r.items || []).filter(it => !it.donatedTo);
       const key = r.loteId ? `lote_${r.loteId}` : (r.parte ? `${r.os}_${r.responsavel}_${r.totalPartes}_legacy` : r.id);
-      const descItens = (r.items || []).map(it => `${it.quantity}x ${it.description || '(sem descrição)'}`).join(' | ') || '—';
-const qtdTotalDoc = (r.items||[]).reduce((s,it)=>s+(Number(it.quantity)||1),0);
-rows.push([
-  csvCellP(r.id), csvCellP(r.os), csvCellP(dt.toLocaleString('pt-BR')), csvCellP(r.responsavel || '—'),
-  csvCellP(qtdTotalDoc),
-  csvCellP(descItens),
+      const descItens = (r.items || []).map(it => `${it.quantity}x ${it.description || '(sem descrição)'}${it.donatedTo ? ' [DOAÇÃO p/ OS ' + it.donatedTo + ']' : ''}`).join(' | ') || '—';
+      const qtdTotalDoc = itensValidos.reduce((s,it)=>s+(Number(it.quantity)||1),0);
+      const incluido = !todasDoadas && itensValidos.length > 0;
+      const itensExcluidos = (r.items?.length || 0) - itensValidos.length;
+      let motivo = '-';
+      if (todasDoadas) motivo = 'Cópia automática de doação (100% dos itens são donatedTo)';
+      else if (itensExcluidos > 0) motivo = `${itensExcluidos} item(ns) excluído(s) por serem cópias de doação (donatedTo)`;
+      rows.push([
+        csvCellP(r.id), csvCellP(r.os), csvCellP(dt.toLocaleString('pt-BR')), csvCellP(r.responsavel || '—'),
+        csvCellP(qtdTotalDoc),
+        csvCellP(descItens),
         csvCellP(key),
-        csvCellP(todasDoadas ? 'NÃO' : 'SIM'),
-        csvCellP(todasDoadas ? 'Cópia automática de doação (100% dos itens são donatedTo)' : '-'),
+        csvCellP(incluido ? 'SIM' : 'NÃO'),
+        csvCellP(motivo),
       ].join(';'));
     });
     rows.push('');
@@ -7006,18 +7016,21 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
         const ensure = (linha) => { if (!map[linha]) map[linha] = { linha, requisitadas: 0, compradas: 0, valor: 0, requisitadasItens: [], compradasItens: [], osReqSet: new Set(), osCompSet: new Set() }; return map[linha]; };
 
     // Mesma fonte (pedidosConsolidados) e mesmo filtro de período usados no gráfico "Volume de Requisições"
-    pedidosConsolidados(requests).forEach(r => {
+        pedidosConsolidados(requests).forEach(r => {
       if (!r.timestamp) return;
       const dt = new Date(r.timestamp);
       if (dt < inicioPeriodo || dt > fimPeriodo) return;
+      const itensValidos = (r.items || []).filter(it => !it.donatedTo);
+      if (!itensValidos.length) return;
       const { linha } = getLinhaProdResumo(r.os, r.vehicleData);
       const g = ensure(linha);
-           g.requisitadas += (r.items?.length || 0);
+      g.requisitadas += itensValidos.length;
       if (r.os) g.osReqSet.add(String(r.os).trim());
-      (r.items || []).forEach(it => g.requisitadasItens.push({ os: r.os, description: it.description, quantity: it.quantity || 1, responsavel: r.responsavel }));
+      itensValidos.forEach(it => g.requisitadasItens.push({ os: r.os, description: it.description, quantity: it.quantity || 1, responsavel: r.responsavel }));
     });
 
-        // Mesma fonte e mesmo filtro (boughtAt/actualDeliveryDate, exclui duplicataDeDoacao, exclui Fábrica/Estoque) usados no gráfico "Valor Gasto em Peças"
+        // Se o item existe por causa de uma doação (donatedTo), a compra pertence à linha da OS
+        // que RECEBEU a peça, não à linha da OS doadora que precisou comprar a reposição.
     requests.forEach(r => {
       (r.items || []).forEach(it => {
         const dataBaseCompra = it.boughtAt || it.actualDeliveryDate;
@@ -7027,27 +7040,28 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
         if (fornecedorNorm === 'RESOLVIDO NA FABRICA' || fornecedorNorm === 'RESOLVIDO NA FÁBRICA' || fornecedorNorm === 'ESTOQUE') return;
         const dt = new Date(String(dataBaseCompra).trim().slice(0, 10) + 'T00:00:00');
         if (dt < inicioPeriodo || dt > fimPeriodo) return;
-        const { linha } = getLinhaProdResumo(r.os, r.vehicleData);
+        const osAtribuida = it.donatedTo || r.os;
+        const { linha } = getLinhaProdResumo(osAtribuida, it.donatedTo ? undefined : r.vehicleData);
         const g = ensure(linha);
         const preco = parsePrice(it.price);
                g.compradas += 1;
         g.valor += preco;
-        if (r.os) g.osCompSet.add(String(r.os).trim());
-        g.compradasItens.push({ os: r.os, description: it.description, quantity: it.quantity || 1, preco, supplier: it.supplier, data: dataBaseCompra });
+        if (osAtribuida) g.osCompSet.add(String(osAtribuida).trim());
+        g.compradasItens.push({ os: osAtribuida, description: it.description, quantity: it.quantity || 1, preco, supplier: it.supplier, data: dataBaseCompra });
       });
     });
-
        return Object.values(map).map(g => ({ ...g, osReqCount: g.osReqSet.size, osCompCount: g.osCompSet.size })).sort((a, b) => b.valor - a.valor);
   }, [requests, vehicleMapLinha, inicioPeriodo, fimPeriodo]);
 
   const exportarAuditoriaLinhas = () => {
     const rows = [[csvCellRR('Linha'), csvCellRR('Tipo'), csvCellRR('OS'), csvCellRR('Peça'), csvCellRR('Qtd'), csvCellRR('Valor'), csvCellRR('Data'), csvCellRR('Fonte da Linha')].join(';')];
-    pedidosConsolidados(requests).forEach(r => {
+        pedidosConsolidados(requests).forEach(r => {
       if (!r.timestamp) return;
       const dt = new Date(r.timestamp);
       if (dt < inicioPeriodo || dt > fimPeriodo) return;
-      const { linha, fonte } = getLinhaProdResumo(r.os, r.vehicleData);
       (r.items || []).forEach(it => {
+        if (it.donatedTo) return; // cópia de doação — não é requisição nova
+        const { linha, fonte } = getLinhaProdResumo(r.os, r.vehicleData);
         rows.push([csvCellRR(linha), csvCellRR('Requisitada'), csvCellRR(r.os), csvCellRR(it.description || '(sem descrição)'), csvCellRR(it.quantity || 1), csvCellRR('-'), csvCellRR(new Date(r.timestamp).toLocaleDateString('pt-BR')), csvCellRR(fonte)].join(';'));
       });
     });
@@ -7057,9 +7071,11 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
         if (!dataBaseCompra) return;
         const dt = new Date(String(dataBaseCompra).trim().slice(0, 10) + 'T00:00:00');
         if (dt < inicioPeriodo || dt > fimPeriodo) return;
-        const { linha, fonte } = getLinhaProdResumo(r.os, r.vehicleData);
         const excluido = !!it.duplicataDeDoacao;
-        rows.push([csvCellRR(linha), csvCellRR(excluido ? 'Comprada (EXCLUÍDA — duplicata de doação)' : 'Comprada'), csvCellRR(r.os), csvCellRR(it.description || '(sem descrição)'), csvCellRR(it.quantity || 1), csvCellRR(parsePrice(it.price).toLocaleString('pt-BR', { minimumFractionDigits: 2 })), csvCellRR(dataBaseCompra), csvCellRR(fonte)].join(';'));
+        const osAtribuida = it.donatedTo || r.os;
+        const { linha, fonte } = getLinhaProdResumo(osAtribuida, it.donatedTo ? undefined : r.vehicleData);
+        const tipoLabel = excluido ? 'Comprada (EXCLUÍDA — duplicata de doação)' : (it.donatedTo ? 'Comprada (reposição de doação — linha de quem recebeu)' : 'Comprada');
+        rows.push([csvCellRR(linha), csvCellRR(tipoLabel), csvCellRR(osAtribuida), csvCellRR(it.description || '(sem descrição)'), csvCellRR(it.quantity || 1), csvCellRR(parsePrice(it.price).toLocaleString('pt-BR', { minimumFractionDigits: 2 })), csvCellRR(dataBaseCompra), csvCellRR(fonte)].join(';'));
       });
     });
     const totalLinhas = dadosPorLinha.reduce((a, d) => a + d.valor, 0);
@@ -7100,11 +7116,11 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
       if (!map[desc]) map[desc] = { descricao: desc, requisitadas: 0, valor: 0, itens: [], osSet: new Set(), osCompSet: new Set() };
       return map[desc];
     };
-    pedidosConsolidados(requests).forEach(r => {
+      pedidosConsolidados(requests).forEach(r => {
       if (!r.timestamp) return;
       const dt = new Date(r.timestamp);
       if (dt < inicioPeriodo || dt > fimPeriodo) return;
-      (r.items || []).forEach(it => {
+      (r.items || []).filter(it => !it.donatedTo).forEach(it => {
         const desc = (it.description || '(sem descrição)').trim().toUpperCase() || '(SEM DESCRIÇÃO)';
         const g = ensure(desc);
         const qtd = Number(it.quantity) || 1;
@@ -7116,6 +7132,18 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
           if (r.os) g.osCompSet.add(String(r.os).trim());
         }
         g.itens.push({ os: r.os, quantity: qtd, preco, status: it.statusOriginal || it.status || 'Pendente', responsavel: r.responsavel });
+      });
+    });
+    requests.forEach(r => {
+      (r.items || []).forEach(it => {
+        if (!it.donatedTo || it.duplicataDeDoacao) return;
+        const preco = parsePrice(it.price);
+        if (preco <= 0) return;
+        const desc = (it.description || '(sem descrição)').trim().toUpperCase() || '(SEM DESCRIÇÃO)';
+        const g = ensure(desc);
+        g.valor += preco;
+        g.osCompSet.add(String(it.donatedTo).trim());
+        g.itens.push({ os: it.donatedTo, quantity: Number(it.quantity) || 1, preco, status: it.statusOriginal || it.status || 'Pendente', responsavel: r.responsavel });
       });
     });
     return Object.values(map)
@@ -7166,16 +7194,20 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
       if (!map[linha]) map[linha] = { linha, requisitadas: 0, compradas: 0, valor: 0, osReqSet: new Set(), osCompSet: new Set(), pecasMap: {} };
       return map[linha];
     };
+       const ensurePeca = (g, desc) => {
+      if (!g.pecasMap[desc]) g.pecasMap[desc] = { descricao: desc, requisitadas: 0, compradas: 0, valor: 0, itens: [], osSet: new Set(), osCompSet: new Set() };
+      return g.pecasMap[desc];
+    };
     pedidosConsolidados(requests).forEach(r => {
       if (!r.timestamp) return;
       const dt = new Date(r.timestamp);
       if (dt < inicioPeriodo || dt > fimPeriodo) return;
-      const { linha } = getLinhaProdResumo(r.os, r.vehicleData);
-      const g = ensureLinha(linha);
-           (r.items || []).forEach(it => {
+      (r.items || []).forEach(it => {
+        if (it.donatedTo) return; // cópia de doação — tratada abaixo, na linha de quem recebeu
+        const { linha } = getLinhaProdResumo(r.os, r.vehicleData);
+        const g = ensureLinha(linha);
         const desc = (it.description || '(sem descrição)').trim().toUpperCase() || '(SEM DESCRIÇÃO)';
-        if (!g.pecasMap[desc]) g.pecasMap[desc] = { descricao: desc, requisitadas: 0, compradas: 0, valor: 0, itens: [], osSet: new Set(), osCompSet: new Set() };
-        const p = g.pecasMap[desc];
+        const p = ensurePeca(g, desc);
         const qtd = Number(it.quantity) || 1;
         const preco = parsePrice(it.price);
         const fornecedorNorm = String(it.supplier || '').trim().toUpperCase();
@@ -7194,6 +7226,34 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
           g.valor += preco;
         }
         p.itens.push({ os: r.os, quantity: qtd, preco, status: it.statusOriginal || it.status || 'Pendente', responsavel: r.responsavel });
+      });
+    });
+
+    // Reposições por doação (donatedTo): quando compradas, contam na linha de quem RECEBEU a peça.
+    requests.forEach(r => {
+      (r.items || []).forEach(it => {
+        if (!it.donatedTo || it.duplicataDeDoacao) return;
+        const dataBaseCompra = it.boughtAt || it.actualDeliveryDate;
+        const preco = parsePrice(it.price);
+        const fornecedorNorm = String(it.supplier || '').trim().toUpperCase();
+        const naoEhCompraReal = fornecedorNorm === 'RESOLVIDO NA FABRICA' || fornecedorNorm === 'RESOLVIDO NA FÁBRICA' || fornecedorNorm === 'ESTOQUE';
+        const foiComprada = !naoEhCompraReal && !!(dataBaseCompra || preco > 0);
+        if (!foiComprada) return;
+        if (dataBaseCompra) {
+          const dtC = new Date(String(dataBaseCompra).trim().slice(0, 10) + 'T00:00:00');
+          if (dtC < inicioPeriodo || dtC > fimPeriodo) return;
+        }
+        const { linha } = getLinhaProdResumo(it.donatedTo, undefined);
+        const g = ensureLinha(linha);
+        const desc = (it.description || '(sem descrição)').trim().toUpperCase() || '(SEM DESCRIÇÃO)';
+        const p = ensurePeca(g, desc);
+        const qtd = Number(it.quantity) || 1;
+        p.compradas += qtd;
+        g.compradas += qtd;
+        p.osCompSet.add(String(it.donatedTo).trim());
+        g.osCompSet.add(String(it.donatedTo).trim());
+        if (preco > 0) { p.valor += preco; g.valor += preco; }
+        p.itens.push({ os: it.donatedTo, quantity: qtd, preco, status: it.statusOriginal || it.status || 'Pendente', responsavel: r.responsavel });
       });
     });
     return Object.values(map)
