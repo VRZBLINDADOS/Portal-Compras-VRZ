@@ -140,6 +140,7 @@ canvas{display:block}
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
 <script src="https://unpkg.com/lucide@0.383.0/dist/umd/lucide.min.js" onerror="var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/lucide@0.383.0/dist/umd/lucide.min.js';document.head.appendChild(s);"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -2410,16 +2411,31 @@ const compressImageToBlob=async(file)=>{
       const r=new FileReader();r.onload=e=>{const img=new Image();img.onload=()=>{const c=document.createElement('canvas');const ctx=c.getContext('2d');let w=img.width,h=img.height;const mx=1024;if(w>h&&w>mx){h*=mx/w;w=mx;}else if(h>mx){w*=mx/h;h=mx;}c.width=w;c.height=h;ctx.drawImage(img,0,0,w,h);c.toBlob(b=>resolve(b),'image/jpeg',.7);};img.src=e.target.result;};r.readAsDataURL(file);
     });
   };
-const handleImageUpload=async(itemId,file)=>{
+const ehHeic=(arquivo)=>{
+    const tipo=(arquivo.type||'').toLowerCase();
+    const nome=(arquivo.name||'').toLowerCase();
+    return tipo==='image/heic'||tipo==='image/heif'||nome.endsWith('.heic')||nome.endsWith('.heif');
+  };
+  const handleImageUpload=async(itemId,file)=>{
     setCompressing(true);
     try{
+      let arquivoParaLer=file;
+      if(ehHeic(file)){
+        if(!window.heic2any)throw new Error('Este navegador não conseguiu abrir foto em HEIC. Nas configurações da câmera do celular, mude o formato de foto para "Mais compatível / JPEG" e tente novamente.');
+        try{
+          const convertido=await window.heic2any({blob:file,toType:'image/jpeg',quality:0.8});
+          arquivoParaLer=Array.isArray(convertido)?convertido[0]:convertido;
+        }catch(erroConversao){
+          throw new Error('Não foi possível converter esta foto HEIC. Nas configurações da câmera do celular, mude o formato de foto para "Mais compatível / JPEG" e tente novamente.');
+        }
+      }
       const c=await new Promise((resolve,reject)=>{
         const timeoutId=setTimeout(()=>reject(new Error('Tempo esgotado ao processar a imagem.')),15000);
         const r=new FileReader();
         r.onerror=()=>{clearTimeout(timeoutId);reject(new Error('Falha ao ler o arquivo.'));};
         r.onload=e=>{
           const img=new Image();
-          img.onerror=()=>{clearTimeout(timeoutId);reject(new Error('Formato de imagem não suportado.'));};
+          img.onerror=()=>{clearTimeout(timeoutId);reject(new Error('Formato de imagem não suportado. Tente tirar a foto novamente ou escolher outra da galeria.'));};
           img.onload=()=>{
             clearTimeout(timeoutId);
             const c=document.createElement('canvas');const ctx=c.getContext('2d');
@@ -2430,11 +2446,11 @@ const handleImageUpload=async(itemId,file)=>{
           };
           img.src=e.target.result;
         };
-        r.readAsDataURL(file);
+        r.readAsDataURL(arquivoParaLer);
       });
       setItems(p=>p.map(i=>i.id===itemId?{...i,photo:c}:i));
       setSemFoto(p=>p.filter(id=>id!==itemId));
-    }catch(err){alert('Não foi possível processar essa imagem: '+(err?.message||'erro desconhecido')+'. Tente tirar a foto novamente ou escolher outra da galeria.');}
+    }catch(err){alert('Não foi possível processar essa imagem: '+(err?.message||'erro desconhecido'));}
     setCompressing(false);
   };
 const salvar=async()=>{
