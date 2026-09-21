@@ -2705,7 +2705,8 @@ const exportCSV=()=>{
       const preco = parsePrice(it.price);
       const precoFormatado = preco > 0 ? preco.toLocaleString('pt-BR', {minimumFractionDigits: 2}) : '0,00';
       const dataCompra = it.boughtAt ? new Date(it.boughtAt + 'T00:00:00').toLocaleDateString('pt-BR') : '-';
-      const dataSolicit = r.timestamp ? new Date(r.timestamp).toLocaleDateString('pt-BR') : '-';
+      const tsSolicit = it._timestamp || r.timestamp;
+      const dataSolicit = tsSolicit ? new Date(tsSolicit).toLocaleDateString('pt-BR') : '-';
       const prazoEntrega = it.deliveryDate ? new Date(it.deliveryDate + 'T00:00:00').toLocaleDateString('pt-BR') : '-';
       const entregaReal = it.actualDeliveryDate ? new Date(it.actualDeliveryDate + 'T00:00:00').toLocaleDateString('pt-BR') : '-';
       
@@ -6739,6 +6740,16 @@ const corrigirPedidosDeVeiculosJaApagados=async()=>{
     </div>
   ),document.body);
 }
+// Classifica um item: 'compra' (conta como compra), 'fabrica' ou 'estoque'.
+// REGRA: valor > 0 é SEMPRE compra. Com valor 0: ESTOQUE -> estoque; RESOLVIDO... / PECA ENCONTRADA -> fábrica;
+// qualquer outro fornecedor (inclui FEITO EM 3D e "COMPRADO JUNTO...") -> compra.
+function tipoFornecedor(it){
+  if(parsePrice(it?.price)>0)return 'compra';
+  const f=String(it?.supplier||'').trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  if(f==='ESTOQUE')return 'estoque';
+  if(f.startsWith('RESOLVIDO')||f==='PECA ENCONTRADA')return 'fabrica';
+  return 'compra';
+}
 function ResumoReuniaoView({requests, vehicles}){
   const [periodo, setPeriodo] = useState('semanal'); // 'diario', 'semanal', 'quinzenal', 'mensal'
   const [offset, setOffset] = useState(0);
@@ -6809,7 +6820,7 @@ function ResumoReuniaoView({requests, vehicles}){
       d.setDate(inicioPeriodo.getDate() + i);
       return {
         label: diasSemana[d.getDay()],
-        date: d.toISOString().slice(0, 10),
+       date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
         isHoje: d.toDateString() === new Date().toDateString(),
         pedidos: [],
         osSet: new Set(),
@@ -6930,26 +6941,27 @@ const dadosCompra = useMemo(() => {
         const dateKey = String(dataBaseCompra).trim().slice(0, 10);
         if (!map[dateKey]) return;
         const fornecedorNorm = String(it.supplier || '').trim().toUpperCase();
-        const isFabrica = fornecedorNorm === 'RESOLVIDO NA FABRICA' || fornecedorNorm === 'RESOLVIDO NA FÁBRICA';
-        const isEstoque = fornecedorNorm === 'ESTOQUE';
+       const isFabrica = tipoFornecedor(it) === 'fabrica';
+        const isEstoque = tipoFornecedor(it) === 'estoque';
         // Resolvido na Fábrica / Retirado do Estoque não são compras reais —
         // ficam só nos cards próprios, não entram em itens/valor/OS's comprados
         if (isFabrica) {
-          resolvidoFabricaCount++;
+         resolvidoFabricaCount += (Number(it.quantity) || 1);
           if (r.os) resolvidoFabricaOS.add(String(r.os).trim());
           itensResolvidoFabrica.push({ ...it, os: r.os });
           return;
         }
         if (isEstoque) {
-          estoqueCount++;
+          estoqueCount += (Number(it.quantity) || 1);
           if (r.os) estoqueOS.add(String(r.os).trim());
           itensEstoque.push({ ...it, os: r.os });
           return;
         }
         const preco = parsePrice(it.price);
-        map[dateKey].itens.push({ ...it, os: r.os, _preco: preco });
+        const osAtrib = it.donatedTo || r.os;
+        map[dateKey].itens.push({ ...it, os: osAtrib, _preco: preco });
         map[dateKey].valor += preco;
-        if (r.os) { map[dateKey].osSet.add(String(r.os).trim()); osComCompra.add(String(r.os).trim()); }
+        if (osAtrib) { map[dateKey].osSet.add(String(osAtrib).trim()); osComCompra.add(String(osAtrib).trim()); }
       });
     });
     const dias = Object.values(map);
@@ -6996,7 +7008,7 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
         const dt = new Date(String(dataBaseCompra).trim().slice(0, 10) + 'T00:00:00');
         if (dt < inicioPeriodo || dt > fimPeriodo) return;
         const fornecedorNorm = String(it.supplier || '').trim().toUpperCase();
-        const ehFabricaOuEstoque = fornecedorNorm === 'RESOLVIDO NA FABRICA' || fornecedorNorm === 'RESOLVIDO NA FÁBRICA' || fornecedorNorm === 'ESTOQUE';
+        const ehFabricaOuEstoque = tipoFornecedor(it) !== 'compra';
         const excluido = !!it.duplicataDeDoacao || ehFabricaOuEstoque;
         rows.push([
           csvCellRR(r.os),
@@ -7040,7 +7052,7 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
       if (!itensValidos.length) return;
       const { linha } = getLinhaProdResumo(r.os, r.vehicleData);
       const g = ensure(linha);
-      g.requisitadas += itensValidos.length;
+      g.requisitadas += itensValidos.reduce((s, it) => s + (Number(it.quantity) || 1), 0);
       if (r.os) g.osReqSet.add(String(r.os).trim());
       itensValidos.forEach(it => g.requisitadasItens.push({ os: r.os, description: it.description, quantity: it.quantity || 1, responsavel: r.responsavel }));
     });
@@ -7053,14 +7065,14 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
         if (!dataBaseCompra) return;
         if (it.duplicataDeDoacao) return;
         const fornecedorNorm = String(it.supplier || '').trim().toUpperCase();
-        if (fornecedorNorm === 'RESOLVIDO NA FABRICA' || fornecedorNorm === 'RESOLVIDO NA FÁBRICA' || fornecedorNorm === 'ESTOQUE') return;
+       if (tipoFornecedor(it) !== 'compra') return;
         const dt = new Date(String(dataBaseCompra).trim().slice(0, 10) + 'T00:00:00');
         if (dt < inicioPeriodo || dt > fimPeriodo) return;
         const osAtribuida = it.donatedTo || r.os;
         const { linha } = getLinhaProdResumo(osAtribuida, it.donatedTo ? undefined : r.vehicleData);
         const g = ensure(linha);
         const preco = parsePrice(it.price);
-               g.compradas += 1;
+              g.compradas += (Number(it.quantity) || 1);
         g.valor += preco;
         if (osAtribuida) g.osCompSet.add(String(osAtribuida).trim());
         g.compradasItens.push({ os: osAtribuida, description: it.description, quantity: it.quantity || 1, preco, supplier: it.supplier, data: dataBaseCompra });
@@ -7087,10 +7099,10 @@ const csvCellRR = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + 
         if (!dataBaseCompra) return;
         const dt = new Date(String(dataBaseCompra).trim().slice(0, 10) + 'T00:00:00');
         if (dt < inicioPeriodo || dt > fimPeriodo) return;
-        const excluido = !!it.duplicataDeDoacao;
+        const excluido = !!it.duplicataDeDoacao || tipoFornecedor(it) !== 'compra';
         const osAtribuida = it.donatedTo || r.os;
         const { linha, fonte } = getLinhaProdResumo(osAtribuida, it.donatedTo ? undefined : r.vehicleData);
-        const tipoLabel = excluido ? 'Comprada (EXCLUÍDA — duplicata de doação)' : (it.donatedTo ? 'Comprada (reposição de doação — linha de quem recebeu)' : 'Comprada');
+        const tipoLabel = excluido ? 'Não contabilizada (duplicata de doação / resolvido na fábrica / estoque)' : (it.donatedTo ? 'Comprada (reposição de doação — linha de quem recebeu)' : 'Comprada');
         rows.push([csvCellRR(linha), csvCellRR(tipoLabel), csvCellRR(osAtribuida), csvCellRR(it.description || '(sem descrição)'), csvCellRR(it.quantity || 1), csvCellRR(parsePrice(it.price).toLocaleString('pt-BR', { minimumFractionDigits: 2 })), csvCellRR(dataBaseCompra), csvCellRR(fonte)].join(';'));
       });
     });
@@ -7154,7 +7166,11 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
       (r.items || []).forEach(it => {
         if (!it.donatedTo || it.duplicataDeDoacao) return;
         const preco = parsePrice(it.price);
-        if (preco <= 0) return;
+       if (preco <= 0 || tipoFornecedor(it) !== 'compra') return;
+        const dbc = it.boughtAt || it.actualDeliveryDate;
+        if (!dbc) return;
+        const dtRep = new Date(String(dbc).trim().slice(0, 10) + 'T00:00:00');
+        if (dtRep < inicioPeriodo || dtRep > fimPeriodo) return;
         const desc = (it.description || '(sem descrição)').trim().toUpperCase() || '(SEM DESCRIÇÃO)';
         const g = ensure(desc);
         g.valor += preco;
@@ -7181,6 +7197,24 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
           csvCellRR(parsePrice(it.price).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })),
           csvCellRR(it.statusOriginal || it.status || 'Pendente'),
           csvCellRR(new Date(r.timestamp).toLocaleDateString('pt-BR')),
+        ].join(';'));
+      });
+    });
+    requests.forEach(r => {
+      (r.items || []).forEach(it => {
+        if (!it.donatedTo || it.duplicataDeDoacao) return;
+        const preco = parsePrice(it.price);
+        const dbc = it.boughtAt || it.actualDeliveryDate;
+        if (preco <= 0 || !dbc || tipoFornecedor(it) !== 'compra') return;
+        const dtR = new Date(String(dbc).trim().slice(0, 10) + 'T00:00:00');
+        if (dtR < inicioPeriodo || dtR > fimPeriodo) return;
+        rows.push([
+          csvCellRR(it.description || '(sem descrição)'),
+          csvCellRR(it.donatedTo),
+          csvCellRR(it.quantity || 1),
+          csvCellRR(preco.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })),
+          csvCellRR('Reposição de doação (compra em ' + dbc + ')'),
+          csvCellRR('-'),
         ].join(';'));
       });
     });
@@ -7228,7 +7262,7 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
         const preco = parsePrice(it.price);
         const fornecedorNorm = String(it.supplier || '').trim().toUpperCase();
         const naoEhCompraReal = fornecedorNorm === 'RESOLVIDO NA FABRICA' || fornecedorNorm === 'RESOLVIDO NA FÁBRICA' || fornecedorNorm === 'ESTOQUE';
-        const foiComprada = !naoEhCompraReal && !!(it.boughtAt || it.actualDeliveryDate || preco > 0);
+        const foiComprada = tipoFornecedor(it) === 'compra' && !!(it.boughtAt || it.actualDeliveryDate);
         p.requisitadas += qtd;
         g.requisitadas += qtd;
         if (r.os) { p.osSet.add(String(r.os).trim()); g.osReqSet.add(String(r.os).trim()); }
@@ -7253,7 +7287,7 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
         const preco = parsePrice(it.price);
         const fornecedorNorm = String(it.supplier || '').trim().toUpperCase();
         const naoEhCompraReal = fornecedorNorm === 'RESOLVIDO NA FABRICA' || fornecedorNorm === 'RESOLVIDO NA FÁBRICA' || fornecedorNorm === 'ESTOQUE';
-        const foiComprada = !naoEhCompraReal && !!(dataBaseCompra || preco > 0);
+        const foiComprada = tipoFornecedor(it) === 'compra' && !!dataBaseCompra;
         if (!foiComprada) return;
         if (dataBaseCompra) {
           const dtC = new Date(String(dataBaseCompra).trim().slice(0, 10) + 'T00:00:00');
@@ -7540,7 +7574,7 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
           { label: "OS's c/ pedidos em dias diferentes", v: osComPedidosEmDiasDiferentes.length, sub: 'clique para ver detalhes', icon: 'calendar-clock', dark: true, onClick: () => setOsMultiDiaAberto(true) },
         ].map((k, i) => (
           <div key={i} onClick={k.onClick} style={{ background: k.dark ? '#0D0D0D' : k.red ? 'var(--red)' : 'var(--smoke)', color: k.dark || k.red ? '#fff' : 'var(--ink)', borderRadius: 14, padding: '16px 18px', border: (!k.dark && !k.red) ? '1.5px solid var(--border)' : 'none', cursor: k.onClick ? 'pointer' : 'default' }}>
-            <div style={{ width: 28, height: 28, borderRadius: 7, background: k.dark || k.red ? 'rgba(255,255,255,.12)' : 'var(--border)', display: 'flex', alignItems: 'center', justifySelf: 'center', marginBottom: 12 }}><Icon name={k.icon} size={14} /></div>
+            <div style={{ width: 28, height: 28, borderRadius: 7, background: k.dark || k.red ? 'rgba(255,255,255,.12)' : 'var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}><Icon name={k.icon} size={14} /></div>
             <p style={{ fontSize: String(k.v).length > 7 ? 18 : 28, fontWeight: 800, lineHeight: 1, margin: 0 }}>{k.v}</p>
             <p style={{ fontSize: 8, fontWeight: 800, textTransform: 'uppercase', marginTop: 5, opacity: .65 }}>{k.label}</p>
             <p style={{ fontSize: 8, fontWeight: 500, marginTop: 2, opacity: .4 }}>{k.sub}</p>
@@ -7652,8 +7686,9 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10, marginBottom: 20 }}>
           <div>
             <p style={{ fontSize: 8, fontWeight: 800, textTransform: 'uppercase', color: 'var(--red)', margin: '0 0 4px' }}>Comparativo por peça e linha de produção — data da solicitação</p>
-            <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Peças Solicitadas × Valor Gasto por Linha</h3>
+            <h3 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Peças Solicitadas × Valor das Solicitações por Linha</h3>
             <p style={{ fontSize: 9, color: 'var(--muted)', marginTop: 6 }}>Período: {fmtPeriodo} · A peça é contabilizada na data em que foi solicitada, mesmo que a compra tenha ocorrido depois · Clique numa peça para ver quais OS's compõem o número</p>
+            <p style={{ fontSize: 9, fontWeight: 700, color: '#856A00', marginTop: 4 }}>Total desta tela: {fmtBRL(totalValorPecas)} (base: data da solicitação). Valor Gasto no período (base: data da compra): {fmtBRL(dadosCompra.totalValor)}. A diferença ({fmtBRL(Math.abs(dadosCompra.totalValor - totalValorPecas))}) são peças compradas neste período mas solicitadas antes dele (ou o contrário).</p>
           </div>
           <button onClick={exportarAuditoriaPecas} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', background: 'var(--ink)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 9, fontWeight: 800, textTransform: 'uppercase', cursor: 'pointer', fontFamily: 'Plus Jakarta Sans,sans-serif', flexShrink: 0 }}>
             <Icon name="shield-check" size={13} /> Auditoria
@@ -7851,7 +7886,7 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                     <div style={{ width: 24, height: 24, borderRadius: 6, background: 'var(--red-light)', color: 'var(--red)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="clipboard-list" size={14} /></div>
                     <h4 style={{ margin: 0, fontSize: 12, fontWeight: 800, textTransform: 'uppercase', color: 'var(--ink)' }}>
-                      Pedidos Realizados ({diaSelecionado.pedidos.length}) · {diaSelecionado.pedidos.reduce((a, p) => a + (p.items?.length || 0), 0)} peça(s) solicitada(s)
+                      Pedidos Realizados ({diaSelecionado.pedidos.length}) · {diaSelecionado.pedidos.reduce((a, p) => a + (p.items || []).reduce((s, it) => s + (Number(it.quantity) || 1), 0), 0)} peça(s) solicitada(s)
                     </h4>
                   </div>
                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -7887,7 +7922,7 @@ rows.push([csvCellRR('DIVERGÊNCIA — Compradas'), csvCellRR(compBatem ? 'NENHU
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
                       <div style={{ width: 24, height: 24, borderRadius: 6, background: '#EDFAF3', color: '#0A6B34', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="shopping-bag" size={14} /></div>
-                      <h4 style={{ margin: 0, fontSize: 12, fontWeight: 800, textTransform: 'uppercase', color: 'var(--ink)' }}>Itens Comprados ({diaCompra.itens.length})</h4>
+                      <h4 style={{ margin: 0, fontSize: 12, fontWeight: 800, textTransform: 'uppercase', color: 'var(--ink)' }}>Itens Comprados ({diaCompra.itens.reduce((s, it) => s + (Number(it.quantity) || 1), 0)})</h4>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       {diaCompra.itens.map((it, i) => (
