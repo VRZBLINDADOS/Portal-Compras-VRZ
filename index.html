@@ -308,7 +308,8 @@ function canDo(role, action){
     admin:   {newReq:true, history:true, donor:true, delete:false, manage:false, users:false},
     solicitante:{newReq:true, history:true, donor:false, delete:false, manage:false, users:false},
     leitor:  {newReq:false, history:true, donor:false, delete:false, manage:false, users:false},
-    comercial:{newReq:false, history:true, donor:false, delete:false, manage:false, users:false},
+       comercial:{newReq:false, history:true, donor:false, delete:false, manage:false, users:false},
+    inspetor:{newReq:true, history:true, donor:false, delete:false, manage:false, users:false},
   };
   return !!(perms[role||'solicitante']?.[action]);
 }
@@ -335,6 +336,7 @@ function defaultAccessForRole(r){
   if(r==='solicitante')return{telas:['request','status','chegadas','estoque'],escopoLinha:'todas',escopoDados:'todos',permissoes:{newReq:true,history:true,donor:false,delete:false,manage:false,users:false}};
   if(r==='leitor')return{telas:['status','chegadas','estoque'],escopoLinha:'todas',escopoDados:'todos',permissoes:{newReq:false,history:true,donor:false,delete:false,manage:false,users:false}};
   if(r==='comercial')return{telas:['status','chegadas','estoque'],escopoLinha:'todas',escopoDados:'todos',permissoes:{newReq:false,history:true,donor:false,delete:false,manage:false,users:false}};
+  if(r==='inspetor')return{telas:['request','status','chegadas','finalizacao','feedbackFinalizacao'],escopoLinha:'todas',escopoDados:'todos',permissoes:{newReq:true,history:true,donor:false,delete:false,manage:false,users:false}};
   return{telas:['status'],escopoLinha:'todas',escopoDados:'todos',permissoes:{newReq:false,history:true,donor:false,delete:false,manage:false,users:false}};
 }
 function resolveEffectiveRole(u){
@@ -454,8 +456,8 @@ const StatusBadge=({status,orig})=>{
 };
 const RoleBadge=({role})=>{
   const r=role||'solicitante';
-  const map={master:'badge-master',admin:'badge-admin',solicitante:'badge-sol',leitor:'badge-reader',comercial:'badge-comercial',custom:'badge-comercial'};
-  const labels={master:'★ Master',admin:'Admin',solicitante:'Solicitante',leitor:'Leitor',comercial:'Comercial',custom:'⚙ Personalizado'};
+   const map={master:'badge-master',admin:'badge-admin',solicitante:'badge-sol',leitor:'badge-reader',comercial:'badge-comercial',inspetor:'badge-comercial',custom:'badge-comercial'};
+  const labels={master:'★ Master',admin:'Admin',solicitante:'Solicitante',leitor:'Leitor',comercial:'Comercial',inspetor:'Inspetor',custom:'⚙ Personalizado'};
   return <span className={`badge ${map[r]||'badge-sol'}`}>{labels[r]||r}</span>;
 };
 
@@ -1077,7 +1079,7 @@ const ETAPAS_INSPECAO=['QA1','QA2','FN1','FN2'];
 const etapaOf=(fin)=>fin?.etapaInspecao||'QA1';
 
 function FeedbackFinalizacaoView({finalizacoes,requests,vehicles,loggedInUser}){
-  const isAdminView=loggedInUser?.user===MASTER_USER||loggedInUser?.user==='Cleber.Zonta'||loggedInUser?.user==='Leonardo.Teixeira';
+  const isAdminView=loggedInUser?.user===MASTER_USER||loggedInUser?.user==='Cleber.Zonta'||loggedInUser?.user==='Leonardo.Teixeira'||loggedInUser?.role==='inspetor';
   const[subTab,setSubTab]=useState('geral');
 
   if(!isAdminView){
@@ -3308,7 +3310,8 @@ function UserManagement({users,onAdd,onDelete,onToggle,onRole,onFinalizacaoAcces
                 <option value="solicitante">Solicitante</option>
                 <option value="leitor">Leitor</option>
                 <option value="admin">Admin</option>
-                <option value="comercial">Comercial</option>
+                               <option value="comercial">Comercial</option>
+                <option value="inspetor">Inspetor</option>
                 {loggedInUser?.user===MASTER_USER&&<option value="master">★ Master</option>}
                 {customRoles?.length>0&&<option value="custom">⚙ Personalizada</option>}
               </select></div>
@@ -3344,12 +3347,13 @@ function UserManagement({users,onAdd,onDelete,onToggle,onRole,onFinalizacaoAcces
                                   <div style={{display:'flex',flexDirection:'column',gap:4}}>
                   <select value={u.role||'solicitante'} onChange={e=>onRole(u,e.target.value)}
                       className="badge"
-                      style={{cursor:'pointer',border:'none',outline:'none',fontFamily:'Plus Jakarta Sans,sans-serif',background:u.role==='master'?'#0D0D0D':u.role==='admin'?'var(--red)':u.role==='leitor'?'var(--muted)':u.role==='comercial'?'#0EA5E9':u.role==='custom'?'#7C3AED':'#1A4EC2',color:u.role==='master'?'#FFD700':'#fff'}}>
+                      style={{cursor:'pointer',border:'none',outline:'none',fontFamily:'Plus Jakarta Sans,sans-serif',background:u.role==='master'?'#0D0D0D':u.role==='admin'?'var(--red)':u.role==='leitor'?'var(--muted)':u.role==='comercial'?'#0EA5E9':u.role==='inspetor'?'#0EA5E9':u.role==='custom'?'#7C3AED':'#1A4EC2',color:u.role==='master'?'#FFD700':'#fff'}}>
                       {loggedInUser?.user===MASTER_USER&&<option value="master">★ Master</option>}
                       <option value="admin">Admin</option>
                       <option value="solicitante">Solicitante</option>
                       <option value="leitor">Leitor</option>
-                      <option value="comercial">Comercial</option>
+                                            <option value="comercial">Comercial</option>
+                      <option value="inspetor">Inspetor</option>
                       {(customRoles||[]).length>0&&<option value="custom">⚙ Personalizada</option>}
                     </select>
                     {u.role==='custom'&&(
@@ -5463,7 +5467,7 @@ function MeusCarrosView({loggedInUser,isMaster,finalizacoes,requests}){
   const[selecionadosPrint,setSelecionadosPrint]=useState({});
   const[imprimindoZip,setImprimindoZip]=useState(false);
 
-  const podeVerTodos=isMaster||loggedInUser?.role==='comercial'||ADMIN_ESPECIAL.includes(loggedInUser?.user);
+   const podeVerTodos=isMaster||loggedInUser?.role==='comercial'||loggedInUser?.role==='inspetor'||ADMIN_ESPECIAL.includes(loggedInUser?.user);
 
   const pecasByOS=useMemo(()=>{
     const acc={};
@@ -8626,7 +8630,7 @@ useEffect(()=>{
   const isAdminEspecial=ADMIN_ESPECIAL.includes(loggedIn?.user);
   const isAdmin=role==='admin'||isMaster||isAdminEspecial;
   const isSol=canDo(role,'newReq')||isAdminEspecial;
-  const canAccessFinalizacao=isMaster||loggedIn?.acessoFinalizacao===true||isAdminEspecial||loggedIn?.user==='Rogerio.Arruda';
+  const canAccessFinalizacao=isMaster||loggedIn?.acessoFinalizacao===true||isAdminEspecial||loggedIn?.user==='Rogerio.Arruda'||loggedIn?.role==='inspetor';
 
     const addUser=async(u,p,r='solicitante',customRoleId=null)=>{
     // Só o Master 1 (Lucas.Sabino) pode criar masters
@@ -8826,7 +8830,8 @@ const changeRole=async(u,r)=>{
     return count;
   },[requests,lidasNav]);
 
-const canAccessFeedbackFinalizacao=isMaster||loggedIn?.user==='Cleber.Zonta'||loggedIn?.user==='Leonardo.Teixeira'||loggedIn?.user==='Rogerio.Arruda'||loggedIn?.user==='Rafael.Oliveira';
+const canAccessFeedbackReuniao=isMaster||loggedIn?.user==='Cleber.Zonta'||loggedIn?.user==='Leonardo.Teixeira'||loggedIn?.user==='Rogerio.Arruda'||loggedIn?.user==='Rafael.Oliveira';
+const canAccessFeedbackFinalizacao=canAccessFeedbackReuniao||loggedIn?.role==='inspetor';
 const ehCustom=loggedIn?.role==='custom';
 const navItems=[
     isSol&&(!ehCustom||telaLiberadaCustom(role,'request'))&&{key:'request',icon:'plus-circle',label:'Nova Peça'},
@@ -8835,7 +8840,7 @@ const navItems=[
     (!ehCustom||telaLiberadaCustom(role,'estoque'))&&{key:'estoque',icon:'boxes',label:'Estoque'},
         (canAccessFinalizacao||ehCustom)&&(!ehCustom||telaLiberadaCustom(role,'finalizacao'))&&{key:'finalizacao',icon:'clipboard-check',label:'Inspeção'},
     canAccessFeedbackFinalizacao&&(!ehCustom||telaLiberadaCustom(role,'feedbackFinalizacao'))&&{key:'feedbackFinalizacao',icon:'message-square',label:'Feedback Finalização'},
-    canAccessFeedbackFinalizacao&&(!ehCustom||telaLiberadaCustom(role,'feedbackFinalizacaoReuniao'))&&{key:'feedbackFinalizacaoReuniao',icon:'presentation',label:'Feedback Finalização Reunião'},
+        canAccessFeedbackReuniao&&(!ehCustom||telaLiberadaCustom(role,'feedbackFinalizacaoReuniao'))&&{key:'feedbackFinalizacaoReuniao',icon:'presentation',label:'Feedback Finalização Reunião'},
         ((loggedIn?.user===MASTER_USER||loggedIn?.user==='Matheus.Ransi')||ehCustom)&&(!ehCustom||telaLiberadaCustom(role,'donor'))&&{key:'donor',icon:'git-merge',label:'Doações'},
     canDo(role,'manage')&&{key:'admin',icon:'settings',label:'Gestão'},
     ((isMaster||isAdmin)||ehCustom)&&(!ehCustom||telaLiberadaCustom(role,'dashboard'))&&{key:'dashboard',icon:'bar-chart-2',label:'Análises'},
@@ -8938,7 +8943,7 @@ const navItems=[
                               {view==='donor'&&(canDo(role,'donor')||loggedIn?.user==='Matheus.Ransi')&&<DonorSystem requests={requests} vehicles={vehicles} loggedInUser={loggedIn}/>}
                 {view==='finalizacao'&&canAccessFinalizacao&&<FinalizacaoView vehiclesDB={vehicles} requests={requests} loggedInUser={loggedIn} isMaster={isMaster}/>}
                {view==='feedbackFinalizacao'&&canAccessFeedbackFinalizacao&&<FeedbackFinalizacaoView finalizacoes={finalizacoesApp} requests={requests} vehicles={vehicles} loggedInUser={loggedIn}/>}
-                {view==='feedbackFinalizacaoReuniao'&&canAccessFeedbackFinalizacao&&<FeedbackFinalizacaoReuniaoView finalizacoes={finalizacoesApp} requests={requests} vehicles={vehicles} loggedInUser={loggedIn}/>}
+                {view==='feedbackFinalizacaoReuniao'&&canAccessFeedbackReuniao&&<FeedbackFinalizacaoReuniaoView finalizacoes={finalizacoesApp} requests={requests} vehicles={vehicles} loggedInUser={loggedIn}/>}
                 {view==='admin'&&canDo(role,'manage')&&(
                   <div className="fade-up" style={{paddingBottom:40}}>
                     <div style={{marginBottom:16}}>
