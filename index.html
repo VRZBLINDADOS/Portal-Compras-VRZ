@@ -8723,12 +8723,12 @@ const changeRole=async(u,r)=>{
     const headers=lines[0].split(/[,\t]/).map(h=>h.trim().toUpperCase());
     const fi=t=>headers.findIndex(h=>t.some(x=>h.includes(x)));
     const[iO,iM,iF,iC,iCh,iE,iL,iLP]=[fi(['OS']),fi(['MODELO']),fi(['FABRICANTE','MARCA']),fi(['COR']),fi(['CHASSI']),fi(['ETAPA']),fi(['LOCALIZA']),fi(['LINHA'])];
-    const rows=(iO!==-1?lines.slice(1):lines).map(l=>{const v=l.split(/[,\t]/);const g=(i,fb)=>(i!==-1?v[i]:v[fb])?.trim()||'';return{os:g(iO,0),modelo:g(iM,1),fabricante:g(iF,2),cor:g(iC,3),chassi:g(iCh,4),etapa:g(iE,5),localizacao:g(iL,6),linhaProducao:g(iLP,7)};}).filter(r=>r.os);
+    const rows=parseVeiculosSemaforo(text);
     setImportData(rows);
   };
   const commitImport=async()=>{
     if(!importData.length)return;const batch=db.batch();
-    importData.forEach(v=>batch.set(col('vehicles').doc(v.os),v));
+   try{for(let i=0;i<importData.length;i+=400){const b=db.batch();importData.slice(i,i+400).forEach(v=>b.set(col('vehicles').doc(String(v.os)),v,{merge:true}));await b.commit();}}catch(e){alert('Erro ao importar: '+e.message);return;}
     await batch.commit();dispatchRefresh();alert('Sucesso! '+importData.length+' veículos importados.');setImportData([]);setShowImport(false);
   };
 
@@ -8845,6 +8845,7 @@ const navItems=[
     canDo(role,'manage')&&{key:'admin',icon:'settings',label:'Gestão'},
     ((isMaster||isAdmin)||ehCustom)&&(!ehCustom||telaLiberadaCustom(role,'dashboard'))&&{key:'dashboard',icon:'bar-chart-2',label:'Análises'},
     ((loggedIn?.user===MASTER_USER||loggedIn?.user==='Matheus.Ransi')||ehCustom)&&(!ehCustom||telaLiberadaCustom(role,'resumo'))&&{key:'resumo',icon:'presentation',label:'Resumo Reunião'},
+    isMaster&&{key:'producao',icon:'alert-triangle',label:'Problemas de Produção'},
   ].filter(Boolean);
 
     const loading=reqLoad||arqLoad||vehLoad||usrLoad||estLoad||movLoad||finLoad;
@@ -8938,6 +8939,7 @@ const navItems=[
 {view==='resumo'&&(loggedIn?.user===MASTER_USER||loggedIn?.user==='Matheus.Ransi')&&<ResumoReuniaoView requests={requestsComHistorico} vehicles={vehicles}/>}
                 {view==='request'&&isSol&&<RequestForm user={user} loggedInUser={loggedIn} vehiclesDB={vehicles} requests={requests}/>}
                 {view==='status'&&<StatusView requests={requests} loggedInUser={loggedIn} vehicles={vehicles}/>}
+                {view==='producao'&&isMaster&&<ProducaoView vehicles={vehicles} loggedInUser={loggedIn}/>}
                 {view==='chegadas'&&<ChegadasView requests={requests} loggedInUser={loggedIn} vehicles={vehicles}/>}
                 {view==='estoque'&&<EstoqueView estoque={estoque} movimentos={estoqueMovimentos} requests={requests} loggedInUser={loggedIn} isMaster={isMaster}/>}
                               {view==='donor'&&(canDo(role,'donor')||loggedIn?.user==='Matheus.Ransi')&&<DonorSystem requests={requests} vehicles={vehicles} loggedInUser={loggedIn}/>}
@@ -8990,7 +8992,7 @@ const navItems=[
 {subView==='deletedItems'&&isMaster&&<DeletedItemsView loggedInUser={loggedIn}/>}
 {subView==='excedentes'&&isMaster&&<PedidosExcedentesView requests={requests}/>}
 {subView==='limpezaVeiculos'&&isMaster&&<LimpezaVeiculosView vehicles={vehicles} requests={requests}/>}
-                    {subView==='vehicles'&&(
+                    {subView==='vehicles'&&<VeiculosSemaforoView vehicles={vehicles}/>}
                       <div className="card" style={{overflow:'hidden'}}>
                         <div style={{overflowX:'auto',maxHeight:'60vh'}} className="scroll-y">
                           <table className="vtable w-full" style={{minWidth:900}}>
@@ -9125,15 +9127,15 @@ const navItems=[
               ):(
                 <div style={{flex:1,overflow:'hidden',display:'flex',flexDirection:'column'}}>
                   <div style={{flex:1,overflow:'auto',border:'1px solid var(--border)',borderRadius:12}} className="scroll-y">
-                    <table style={{width:'100%',borderCollapse:'collapse',minWidth:900}}>
+                    <table style={{width:'100%',borderCollapse:'collapse',minWidth:2400}}>
                       <thead style={{background:'var(--smoke)',position:'sticky',top:0}}>
-                       <tr>{['OS','Modelo','Fabricante','Cor','Chassi','Etapa','Localização','Linha Produção'].map(h=><th key={h} style={{padding:10,fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.08em',color:'var(--muted)',textAlign:'left',borderBottom:'1px solid var(--border)'}}>{h}</th>)}</tr>
+                       <tr>{PP_COL_TITLES.map(h=><th key={h} style={{padding:10,fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.08em',color:'var(--muted)',textAlign:'left',borderBottom:'1px solid var(--border)'}}>{h}</th>)}</tr>
                       </thead>
                       <tbody>
-                        {importData.map((row,rIdx)=>(
+                        {importData.slice(0,60).map((row,rIdx)=>(
                           <tr key={rIdx} style={{borderBottom:'1px solid var(--smoke)'}}>
-                            {['os','modelo','fabricante','cor','chassi','etapa','localizacao','linhaProducao'].map(k=>(
-                              <td key={k} style={{border:'none',padding:0,height:36}}><input className="excel-input" value={row[k]} onChange={e=>{const d=[...importData];d[rIdx][k]=sanitize(e.target.value);setImportData(d);}}/></td>
+                           {PP_COL_KEYS.map(k=>(
+                              <td key={k} style={{border:'none',padding:0,height:36}}><input className="excel-input" value={row[k]||''} onChange={e=>{const d=[...importData];d[rIdx][k]=sanitize(e.target.value);setImportData(d);}}/></td>
                             ))}
                           </tr>
                         ))}
@@ -9141,7 +9143,7 @@ const navItems=[
                     </table>
                   </div>
                   <div style={{paddingTop:14,display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
-                    <p style={{fontSize:10,color:'var(--muted)',fontWeight:600}}>{importData.length} registros</p>
+                    <p style={{fontSize:10,color:'var(--muted)',fontWeight:600}}>{importData.length} registros{importData.length>60?' (prévia dos 60 primeiros; todos serão importados)':''}</p>
                     <div style={{display:'flex',gap:10}}><button onClick={()=>setImportData([])} className="btn-ghost">Limpar</button><button onClick={commitImport} className="btn-primary" style={{padding:'11px 28px'}}>Sincronizar</button></div>
                   </div>
                 </div>
