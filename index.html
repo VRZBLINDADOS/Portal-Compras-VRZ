@@ -9544,7 +9544,7 @@ useEffect(()=>{
   const isAdminEspecial=ADMIN_ESPECIAL.includes(loggedIn?.user);
   const isAdmin=role==='admin'||isMaster||isAdminEspecial;
   const isSol=canDo(role,'newReq')||isAdminEspecial;
-  const   const canAccessFinalizacao=isMaster||loggedIn?.acessoFinalizacao===true||isAdminEspecial||loggedIn?.user==='Rogerio.Arruda'||loggedIn?.role==='inspetor';
+ const canAccessFinalizacao=isMaster||loggedIn?.acessoFinalizacao===true||isAdminEspecial||loggedIn?.user==='Rogerio.Arruda'||loggedIn?.role==='inspetor';
   const canAccessProblemasProd=isMaster||isAdminEspecial||loggedIn?.role==='inspetor'||(String(role).startsWith('custom:')&&telaLiberadaCustom(role,'problemasProducao'));
 
     const addUser=async(u,p,r='solicitante',customRoleId=null)=>{
@@ -9907,7 +9907,7 @@ const navItems=[
 {subView==='deletedItems'&&isMaster&&<DeletedItemsView loggedInUser={loggedIn}/>}
 {subView==='excedentes'&&isMaster&&<PedidosExcedentesView requests={requests}/>}
 {subView==='limpezaVeiculos'&&isMaster&&<LimpezaVeiculosView vehicles={vehicles} requests={requests}/>}
-                    {subView==='vehicles'&&(
+                    
                      {subView==='vehicles'&&<VeiculosTable vehicles={vehicles}/>}
 
                   {['pending','quoting','bought','overdue','completed','donated'].includes(subView)&&(()=>{
