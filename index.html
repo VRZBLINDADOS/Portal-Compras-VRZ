@@ -9359,7 +9359,7 @@ function ProblemasProducaoView({vehicles,loggedInUser,isMaster}){
                     <div><p style={{fontSize:28,fontWeight:800,lineHeight:1,margin:0}}>{at.lista.length}</p><p style={{fontSize:8,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',margin:'3px 0 0'}}>carros agora</p></div>
                     <div style={{textAlign:'right'}}><p style={{fontSize:18,fontWeight:800,lineHeight:1,margin:0,color:acima?'var(--red)':'#059669'}}>{fmt1(at.media)} d</p><p style={{fontSize:8,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',margin:'3px 0 0'}}>média em andamento</p></div>
                   </div>
-                  <p style={{fontSize:9,fontWeight:700,color:'var(--muted)',margin:'10px 0 0'}}>Média histórica: <strong style={{color:'var(--ink)'}}>{fmt1(hist)} d</strong>{at.max!==null?` · maior: ${fmt1(at.max)} d`:''}</p>
+                  
                 </div>
               );
             })}
