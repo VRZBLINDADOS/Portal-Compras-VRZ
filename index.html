@@ -10033,8 +10033,8 @@ const navItems=[
 
       {/* Mobile Bottom Nav */}
       <div id="mobile-bottom"><style>{`@media(min-width:768px){#mobile-bottom{display:none!important}}`}</style>
-        <div className="bottom-nav">
-          {navItems.map(n=>(
+                <div className="bottom-nav">
+          {[...navItems].sort((a,b)=>a.label.localeCompare(b.label,'pt-BR')).map(n=>(
             <button key={n.key} onClick={()=>setView(n.key)} className={`bottom-nav-btn ${view===n.key?'active':''}`}>
               <div style={{position:'relative',display:'flex',alignItems:'center',justifyContent:'center'}}>
                 <Icon name={n.icon} size={21}/>
