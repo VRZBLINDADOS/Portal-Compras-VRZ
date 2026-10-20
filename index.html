@@ -9089,7 +9089,8 @@ function ProblemasProducaoView({vehicles,loggedInUser,isMaster}){
   const{data:base,loading:baseLoad}=useFirestore('leadTimeBase');
   const{data:problemas,loading:probLoad}=useFirestore('problemasProducao');
   const[sub,setSub]=useState('painel');
-  const[nMeses,setNMeses]=useState(12);
+    const[ano,setAno]=useState(new Date().getFullYear());
+  const[periodoAno,setPeriodoAno]=useState('ano');
   const[detalhe,setDetalhe]=useState(null);
   const[foto,setFoto]=useState(null);
   const[doneNovo,setDoneNovo]=useState(false);
@@ -9125,13 +9126,20 @@ function ProblemasProducaoView({vehicles,loggedInUser,isMaster}){
     return null;
   };
 
+    const anosDisponiveis=useMemo(()=>{
+    const s=new Set([new Date().getFullYear()]);
+    registros.forEach(c=>{if(c.s)s.add(new Date(c.s).getFullYear());});
+    return[...s].sort((a,b)=>b-a);
+  },[registros]);
+
   // Agregação mensal (por mês de ENTREGA)
   const meses=useMemo(()=>{
     const porMes={};
     registros.filter(c=>c.e&&c.s&&c.s>=c.e).forEach(c=>{const d=new Date(c.s);const k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');(porMes[k]=porMes[k]||[]).push(c);});
-    const hoje=new Date();const out=[];
-    for(let i=nMeses-1;i>=0;i--){
-      const d=new Date(hoje.getFullYear(),hoje.getMonth()-i,1);
+        const out=[];
+    const mIni=periodoAno==='s2'?6:0,mFim=periodoAno==='s1'?5:11;
+    for(let mi=mIni;mi<=mFim;mi++){
+      const d=new Date(ano,mi,1);
       const k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
       const lista=porMes[k]||[];
       const comp=lista.filter(carroCompleto);
@@ -9141,7 +9149,7 @@ function ProblemasProducaoView({vehicles,loggedInUser,isMaster}){
         seg:stacked?[0,1,2,3].map(i=>mediaArr(comp.map(c=>duracaoEtapa(c,i)))):null});
     }
     return out;
-  },[registros,nMeses]);
+   },[registros,ano,periodoAno]);
 
   // Média histórica por etapa (carros completos dos meses exibidos)
   const medEtapas=useMemo(()=>{
@@ -9336,8 +9344,13 @@ function ProblemasProducaoView({vehicles,loggedInUser,isMaster}){
                 <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--red)',margin:'0 0 4px'}}>Média em dias (Entrada → Entrega) por mês de entrega</p>
                 <h3 style={{fontSize:18,fontWeight:800,margin:0}}>Lead Time da Produção</h3>
               </div>
-              <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:3,borderRadius:10,border:'1px solid var(--border)'}}>
-                {[6,12,18].map(n=><button key={n} onClick={()=>setNMeses(n)} style={{padding:'6px 12px',borderRadius:8,fontSize:9,fontWeight:800,textTransform:'uppercase',border:'none',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif',background:nMeses===n?'#fff':'transparent',color:nMeses===n?'var(--red)':'var(--muted)',boxShadow:nMeses===n?'0 2px 6px rgba(0,0,0,.08)':'none'}}>{n} meses</button>)}
+                           <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center'}}>
+                <select value={ano} onChange={e=>setAno(Number(e.target.value))} className="input" style={{width:'auto',padding:'7px 12px',fontSize:11,fontWeight:800,appearance:'auto'}}>
+                  {anosDisponiveis.map(a=><option key={a} value={a}>{a}</option>)}
+                </select>
+                <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:3,borderRadius:10,border:'1px solid var(--border)'}}>
+                  {[{k:'ano',l:'Ano todo'},{k:'s1',l:'1º semestre'},{k:'s2',l:'2º semestre'}].map(t=><button key={t.k} onClick={()=>setPeriodoAno(t.k)} style={{padding:'6px 12px',borderRadius:8,fontSize:9,fontWeight:800,textTransform:'uppercase',border:'none',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif',background:periodoAno===t.k?'#fff':'transparent',color:periodoAno===t.k?'var(--red)':'var(--muted)',boxShadow:periodoAno===t.k?'0 2px 6px rgba(0,0,0,.08)':'none'}}>{t.l}</button>)}
+                </div>
               </div>
             </div>
             <div style={{display:'flex',gap:14,flexWrap:'wrap',marginBottom:10}}>
