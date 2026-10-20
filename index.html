@@ -4769,7 +4769,7 @@ function diffHistoricoProblemas(original,atualizado,usuario,now){
     const idsNovos=new Set(novos.map(p=>p.id));
     novos.forEach(p=>{
       if(!idsAntigos.has(p.id)){
-        entradas.push({acao:`Problema adicionado em ${CATEGORIA_LABELS_HIST[cat]}: "${p.descricao||'(sem descrição)'}"`,usuario,timestamp:now});
+        entradas.push({acao:`Problema adicionado em ${CATEGORIA_LABELS_HIST[cat]}: [${p.defeito||'sem defeito'}] "${p.descricao||'(sem descrição)'}"`,usuario,timestamp:now});
       }
     });
     antigos.forEach(p=>{
@@ -4780,10 +4780,18 @@ function diffHistoricoProblemas(original,atualizado,usuario,now){
   });
   return entradas;
 }
+  const LISTA_DEFEITOS=['ABERTURA','PARAFUSAR','NÃO FUNCIONA','DANIFICADO','INSTALAR','PENDENCIA','DESALINHADO','BARULHO/VIBRAÇÃO','SOLTO/FOLGA','SUJEIRA','INFILTRAÇÃO','VENTO/RUIDO','RISCO/PEGANDO','VINCO','AMASSADO','RISCO PINTURA','RISCO POLIMENTO','CONTAMINAÇÃO','ESCORRIDO','CRATERA','FUNILARIA/PINTURA','PICOTE','MANCHA','COLA','PILOTO AZUL','DESFIADO','QUEBRADO','LIMPEZA','REPASSE GERAL','HOLOGRAMA','DESCONTAMINAÇÃO','CONDENSANDO','CONECTAR','DESATIVAR','PROGRAMAR','APAGAR AVARIAS','VALIDAR','CALAFETAR/VEDAR','MAPEAMENTO','PREPARAÇÃO IRREGULAR','QUEBRA DE QUALIDADE','CONDICIONAL','GARANTIA'];
+// true se existe problema NOVO (não estava na inspeção original) sem defeito escolhido
+function faltaDefeito(atual,original){
+  const cats=['ajuste','martelinho','pintura','vidro','outro','instalacaoPecas'];
+  const ids=new Set();
+  cats.forEach(c=>(original?.[c]||[]).forEach(p=>ids.add(p.id)));
+  return cats.some(c=>(atual[c]||[]).some(p=>!ids.has(p.id)&&!p.defeito));
+}
 function ProblemCategoryEditor({title,icon,color,items,setItems,disabled,limiteAtingido,tipoSelect,loggedInUser}){
 const addProblem=()=>{
     if(disabled)return;
-    setItems([...items,{id:String(Date.now())+Math.floor(Math.random()*999),descricao:'',foto:null,status:'Pendente',criadoEm:Date.now(),criadoPor:loggedInUser?.user||'—',...(tipoSelect?{tipo:'Interno'}:{})}]);
+    setItems([...items,{id:String(Date.now())+Math.floor(Math.random()*999),defeito:'',descricao:'',foto:null,status:'Pendente',criadoEm:Date.now(),criadoPor:loggedInUser?.user||'—',...(tipoSelect?{tipo:'Interno'}:{})}]);
   };
   const updateProblem=(id,key,val)=>{
     if(key==='foto'&&val){
@@ -4847,7 +4855,14 @@ const addProblem=()=>{
                   </select>
                 </div>
               )}
-              <textarea value={p.descricao} onChange={e=>updateProblem(p.id,'descricao',sanitize(e.target.value))} placeholder="Descreva o problema encontrado..." className="input" disabled={disabled} style={{minHeight:56,resize:'vertical',fontSize:12,fontWeight:500,flex:1}}/>
+                            <div>
+                <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.08em',color:'var(--red)',display:'block',marginBottom:4}}>Defeito *</label>
+                <select value={p.defeito||''} onChange={e=>updateProblem(p.id,'defeito',e.target.value)} disabled={disabled} className="input" style={{fontSize:11,fontWeight:700,appearance:'auto',padding:'8px 12px'}}>
+                  <option value="">Selecione o defeito...</option>
+                  {LISTA_DEFEITOS.map(d=><option key={d} value={d}>{d}</option>)}
+                </select>
+              </div>
+              <textarea value={p.descricao} onChange={e=>updateProblem(p.id,'descricao',sanitize(e.target.value))} placeholder="Descreva o problema encontrado (onde, como aparece)..." className="input" disabled={disabled} style={{minHeight:56,resize:'vertical',fontSize:12,fontWeight:500,flex:1}}/>
             </div>
           </div>
         ))}
@@ -5107,7 +5122,8 @@ const reset=()=>{
   };
 const executarSalvar=async()=>{
     const problemasSemDescricao=[...ajuste,...martelinho,...pintura,...vidro,...outro,...instalacaoPecas].some(p=>!p.descricao||!p.descricao.trim());
-    if(problemasSemDescricao){alert('Preencha a descrição de todos os problemas em Ajuste, Martelinho, Pintura e Vidro antes de salvar.');return;}
+        if(problemasSemDescricao){alert('Preencha a descrição de todos os problemas em Ajuste, Martelinho, Pintura e Vidro antes de salvar.');return;}
+    if(faltaDefeito({ajuste,martelinho,pintura,vidro,outro,instalacaoPecas},existingFin)){alert('Escolha o defeito de todos os problemas antes de salvar.');return;}
     if(mostrarNovas&&novasPecas.some(p=>!p.description||!p.description.trim())){alert('Preencha a descrição de todas as peças antes de salvar.');return;}
     const pecasValidas=novasPecas.filter(p=>p.description.trim());
     if(mostrarNovas&&pecasValidas.some(p=>!p.photo)){setShowFotoAlert(true);return;}
@@ -5362,7 +5378,7 @@ const executarSalvar=async()=>{
       <ProblemCategoryEditor title="Martelinho" icon="hammer" color="#DC1F1F" items={martelinho} setItems={setMartelinho} disabled={disabled} limiteAtingido={limiteAtingido} loggedInUser={loggedInUser}/>
       <ProblemCategoryEditor title="Pintura" icon="paintbrush" color="#2563EB" items={pintura} setItems={setPintura} disabled={disabled} limiteAtingido={limiteAtingido} tipoSelect loggedInUser={loggedInUser}/>
       <ProblemCategoryEditor title="Vidro" icon="square" color="#0EA5E9" items={vidro} setItems={setVidro} disabled={disabled} limiteAtingido={limiteAtingido} tipoSelect loggedInUser={loggedInUser}/>
-      <ProblemCategoryEditor title="Estética" icon="more-horizontal" color="#6B7280" items={outro} setItems={setOutro} disabled={disabled} limiteAtingido={limiteAtingido} loggedInUser={loggedInUser}/>
+           {(etapaInspecao==='FN2'||outro.length>0)&&<ProblemCategoryEditor title="Estética" icon="more-horizontal" color="#6B7280" items={outro} setItems={setOutro} disabled={disabled} limiteAtingido={limiteAtingido} loggedInUser={loggedInUser}/>}
       <ProblemCategoryEditor title="Instalação Peças" icon="package" color="#10B981" items={instalacaoPecas} setItems={setInstalacaoPecas} disabled={disabled} limiteAtingido={limiteAtingido} loggedInUser={loggedInUser}/>
       <PecasFinalizacaoSection os={os} requests={requests}
         novasPecas={novasPecas} setNovasPecas={setNovasPecas} excedentes={excedentes} setExcedentes={setExcedentes}
@@ -5394,7 +5410,8 @@ function EditarInspecaoModal({fin,loggedInUser,onClose}){
 
   const salvar=async()=>{
     const problemasSemDescricao=[...ajuste,...martelinho,...pintura,...vidro,...outro,...instalacaoPecas].some(p=>!p.descricao||!p.descricao.trim());
-    if(problemasSemDescricao){alert('Preencha a descrição de todos os problemas antes de salvar.');return;}
+        if(problemasSemDescricao){alert('Preencha a descrição de todos os problemas antes de salvar.');return;}
+    if(faltaDefeito({ajuste,martelinho,pintura,vidro,outro,instalacaoPecas},fin)){alert('Escolha o defeito de todos os problemas antes de salvar.');return;}
     setSaving(true);
     try{
       const now=Date.now();
@@ -5436,7 +5453,7 @@ function EditarInspecaoModal({fin,loggedInUser,onClose}){
           <ProblemCategoryEditor title="Martelinho" icon="hammer" color="#DC1F1F" items={martelinho} setItems={setMartelinho} disabled={false} limiteAtingido={limiteAtingido} loggedInUser={loggedInUser}/>
           <ProblemCategoryEditor title="Pintura" icon="paintbrush" color="#2563EB" items={pintura} setItems={setPintura} disabled={false} limiteAtingido={limiteAtingido} tipoSelect loggedInUser={loggedInUser}/>
           <ProblemCategoryEditor title="Vidro" icon="square" color="#0EA5E9" items={vidro} setItems={setVidro} disabled={false} limiteAtingido={limiteAtingido} tipoSelect loggedInUser={loggedInUser}/>
-          <ProblemCategoryEditor title="Estética" icon="more-horizontal" color="#6B7280" items={outro} setItems={setOutro} disabled={false} limiteAtingido={limiteAtingido} loggedInUser={loggedInUser}/>
+                    {(etapaOf(fin)==='FN2'||outro.length>0)&&<ProblemCategoryEditor title="Estética" icon="more-horizontal" color="#6B7280" items={outro} setItems={setOutro} disabled={false} limiteAtingido={limiteAtingido} loggedInUser={loggedInUser}/>}
           <ProblemCategoryEditor title="Instalação Peças" icon="package" color="#10B981" items={instalacaoPecas} setItems={setInstalacaoPecas} disabled={false} limiteAtingido={limiteAtingido} loggedInUser={loggedInUser}/>
         </div>
         <div style={{padding:'16px 24px',background:'var(--smoke)',borderTop:'1px solid var(--border)',display:'flex',justifyContent:'flex-end',gap:10,flexShrink:0}}>
@@ -5606,7 +5623,7 @@ const exportarPDF=async(fin,comFoto=true)=>{
     const csvCell=(v)=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
 const rows=[[csvCell('OS'),csvCell('Etapa Inspeção'),csvCell('Chassi'),csvCell('Modelo'),csvCell('Ajustes'),csvCell('Martelinho'),csvCell('Pintura'),csvCell('Vidro'),csvCell('Estética'),csvCell('Instalação Peças'),csvCell('Peças'),csvCell('Responsável')].join(';')];
   baseVisiveis.forEach(fin=>{
-      const fmtProblemas=(items)=>(items||[]).map(p=>`${p.status==='Solucionado'?'[Solucionado]':'[Pendente]'} ${p.descricao||'(sem descrição)'}${p.tipo?' ('+p.tipo+')':''}`).join(' | ')||'—';
+      const fmtProblemas=(items)=>(items||[]).map(p=>`${p.status==='Solucionado'?'[Solucionado]':'[Pendente]'} ${p.defeito?'['+p.defeito+'] ':''}${p.descricao||'(sem descrição)'}${p.tipo?' ('+p.tipo+')':''}`).join(' | ')||'—';
       const pecasItems=(pecasByOS[String(fin.os).trim()]||[]).filter(it=>!it.excedente);
       const fmtPecas=pecasItems.map(it=>`${it.quantity}x ${it.description} — ${it.statusOriginal||it.status||'Pendente'}`).join(' | ')||'—';
       rows.push([
@@ -5728,7 +5745,7 @@ const rows=[[csvCell('OS'),csvCell('Etapa Inspeção'),csvCell('Chassi'),csvCell
                             <div key={p.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',background:p.status==='Solucionado'?'#F0FBF5':'var(--smoke)',border:`1px solid ${p.status==='Solucionado'?'#AAE6C5':'var(--border)'}`,borderRadius:9}}>
                               {p.foto?<img src={p.foto} style={{width:36,height:36,borderRadius:7,objectFit:'cover',flexShrink:0}}/>:<div style={{width:36,height:36,borderRadius:7,background:'#fff',border:'1px solid var(--border)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><Icon name={icon} size={14}/></div>}
                               <div style={{flex:1,minWidth:0}}>
-                                <p style={{fontSize:10,fontWeight:600,margin:0,color:'var(--ink)'}}>{p.descricao||'(sem descrição)'}{p.tipo&&<span style={{marginLeft:6,fontSize:8,fontWeight:800,textTransform:'uppercase',padding:'1px 7px',borderRadius:999,background:p.tipo==='Interno'?'#EAF0FF':'#FFF4E6',color:p.tipo==='Interno'?'#1A4EC2':'#C45E00',border:`1px solid ${p.tipo==='Interno'?'#C0D0F5':'#FFD9A8'}`}}>{p.tipo}</span>}</p>
+                                <p style={{fontSize:10,fontWeight:600,margin:0,color:'var(--ink)'}}>{p.defeito&&<span style={{marginRight:6,fontSize:8,fontWeight:800,textTransform:'uppercase',padding:'1px 7px',borderRadius:999,background:'var(--ink)',color:'#fff'}}>{p.defeito}</span>}{p.descricao||'(sem descrição)'}{p.tipo&&<span style={{marginLeft:6,fontSize:8,fontWeight:800,textTransform:'uppercase',padding:'1px 7px',borderRadius:999,background:p.tipo==='Interno'?'#EAF0FF':'#FFF4E6',color:p.tipo==='Interno'?'#1A4EC2':'#C45E00',border:`1px solid ${p.tipo==='Interno'?'#C0D0F5':'#FFD9A8'}`}}>{p.tipo}</span>}</p>
                                 <p style={{fontSize:8,color:'var(--muted)',fontWeight:600,margin:'2px 0 0'}}>Adicionado por <strong>{p.criadoPor||'—'}</strong> em {p.criadoEm?new Date(p.criadoEm).toLocaleString('pt-BR'):'—'}</p>
                                {p.status==='Solucionado'&&<p style={{fontSize:8,color:'#059669',fontWeight:700,margin:'2px 0 0'}}>✓ Resolvido {p.resolvidoPor?`por ${p.resolvidoPor}`:''} {p.resolvidoEm?'em '+new Date(p.resolvidoEm).toLocaleString('pt-BR'):''}</p>}
                                 {p.status==='Solucionado'&&p.obsResolucao&&<p style={{fontSize:8,color:'var(--muted)',fontWeight:600,margin:'2px 0 0',fontStyle:'italic'}}>Obs: {p.obsResolucao}</p>}
