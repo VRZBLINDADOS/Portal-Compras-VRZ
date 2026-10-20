@@ -9506,7 +9506,8 @@ function App(){
   const[view,setView]=useState('request');
   const[subView,setSubView]=useState('pending');
   const[importData,setImportData]=useState([]);const[showImport,setShowImport]=useState(false);const[editing,setEditing]=useState(null);
-  const[showChangePwd,setShowChangePwd]=useState(false);
+    const[showChangePwd,setShowChangePwd]=useState(false);
+  const[navBusca,setNavBusca]=useState('');
 const[gestSearch,setGestSearch]=useState('');
 const[gestFab,setGestFab]=useState('');
 
@@ -9794,7 +9795,9 @@ const navItems=[
     canAccessProblemasProd&&{key:'problemasProducao',icon:'alert-triangle',label:'Problemas de Produção'},
   ].filter(Boolean);
 
-    const loading=reqLoad||arqLoad||vehLoad||usrLoad||estLoad||movLoad||finLoad;
+       const loading=reqLoad||arqLoad||vehLoad||usrLoad||estLoad||movLoad||finLoad;
+  const semAcento=(s)=>String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const navVisiveis=[...navItems].sort((a,b)=>a.label.localeCompare(b.label,'pt-BR')).filter(n=>semAcento(n.label).includes(semAcento(navBusca.trim())));
 
   // ── Return condicional APÓS todos os hooks ────────────────────────────────
   if(!loggedIn)return <LoginView onLogin={login} usersList={users} loadingUsers={usrLoad}/>;
@@ -9813,8 +9816,13 @@ const navItems=[
           <div style={{width:36,height:36,background:'var(--red)',borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,boxShadow:'0 4px 12px rgba(220,31,31,.3)'}}><Icon name="shopping-cart" size={18}/></div>
           <div><p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',letterSpacing:'.14em',color:'rgba(255,255,255,.3)',margin:0,lineHeight:1}}>Portal Compras</p><h1 style={{fontSize:20,fontWeight:800,margin:0,lineHeight:1.1,color:'#fff'}}>VRZ</h1></div>
         </div>
+                <div style={{position:'relative',margin:'0 2px 8px',flexShrink:0}}>
+          <input type="text" value={navBusca} onChange={e=>setNavBusca(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&navVisiveis[0]){setView(navVisiveis[0].key);setNavBusca('');}if(e.key==='Escape')setNavBusca('');}} placeholder="Buscar aba..." style={{width:'100%',padding:'9px 12px 9px 32px',background:'rgba(255,255,255,.08)',border:'1px solid rgba(255,255,255,.12)',borderRadius:9,color:'#fff',fontSize:11,fontWeight:600,outline:'none',fontFamily:'Plus Jakarta Sans,sans-serif'}}/>
+          <div style={{position:'absolute',left:10,top:'50%',transform:'translateY(-50%)',color:'rgba(255,255,255,.4)',pointerEvents:'none'}}><Icon name="search" size={13}/></div>
+          {navBusca&&navVisiveis.length===0&&<p style={{fontSize:9,fontWeight:700,color:'rgba(255,255,255,.35)',margin:'8px 4px 0'}}>Nenhuma aba encontrada</p>}
+        </div>
         <div className="scroll-y" style={{flex:1,minHeight:0,overflowY:'auto',display:'flex',flexDirection:'column',gap:2}}>
-        {navItems.map(n=>(
+                {navVisiveis.map(n=>(
             <button key={n.key} onClick={()=>setView(n.key)} className={`nav-item ${view===n.key?'active':''}`} title={n.label}>
               <div className="nav-icon" style={{position:'relative'}}>
                 <Icon name={n.icon} size={15}/>
