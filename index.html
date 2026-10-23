@@ -8893,16 +8893,24 @@ function LeadTimeChart({meses,onSegmento,onMes}){
                   <text x={cx} y={y(m.tot)-7} textAnchor="middle" fontSize="12" fontWeight="800" fill="#111">{Math.round(m.tot)}</text>
                 </g>
               )}
-              {m.stacked&&m.seg.map((v,si)=>{
-                const val=v||0;const y0=y(acc+val),h=y(acc)-y(acc+val);acc+=val;
+                           {m.stacked&&(()=>{
+                const hSeg=m.seg.map(v=>(v||0)>0?Math.max(y(0)-y(v||0),15):0);
+                let base=y(0);
                 return(
-                  <g key={si} onClick={()=>onSegmento(m,si)} style={{cursor:'pointer'}}>
-                    <rect x={x} y={y0} width={bw} height={Math.max(h,0)} fill={AREAS_PROD[si].cor} stroke="#fff" strokeWidth="1"/>
-                    {h>=14&&<text x={cx} y={y0+h/2+4} textAnchor="middle" fontSize="10" fontWeight="700" fill={AREAS_PROD[si].txt}>{fmt1(val)}</text>}
-                  </g>
+                  <>
+                    {m.seg.map((v,si)=>{
+                      const val=v||0;const h=hSeg[si];const y0=base-h;base=y0;
+                      return(
+                        <g key={si} onClick={()=>onSegmento(m,si)} style={{cursor:'pointer'}}>
+                          <rect x={x} y={y0} width={bw} height={Math.max(h,0)} fill={AREAS_PROD[si].cor} stroke="#fff" strokeWidth="1"/>
+                          {h>=14&&<text x={cx} y={y0+h/2+4} textAnchor="middle" fontSize="10" fontWeight="700" fill={AREAS_PROD[si].txt}>{fmt1(val)}</text>}
+                        </g>
+                      );
+                    })}
+                    <text x={cx} y={base-7} textAnchor="middle" fontSize="12" fontWeight="800" fill="#111">{Math.round(m.seg.reduce((a,v)=>a+(v||0),0))}</text>
+                  </>
                 );
-              })}
-              {m.stacked&&<text x={cx} y={y(acc)-7} textAnchor="middle" fontSize="12" fontWeight="800" fill="#111">{Math.round(acc)}</text>}
+              })()}
               <g onClick={()=>onMes(m)} style={{cursor:'pointer'}}>
                 <text transform={`translate(${cx+4},${H-pb+14}) rotate(-40)`} textAnchor="end" fontSize="11" fontWeight="600" fill="#374151">{m.label}</text>
                 <text x={cx} y={H-6} textAnchor="middle" fontSize="8" fontWeight="700" fill="#9A9189">{m.lista.length} OS</text>
