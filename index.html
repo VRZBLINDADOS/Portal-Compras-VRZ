@@ -1075,7 +1075,7 @@ const stats=useMemo(()=>{
 }
 const LINHAS_ROGERIO=['Linha 1','Linha 2','Linha 3'];
 const LINHAS_SOARES=['Linha 4','Linha 5','Linha 6','Linha 7'];
-const ETAPAS_INSPECAO=['QA1','QA2','FN1','FN2'];
+const ETAPAS_INSPECAO=['QA1','QA2','PINTURA','FN1','FN2'];
 const etapaOf=(fin)=>fin?.etapaInspecao||'QA1';
 
 function FeedbackFinalizacaoView({finalizacoes,requests,vehicles,loggedInUser}){
@@ -5078,7 +5078,7 @@ useEffect(()=>{
   };
  const onOSBlur=()=>{
     const t=String(os).trim();if(!t)return;
-    if(!etapaInspecao){alert('Selecione a etapa de inspeção (QA1, QA2, FN1 ou FN2) antes de informar a OS.');return;}
+    if(!etapaInspecao){alert('Selecione a etapa de inspeção ('+ETAPAS_INSPECAO.join(', ')+') antes de informar a OS.');return;}
     const f=vehiclesDB.find(v=>String(v.os).trim()===t);
     if(f){
       setVehicle(f);
@@ -5207,7 +5207,7 @@ const executarSalvar=async()=>{
 
    const handleSalvarClick=()=>{
     if(readOnly)return;
-    if(!etapaInspecao)return alert('Selecione a etapa de inspeção (QA1, QA2, FN1 ou FN2).');
+    if(!etapaInspecao)return alert('Selecione a etapa de inspeção ('+ETAPAS_INSPECAO.join(', ')+').');
     if(!os.trim())return alert('Informe a OS.');
     if(!vehicle)return alert('OS não cadastrada.');
     if(pecasEscolha==='novas'&&!perguntaExcedenteFeita){setPerguntaPendente('excedente');return;}
@@ -5857,7 +5857,7 @@ const rows=[[csvCell('OS'),csvCell('Etapa Inspeção'),csvCell('Chassi'),csvCell
                   <p style={{fontSize:11,color:'var(--muted)',textAlign:'center',marginBottom:16}}>Qual PDF você deseja exportar?</p>
                   <div style={{display:'flex',flexDirection:'column',gap:10}}>
                     <button onClick={()=>setPdfEscopo('etapa')} className="btn-primary" style={{background:'#2563EB'}}><Icon name="file-text" size={14}/> Apenas esta inspeção ({etapaOf(pdfConfirmFin)})</button>
-                    <button onClick={()=>setPdfEscopo('geral')} className="btn-ghost"><Icon name="layers" size={14}/> Geral (QA1 · QA2 · FN1 · FN2)</button>
+                    <button onClick={()=>setPdfEscopo('geral')} className="btn-ghost"><Icon name="layers" size={14}/> Geral ({ETAPAS_INSPECAO.join(' · ')})</button>
                     <button onClick={()=>{setPdfConfirmFin(null);setPdfEscopo(null);}} style={{background:'none',border:'none',color:'var(--muted)',fontSize:10,fontWeight:700,textTransform:'uppercase',cursor:'pointer',padding:6}}>Cancelar</button>
                   </div>
                 </>
@@ -6043,7 +6043,7 @@ try{
   return(
     <div className="fade-up" style={{paddingBottom:16}}>
             <div style={{marginBottom:16}}>
-        <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.15em',color:'var(--red)',marginBottom:4}}>QA1 · QA2 · FN1 · FN2</p>
+        <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.15em',color:'var(--red)',marginBottom:4}}>{ETAPAS_INSPECAO.join(' · ')}</p>
         <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',margin:'0 0 14px'}}>
           <h2 style={{fontSize:30,fontWeight:800,margin:0,letterSpacing:'-.02em'}}>Inspeção</h2>
           <LastUpdateBadge/>
@@ -6170,13 +6170,13 @@ function InspecaoComparativoView({finalizacoes,requests,vehicles}){
       </div>
 
       <div style={{marginBottom:16}}>
-        <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',display:'block',marginBottom:6}}>Comparar as 4 inspeções de uma OS</label>
+        <label style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',display:'block',marginBottom:6}}>Comparar as inspeções de uma OS</label>
         <input type="text" inputMode="numeric" value={osInput} onChange={e=>setOsInput(sanitize(e.target.value))} placeholder="Digite a OS" className="input" style={{fontSize:20,fontWeight:800,maxWidth:320}}/>
       </div>
 
       {!osInput.trim()?(
         <div style={{padding:'40px 20px',textAlign:'center',background:'#fff',borderRadius:16,border:'1.5px dashed var(--border)'}}>
-          <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',margin:0}}>Informe uma OS para ver o comparativo entre QA1, QA2, FN1 e FN2</p>
+          <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',margin:0}}>Informe uma OS para ver o comparativo entre {ETAPAS_INSPECAO.join(', ')}</p>
         </div>
       ):(
         <>
@@ -6193,7 +6193,7 @@ function InspecaoComparativoView({finalizacoes,requests,vehicles}){
             <div style={{background:'var(--red)',color:'#fff',borderRadius:14,padding:18}}>
               <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',margin:'0 0 8px',opacity:.85}}>Total Geral</p>
               <p style={{fontSize:30,fontWeight:800,margin:0,lineHeight:1}}>{totalGeral}</p>
-              <p style={{fontSize:8,fontWeight:600,margin:'4px 0 0',opacity:.85}}>QA1+QA2+FN1+FN2</p>
+              <p style={{fontSize:8,fontWeight:600,margin:'4px 0 0',opacity:.85}}>{ETAPAS_INSPECAO.join('+')}</p>
             </div>
           </div>
 
@@ -6218,7 +6218,7 @@ function InspecaoComparativoView({finalizacoes,requests,vehicles}){
             )}
           </div>
 
-          <div className="grid-4col" style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12}}>
+          <div className="grid-4col" style={{display:'grid',gridTemplateColumns:`repeat(${ETAPAS_INSPECAO.length},1fr)`,gap:12}}>
             {ETAPAS_INSPECAO.map(et=>(
               <div key={et} className="card" style={{padding:16}}>
                 <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--red)',margin:'0 0 10px'}}>{et}</p>
