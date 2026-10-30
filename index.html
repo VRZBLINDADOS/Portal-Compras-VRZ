@@ -9527,6 +9527,88 @@ function RcSecao({titulo,sub,children}){
   );
 }
 
+function buildResumoCarrosPDF(lista,titulo){
+  const{jsPDF}=window.jspdf;const doc=new jsPDF();
+  const W=210,M=10,LIM=282;
+  const agora=Date.now();
+  let y=15;
+  const garante=(h)=>{if(y+h>LIM){doc.addPage();y=15;}};
+  const linha=(t,o={})=>{
+    const x=o.x||M,size=o.size||8;
+    doc.setFont('helvetica',o.bold?'bold':'normal');doc.setFontSize(size);
+    const c=o.cor||[0,0,0];doc.setTextColor(c[0],c[1],c[2]);
+    const ls=doc.splitTextToSize(String(t),W-M-x);
+    ls.forEach(l=>{garante(size*0.42+1.6);doc.text(l,x,y);y+=size*0.42+1.6;});
+  };
+  const secao=(t)=>{garante(14);y+=2;linha(t,{bold:true,size:9,cor:[220,31,31]});};
+
+  doc.setFillColor(13,13,13);doc.rect(0,0,210,30,'F');
+  doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(15);
+  doc.text(titulo,M,14);
+  doc.setFont('helvetica','normal');doc.setFontSize(8);
+  doc.text(`${lista.length} carro(s)  ·  Gerado em ${new Date().toLocaleString('pt-BR')}`,M,23);
+  y=40;
+
+  lista.forEach((c,idx)=>{
+    if(idx>0){doc.addPage();y=15;}
+    doc.setFillColor(13,13,13);doc.rect(8,y-6,194,12,'F');
+    doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(12);
+    doc.text(`OS #${c.os}  -  ${c.modelo||'—'}`,12,y+2);
+    y+=14;
+
+    secao('VEÍCULO');
+    linha(`Chassi: ${c.chassi||'—'}   |   Cor: ${c.cor||'—'}   |   Fabricante: ${c.fabricante||'—'}`);
+    linha(`Cliente: ${c.cliente||'—'}   |   Parceiro: ${c.parceiro||'—'}   |   Vendedor: ${c.vendedor||'—'}`);
+    linha(`Linha: ${c.linha||'—'}   |   Etapa: ${c.etapa||'—'}   |   Localização: ${c.localizacao||'—'}`);
+    if(c.obs&&c.obs!=='-')linha(`Obs.: ${c.obs}`);
+
+    secao(c.leadTotal!==null?`LEAD TIME  (total: ${fmt1(c.leadTotal)} dias)`:c.diasFabrica!==null?`LEAD TIME  (${fmt1(c.diasFabrica)} dias na fábrica até agora)`:'LEAD TIME');
+    AREAS_PROD.forEach((a,i)=>{
+      const dur=duracaoEtapa(c.reg,i);const atual=c.idxAtual===i;
+      const[ini,fim]=janelaEtapa(c.reg,i);
+      const valor=dur!==null?fmt1(dur)+' d':atual?fmt1(c.diasEtapa)+' d (em andamento)':'—';
+      linha(`${a.label}: ${valor}   (${fmtDataCurta(ini)} a ${fmtDataCurta(fim)})`,{x:14});
+    });
+
+    secao(`PARADAS DE PRODUÇÃO  (${c.probs.length} ocorrência(s), ${fmt1(c.diasParado)} dia(s) parado, ${c.abertas.length} em aberto)`);
+    if(!c.probs.length)linha('Nenhuma parada registrada.',{x:14,cor:[110,110,110]});
+    [...c.probs].sort((a,b)=>String(a.inicio).localeCompare(String(b.inicio))).forEach(p=>{
+      const area=AREAS_PROD.find(a=>a.k===p.area);
+      linha(`${p.fim?'[RESOLVIDA]':'[EM ABERTO]'} ${area?area.curto:''} - ${p.motivo}  |  Início ${p.inicio?new Date(p.inicio+'T00:00:00').toLocaleDateString('pt-BR'):'—'}${p.fim?'  |  Solução '+new Date(p.fim+'T00:00:00').toLocaleDateString('pt-BR'):''}  |  ${fmt1(diasDoProblema(p,agora))} d`,{x:14,bold:true});
+      if(p.descricao)linha(`Descrição: ${p.descricao}`,{x:18,size:7.5});
+      if(p.comoResolveu)linha(`Como resolveu: ${p.comoResolveu}`,{x:18,size:7.5,cor:[10,107,52]});
+    });
+
+    secao(`PEÇAS  (${c.pecas.length} item(ns), ${c.faltando.length} faltando${c.atrasadas.length?', '+c.atrasadas.length+' atrasada(s)':''})`);
+    if(!c.pecas.length)linha('Nenhum pedido de peças.',{x:14,cor:[110,110,110]});
+    c.pecas.forEach(it=>{
+      let extra='';
+      if(it.deliveryDate&&it.status!=='Concluído')extra+=`  |  Prazo ${new Date(it.deliveryDate+'T00:00:00').toLocaleDateString('pt-BR')}`;
+      if(it.actualDeliveryDate)extra+=`  |  Entregue ${new Date(it.actualDeliveryDate+'T00:00:00').toLocaleDateString('pt-BR')}`;
+      if(it.receivedFrom)extra+=`  |  Recebida da OS ${it.receivedFrom}`;
+      if(it.donatedTo&&!it.receivedFrom)extra+=`  |  Doada p/ OS ${it.donatedTo}`;
+      if(it.recebidoDoEstoque)extra+='  |  Do estoque';
+      linha(`${it.quantity||1}x ${it.description||'(sem descrição)'}  -  ${it.statusOriginal||it.status||'Pendente'}${extra}`,{x:14});
+    });
+
+    secao(`INSPEÇÕES  (${c.inspFeitas} de ${ETAPAS_INSPECAO.length} realizadas)`);
+    ETAPAS_INSPECAO.forEach(et=>{
+      const i=c.inspPorEtapa[et];
+      if(!i){linha(`${et}: não realizada`,{x:14,cor:[110,110,110]});return;}
+      const cats=RC_CATS.filter(([ck])=>i.porCat[ck]>0).map(([ck,label])=>`${label} ${i.porCat[ck]}`).join(', ');
+      linha(`${et}: ${i.total} problema(s), ${i.pend} pendente(s)${cats?'  ('+cats+')':''}  -  por ${i.fin.criadoPor||'—'} em ${i.fin.criadoEm?new Date(i.fin.criadoEm).toLocaleDateString('pt-BR'):'—'}`,{x:14,bold:true});
+      if(i.arquivada)linha('Inspeção arquivada - detalhes no PDF do Histórico.',{x:18,size:7.5,cor:[110,110,110]});
+      const defeitos={};
+      RC_CATS.forEach(([ck])=>(i.fin[ck]||[]).forEach(p=>{if(!p.defeito)return;const nome=p.defeito==='OUTRO'&&p.defeitoOutro?'OUTRO: '+p.defeitoOutro:p.defeito;defeitos[nome]=(defeitos[nome]||0)+1;}));
+      const dTxt=Object.entries(defeitos).sort((a,b)=>b[1]-a[1]).map(([n,q])=>q>1?`${n} x${q}`:n).join(', ');
+      if(dTxt)linha(`Defeitos: ${dTxt}`,{x:18,size:7.5});
+    });
+  });
+  const total=doc.internal.getNumberOfPages();
+  for(let p=1;p<=total;p++){doc.setPage(p);doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(120,120,120);doc.text(`Página ${p} de ${total}`,200,291,{align:'right'});}
+  return doc;
+}
+
 function ResumoCarrosView({vehicles,requests,finalizacoes,loggedInUser,isMaster}){
   const{data:base,loading:baseLoad}=useFirestore('leadTimeBase');
   const{data:problemas,loading:probLoad}=useFirestore('problemasProducao');
@@ -9538,7 +9620,17 @@ function ResumoCarrosView({vehicles,requests,finalizacoes,loggedInUser,isMaster}
   const[limite,setLimite]=useState(60);
   const[aberto,setAberto]=useState(null);
   const[foto,setFoto]=useState(null);
-  useEffect(()=>{setLimite(60);},[busca,escopo,fParada,fPeca,fSemInsp]);
+    useEffect(()=>{setLimite(60);},[busca,escopo,fParada,fPeca,fSemInsp]);
+  const[gerandoPdf,setGerandoPdf]=useState(false);
+  const exportarPDF=(cars,nome,titulo)=>{
+    if(!cars.length)return;
+    setGerandoPdf(true);
+    setTimeout(()=>{
+      try{buildResumoCarrosPDF(cars,titulo).save(nome);}
+      catch(e){alert('Erro ao gerar PDF: '+e.message);}
+      setGerandoPdf(false);
+    },50);
+  };
 
   // ── Índices por OS ──
   const{pecasPorOS,vdPorOS}=useMemo(()=>{
@@ -9669,7 +9761,10 @@ function ResumoCarrosView({vehicles,requests,finalizacoes,loggedInUser,isMaster}
           <button onClick={exportarCSV} style={{display:'flex',alignItems:'center',gap:6,padding:'10px 14px',background:'#059669',color:'#fff',border:'none',borderRadius:10,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}><Icon name="file-text" size={13}/> Excel</button>
         </div>
         <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-          {chipFiltro(fParada,()=>setFParada(v=>!v),'Com parada em aberto',cParada,'#DC1F1F')}
+                    {chipFiltro(fParada,()=>setFParada(v=>!v),'Com parada em aberto',cParada,'#DC1F1F')}
+          <button onClick={()=>exportarPDF(lista,'Resumo_Carros_Geral.pdf','VRZ - RESUMO DE CARROS')} disabled={gerandoPdf||!lista.length} style={{display:'inline-flex',alignItems:'center',gap:6,padding:'7px 14px',marginLeft:'auto',background:gerandoPdf||!lista.length?'var(--smoke)':'#2563EB',color:gerandoPdf||!lista.length?'var(--muted)':'#fff',border:'none',borderRadius:999,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:gerandoPdf||!lista.length?'not-allowed':'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
+            {gerandoPdf?<Icon name="refresh-cw" size={13} className="spin"/>:<Icon name="printer" size={13}/>} PDF ({lista.length})
+          </button>
           {chipFiltro(fPeca,()=>setFPeca(v=>!v),'Faltando peça',cPeca,'#C45E00')}
           {chipFiltro(fSemInsp,()=>setFSemInsp(v=>!v),'Sem nenhuma inspeção',cSemInsp,'#1A1A1A')}
         </div>
@@ -9713,6 +9808,11 @@ function ResumoCarrosView({vehicles,requests,finalizacoes,loggedInUser,isMaster}
 
       {sel&&(
         <DetailModal title={`OS #${sel.os} — ${sel.modelo||'—'}`} subtitle={[sel.chassi,sel.linha].filter(Boolean).join(' · ')} onClose={()=>setAberto(null)}>
+                    <div style={{display:'flex',justifyContent:'flex-end',marginBottom:14}}>
+            <button onClick={()=>exportarPDF([sel],`Resumo_OS_${sel.os}.pdf`,`VRZ - RESUMO DA OS ${sel.os}`)} disabled={gerandoPdf} style={{display:'inline-flex',alignItems:'center',gap:6,padding:'8px 16px',background:'#2563EB',color:'#fff',border:'none',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:gerandoPdf?'not-allowed':'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
+              {gerandoPdf?<Icon name="refresh-cw" size={13} className="spin"/>:<Icon name="printer" size={13}/>} PDF desta OS
+            </button>
+          </div>
           <RcSecao titulo="Veículo">
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:'8px 14px'}}>
               {[['Cliente',sel.cliente],['Parceiro',sel.parceiro],['Vendedor',sel.vendedor],['Fabricante',sel.fabricante],['Cor',sel.cor],['Linha',sel.linha],['Etapa',sel.etapa],['Localização',sel.localizacao]].map(([l,v])=>(
