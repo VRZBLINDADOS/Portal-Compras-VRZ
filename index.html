@@ -10109,7 +10109,8 @@ const navItems=[
     canDo(role,'manage')&&{key:'admin',icon:'settings',label:'Gestão'},
     ((isMaster||isAdmin)||ehCustom)&&(!ehCustom||telaLiberadaCustom(role,'dashboard'))&&{key:'dashboard',icon:'bar-chart-2',label:'Análises'},
         ((loggedIn?.user===MASTER_USER||loggedIn?.user==='Matheus.Ransi')||ehCustom)&&(!ehCustom||telaLiberadaCustom(role,'resumo'))&&{key:'resumo',icon:'presentation',label:'Resumo Reunião'},
-    canAccessProblemasProd&&{key:'problemasProducao',icon:'alert-triangle',label:'Problemas de Produção'},
+        canAccessProblemasProd&&{key:'problemasProducao',icon:'alert-triangle',label:'Problemas de Produção'},
+    isMaster&&{key:'resumoCarros',icon:'car',label:'Resumo Carros'},
   ].filter(Boolean);
 
        const loading=reqLoad||arqLoad||vehLoad||usrLoad||estLoad||movLoad||finLoad;
@@ -10209,6 +10210,7 @@ const navItems=[
                                 {view==='dashboard'&&(isMaster||isAdmin)&&<DashboardView requests={requestsComHistorico} vehicles={vehicles}/>}
 {view==='resumo'&&(loggedIn?.user===MASTER_USER||loggedIn?.user==='Matheus.Ransi')&&<ResumoReuniaoView requests={requestsComHistorico} vehicles={vehicles}/>}
 {view==='problemasProducao'&&canAccessProblemasProd&&<ProblemasProducaoView vehicles={vehicles} loggedInUser={loggedIn} isMaster={isMaster}/>}
+{view==='resumoCarros'&&isMaster&&<ResumoCarrosView vehicles={vehicles} requests={requests} finalizacoes={finalizacoesApp} loggedInUser={loggedIn} isMaster={isMaster}/>}
                 {view==='request'&&isSol&&<RequestForm user={user} loggedInUser={loggedIn} vehiclesDB={vehicles} requests={requests}/>}
                 {view==='status'&&<StatusView requests={requests} loggedInUser={loggedIn} vehicles={vehicles}/>}
                 {view==='chegadas'&&<ChegadasView requests={requests} loggedInUser={loggedIn} vehicles={vehicles}/>}
