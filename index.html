@@ -9508,6 +9508,315 @@ function ProblemasProducaoView({vehicles,loggedInUser,isMaster}){
     </div>
   );
 }
+  // ═══════════════════════════════════════════════════════════════════════════
+// RESUMO CARROS — visão única por OS (veículo, lead time, paradas, peças e inspeções)
+// Cole este bloco INTEIRO logo acima da linha:  function App(){
+// ═══════════════════════════════════════════════════════════════════════════
+const RC_CATS=[['ajuste','Ajuste','#F59E0B'],['martelinho','Martelinho','#DC1F1F'],['pintura','Pintura','#2563EB'],['vidro','Vidro','#0EA5E9'],['outro','Estética','#6B7280'],['instalacaoPecas','Instalação Peças','#10B981']];
+const RC_PECA_FALTANDO=['Pendente','Em Cotação','Comprado'];
+
+function RcSecao({titulo,sub,children}){
+  return(
+    <div style={{marginBottom:18}}>
+      <div style={{display:'flex',alignItems:'baseline',gap:8,flexWrap:'wrap',marginBottom:8}}>
+        <p style={{fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--red)',margin:0}}>{titulo}</p>
+        {sub&&<span style={{fontSize:9,fontWeight:700,color:'var(--muted)'}}>{sub}</span>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function ResumoCarrosView({vehicles,requests,finalizacoes,loggedInUser,isMaster}){
+  const{data:base,loading:baseLoad}=useFirestore('leadTimeBase');
+  const{data:problemas,loading:probLoad}=useFirestore('problemasProducao');
+  const[busca,setBusca]=useState('');
+  const[escopo,setEscopo]=useState('producao');
+  const[fParada,setFParada]=useState(false);
+  const[fPeca,setFPeca]=useState(false);
+  const[fSemInsp,setFSemInsp]=useState(false);
+  const[limite,setLimite]=useState(60);
+  const[aberto,setAberto]=useState(null);
+  const[foto,setFoto]=useState(null);
+  useEffect(()=>{setLimite(60);},[busca,escopo,fParada,fPeca,fSemInsp]);
+
+  // ── Índices por OS ──
+  const{pecasPorOS,vdPorOS}=useMemo(()=>{
+    const acc={},vd={};
+    requests.forEach(r=>{
+      const k=String(r.os||'').trim();if(!k)return;
+      if(!vd[k]&&r.vehicleData)vd[k]=r.vehicleData;
+      if(!acc[k])acc[k]={seen:new Set(),items:[]};
+      (r.items||[]).forEach(it=>{
+        const key=it.id||it.description;
+        if(!acc[k].seen.has(key)){acc[k].seen.add(key);acc[k].items.push({...it,_responsavel:r.responsavel,_timestamp:r.timestamp});}
+      });
+    });
+    const m={};Object.entries(acc).forEach(([k,v])=>{m[k]=v.items;});
+    return{pecasPorOS:m,vdPorOS:vd};
+  },[requests]);
+  const finsPorOS=useMemo(()=>{const m={};(finalizacoes||[]).forEach(f=>{const k=String(f.os||'').trim();if(!k)return;(m[k]=m[k]||[]).push(f);});return m;},[finalizacoes]);
+  const probsPorOS=useMemo(()=>{const m={};problemas.forEach(p=>{const k=String(p.os||'').trim();(m[k]=m[k]||[]).push(p);});return m;},[problemas]);
+
+  // ── Lista de carros (Veículos + histórico de lead time + OS que só aparecem em pedidos/inspeções/paradas) ──
+  const carros=useMemo(()=>{
+    const m={};
+    base.forEach(d=>(d.carros||[]).forEach(c=>{const os=String(c.os);m[os]={os,modelo:c.modelo,fabricante:c.fab,e:c.e||null,a:c.a||null,d:c.d||null,q:c.q||null,s:c.s||null};}));
+    vehicles.forEach(v=>{
+      const os=String(v.os).trim();if(!os)return;
+      const ant=m[os]||{};
+      m[os]={...ant,os,modelo:v.modelo||ant.modelo,fabricante:v.fabricante||ant.fabricante,cor:v.cor,chassi:v.chassi,cliente:v.cliente,parceiro:v.parceiro,vendedor:v.vendedor,etapa:v.etapa,localizacao:v.localizacao,linha:v.linhaProducao,obs:v.observacoes,
+        e:v.dataEntrada||ant.e||null,a:v.dataAT||ant.a||null,d:v.dataDesmontagem||ant.d||null,q:v.dataQA||ant.q||null,s:v.dataEntrega||ant.s||null,noVeic:true};
+    });
+    [...Object.keys(pecasPorOS),...Object.keys(finsPorOS),...Object.keys(probsPorOS)].forEach(os=>{
+      if(m[os])return;
+      const vd=vdPorOS[os]||{};
+      m[os]={os,modelo:vd.modelo,fabricante:vd.fabricante,chassi:vd.chassi,cor:vd.cor,linha:vd.linhaProducao,etapa:vd.etapa,localizacao:vd.localizacao,e:null,a:null,d:null,q:null,s:null};
+    });
+    return Object.values(m);
+  },[base,vehicles,pecasPorOS,finsPorOS,probsPorOS,vdPorOS]);
+
+  // ── Resumo calculado por OS ──
+  const linhas=useMemo(()=>{
+    const agora=Date.now();const hoje0=new Date();hoje0.setHours(0,0,0,0);
+    return carros.map(c=>{
+      const pecas=(pecasPorOS[c.os]||[]).filter(it=>!it.excedente);
+      const faltando=pecas.filter(it=>RC_PECA_FALTANDO.includes(it.status||'Pendente'));
+      const atrasadas=faltando.filter(it=>it.status==='Comprado'&&it.deliveryDate&&new Date(it.deliveryDate+'T00:00:00')<hoje0);
+      const probs=probsPorOS[c.os]||[];
+      const abertas=probs.filter(p=>!p.fim);
+      const diasParado=diasUniao(probs.map(p=>{const a=isoParaMs(p.inicio);if(!a)return[0,0];return[a,p.fim?isoParaMs(p.fim):agora];}));
+      const fins=finsPorOS[c.os]||[];
+      const inspPorEtapa={};
+      ETAPAS_INSPECAO.forEach(et=>{
+        const f=fins.filter(x=>etapaOf(x)===et).sort((x,y)=>(x.arquivada?1:0)-(y.arquivada?1:0))[0];
+        if(!f){inspPorEtapa[et]=null;return;}
+        let total=0,pend=0;const porCat={};
+        RC_CATS.forEach(([k])=>{const arr=f[k]||[];porCat[k]=arr.length;total+=arr.length;pend+=arr.filter(p=>p.status!=='Solucionado').length;});
+        inspPorEtapa[et]={fin:f,total,pend,porCat,arquivada:!!f.arquivada};
+      });
+      const inspFeitas=ETAPAS_INSPECAO.filter(et=>inspPorEtapa[et]).length;
+      const entregue=!!c.s||normHeader(c.etapa)==='ENTREGUE'||normHeader(c.localizacao)==='ENTREGUE';
+      const ativo=!!c.noVeic&&!entregue;
+      const reg={e:c.e,a:c.a,d:c.d,q:c.q,s:c.s};
+      const emAndamento=!!c.e&&!c.s;
+      const idxAtual=emAndamento?etapaAtualDoCarro(reg):null;
+      return{...c,pecas,faltando,atrasadas,probs,abertas,diasParado,inspPorEtapa,inspFeitas,entregue,ativo,reg,
+        leadTotal:c.e&&c.s?(c.s-c.e)/DIA_MS:null,
+        diasFabrica:emAndamento?(agora-c.e)/DIA_MS:null,
+        idxAtual,diasEtapa:idxAtual!==null?(agora-[c.e,c.a,c.d,c.q][idxAtual])/DIA_MS:null};
+    });
+  },[carros,pecasPorOS,probsPorOS,finsPorOS]);
+
+  // ── Filtros ──
+  const baseFiltrada=useMemo(()=>{
+    const t=busca.trim().toLowerCase();
+    return linhas.filter(c=>{
+      if(escopo==='producao'&&!c.ativo)return false;
+      if(escopo==='encerrados'&&c.ativo)return false;
+      if(!t)return true;
+      return [c.os,c.modelo,c.chassi,c.cliente,c.parceiro,c.linha,c.fabricante].some(v=>String(v||'').toLowerCase().includes(t));
+    });
+  },[linhas,escopo,busca]);
+  const lista=useMemo(()=>baseFiltrada.filter(c=>(!fParada||c.abertas.length>0)&&(!fPeca||c.faltando.length>0)&&(!fSemInsp||c.inspFeitas===0))
+    .sort((a,b)=>String(b.os).localeCompare(String(a.os),undefined,{numeric:true})),[baseFiltrada,fParada,fPeca,fSemInsp]);
+  const cParada=baseFiltrada.filter(c=>c.abertas.length>0).length;
+  const cPeca=baseFiltrada.filter(c=>c.faltando.length>0).length;
+  const cSemInsp=baseFiltrada.filter(c=>c.inspFeitas===0).length;
+
+  const exportarCSV=()=>{
+    const q=(v)=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
+    const cab=['OS','Modelo','Chassi','Cliente','Linha','Etapa','Localização','Entrada','AT','Desmontagem','QA','Entrega','Lead time (dias)','Dias na fábrica','Paradas','Paradas em aberto','Dias parado','Motivos das paradas','Peças','Peças faltando','Peças atrasadas',...ETAPAS_INSPECAO.map(et=>'Inspeção '+et)];
+    const rows=[cab.map(q).join(';')];
+    lista.forEach(c=>{
+      const motivos=[...new Set(c.probs.map(p=>p.motivo))].join(' | ');
+      rows.push([c.os,c.modelo||'',c.chassi||'',c.cliente||'',c.linha||'',c.etapa||'',c.localizacao||'',fmtDataCurta(c.e),fmtDataCurta(c.a),fmtDataCurta(c.d),fmtDataCurta(c.q),fmtDataCurta(c.s),
+        c.leadTotal!==null?Math.round(c.leadTotal):'',c.diasFabrica!==null?Math.round(c.diasFabrica):'',c.probs.length,c.abertas.length,Math.round(c.diasParado),motivos,c.pecas.length,c.faltando.length,c.atrasadas.length,
+        ...ETAPAS_INSPECAO.map(et=>{const i=c.inspPorEtapa[et];return i?`${i.total} problema(s), ${i.pend} pendente(s)`:'Não realizada';})].map(q).join(';'));
+    });
+    const blob=new Blob(['\uFEFF'+rows.join('\r\n')],{type:'text/csv;charset=utf-8;'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='Resumo_Carros_'+new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')+'.csv';a.click();
+  };
+
+  if(baseLoad||probLoad)return<Skeleton/>;
+
+  const sel=aberto?linhas.find(c=>c.os===aberto):null;
+  const chipFiltro=(ativo,onClick,label,n,cor)=>(
+    <button onClick={onClick} style={{display:'inline-flex',alignItems:'center',gap:6,padding:'7px 12px',borderRadius:999,border:`1.5px solid ${ativo?cor:'var(--border)'}`,background:ativo?cor:'#fff',color:ativo?'#fff':'var(--ink)',fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
+      {label}<span style={{padding:'1px 7px',borderRadius:999,background:ativo?'rgba(255,255,255,.25)':'var(--smoke)',fontSize:9}}>{n}</span>
+    </button>
+  );
+  const corInsp=(i)=>!i?{bg:'var(--smoke)',fg:'var(--muted)',bd:'var(--border)'}:i.pend>0?{bg:'#FFF4E6',fg:'#C45E00',bd:'#FFD9A8'}:{bg:'#EDFAF3',fg:'#059669',bd:'#AAE6C5'};
+
+  return(
+    <div className="fade-up" style={{paddingBottom:40}}>
+      <div style={{marginBottom:16}}>
+        <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.15em',color:'var(--red)',marginBottom:4}}>Visão completa por OS</p>
+        <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',margin:'0 0 14px'}}>
+          <h2 style={{fontSize:30,fontWeight:800,margin:0,letterSpacing:'-.02em'}}>Resumo Carros</h2>
+          <LastUpdateBadge/>
+        </div>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'center',marginBottom:12}}>
+          <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)'}}>
+            {[{k:'producao',l:'Em produção'},{k:'encerrados',l:'Entregues / encerrados'},{k:'todos',l:'Todos'}].map(t=>(
+              <button key={t.k} onClick={()=>setEscopo(t.k)} style={{padding:'8px 14px',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',border:'none',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif',background:escopo===t.k?'#fff':'transparent',color:escopo===t.k?'var(--red)':'var(--muted)',boxShadow:escopo===t.k?'0 2px 8px rgba(0,0,0,.08)':'none',whiteSpace:'nowrap'}}>{t.l}</button>
+            ))}
+          </div>
+          <div style={{position:'relative',flex:1,minWidth:220}}>
+            <input type="text" placeholder="Buscar OS / Modelo / Chassi / Cliente / Linha..." value={busca} onChange={e=>setBusca(e.target.value)} className="input" style={{paddingLeft:36,fontSize:11}}/>
+            <div style={{position:'absolute',left:11,top:'50%',transform:'translateY(-50%)',color:'var(--muted)'}}><Icon name="search" size={14}/></div>
+          </div>
+          <button onClick={exportarCSV} style={{display:'flex',alignItems:'center',gap:6,padding:'10px 14px',background:'#059669',color:'#fff',border:'none',borderRadius:10,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}><Icon name="file-text" size={13}/> Excel</button>
+        </div>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+          {chipFiltro(fParada,()=>setFParada(v=>!v),'Com parada em aberto',cParada,'#DC1F1F')}
+          {chipFiltro(fPeca,()=>setFPeca(v=>!v),'Faltando peça',cPeca,'#C45E00')}
+          {chipFiltro(fSemInsp,()=>setFSemInsp(v=>!v),'Sem nenhuma inspeção',cSemInsp,'#1A1A1A')}
+        </div>
+      </div>
+
+      <p style={{fontSize:9,fontWeight:700,color:'var(--muted)',margin:'0 0 10px'}}>{lista.length} carro(s) · clique em um carro para ver o resumo completo</p>
+
+      {lista.length===0?(
+        <div style={{padding:'56px 20px',textAlign:'center',background:'#fff',borderRadius:16,border:'1.5px dashed var(--border)'}}>
+          <Icon name="car" size={30} style={{margin:'0 auto 10px',display:'block',color:'var(--muted)'}}/>
+          <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',margin:0}}>Nenhum carro encontrado com esses filtros</p>
+        </div>
+      ):(
+        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+          {lista.slice(0,limite).map(c=>(
+            <div key={c.os} onClick={()=>setAberto(c.os)} className="card" style={{cursor:'pointer',padding:'12px 14px',borderLeft:`3px solid ${c.abertas.length?'var(--red)':c.faltando.length?'#F59E0B':'#059669'}`}}>
+              <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:8}}>
+                <span style={{fontSize:14,fontWeight:800}}>OS #{c.os}</span>
+                <span style={{fontSize:9,fontWeight:700,color:'var(--muted)',textTransform:'uppercase'}}>{c.modelo||'—'}</span>
+                {c.linha&&<span className="pill" style={{fontSize:8}}>{c.linha}</span>}
+                {c.etapa&&<span style={{fontSize:8,fontWeight:800,padding:'2px 8px',borderRadius:5,background:'#FFF4E6',border:'1px solid #FFD9A8',color:'#C45E00',textTransform:'uppercase'}}>{c.etapa}</span>}
+                {c.localizacao&&<span style={{fontSize:8,fontWeight:800,padding:'2px 8px',borderRadius:5,background:'#EAF0FF',border:'1px solid #C0D0F5',color:'#1A4EC2',textTransform:'uppercase'}}>{c.localizacao}</span>}
+                <span style={{marginLeft:'auto',fontSize:9,fontWeight:800,color:'var(--muted)'}}>{c.leadTotal!==null?`Lead time: ${fmt1(c.leadTotal)} d`:c.diasFabrica!==null?`${fmt1(c.diasFabrica)} d na fábrica`:''}</span>
+              </div>
+              <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
+                {c.probs.length===0?<span style={{fontSize:8,fontWeight:800,padding:'3px 9px',borderRadius:999,background:'var(--smoke)',color:'var(--muted)',border:'1px solid var(--border)'}}>Sem paradas</span>
+                  :<span style={{fontSize:8,fontWeight:800,padding:'3px 9px',borderRadius:999,background:c.abertas.length?'var(--red)':'#FFF4E6',color:c.abertas.length?'#fff':'#C45E00',border:c.abertas.length?'none':'1px solid #FFD9A8'}}>{c.probs.length} parada(s) · {fmt1(c.diasParado)} d{c.abertas.length?` · ${c.abertas.length} em aberto`:''}</span>}
+                {c.pecas.length===0?<span style={{fontSize:8,fontWeight:800,padding:'3px 9px',borderRadius:999,background:'var(--smoke)',color:'var(--muted)',border:'1px solid var(--border)'}}>Sem pedido de peças</span>
+                  :c.faltando.length>0?<span style={{fontSize:8,fontWeight:800,padding:'3px 9px',borderRadius:999,background:'#FFF4E6',color:'#C45E00',border:'1px solid #FFD9A8'}}>Faltam {c.faltando.length} de {c.pecas.length} peça(s){c.atrasadas.length?` · ${c.atrasadas.length} atrasada(s)`:''}</span>
+                  :<span style={{fontSize:8,fontWeight:800,padding:'3px 9px',borderRadius:999,background:'#EDFAF3',color:'#059669',border:'1px solid #AAE6C5'}}>Peças completas ({c.pecas.length})</span>}
+                <span style={{width:1,height:16,background:'var(--border)',margin:'0 2px'}}/>
+                {ETAPAS_INSPECAO.map(et=>{const i=c.inspPorEtapa[et];const k=corInsp(i);return(
+                  <span key={et} title={i?`${et}: ${i.total} problema(s), ${i.pend} pendente(s)`:`${et}: não realizada`} style={{fontSize:8,fontWeight:800,padding:'3px 8px',borderRadius:6,background:k.bg,color:k.fg,border:'1px solid '+k.bd}}>{et}{i?` · ${i.total}`:' · —'}</span>
+                );})}
+              </div>
+            </div>
+          ))}
+          {lista.length>limite&&<button onClick={()=>setLimite(l=>l+60)} className="btn-ghost" style={{width:'100%'}}>Mostrar mais ({lista.length-limite} restantes)</button>}
+        </div>
+      )}
+
+      {sel&&(
+        <DetailModal title={`OS #${sel.os} — ${sel.modelo||'—'}`} subtitle={[sel.chassi,sel.linha].filter(Boolean).join(' · ')} onClose={()=>setAberto(null)}>
+          <RcSecao titulo="Veículo">
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:'8px 14px'}}>
+              {[['Cliente',sel.cliente],['Parceiro',sel.parceiro],['Vendedor',sel.vendedor],['Fabricante',sel.fabricante],['Cor',sel.cor],['Linha',sel.linha],['Etapa',sel.etapa],['Localização',sel.localizacao]].map(([l,v])=>(
+                <div key={l}><p style={{fontSize:7,fontWeight:700,textTransform:'uppercase',color:'var(--muted)',margin:'0 0 2px'}}>{l}</p><p style={{fontSize:10,fontWeight:700,margin:0,textTransform:'uppercase'}}>{v||'—'}</p></div>
+              ))}
+            </div>
+            {sel.obs&&sel.obs!=='-'&&<p style={{fontSize:10,fontWeight:600,color:'var(--muted)',margin:'8px 0 0'}}>Obs.: {sel.obs}</p>}
+          </RcSecao>
+
+          <RcSecao titulo="Lead time" sub={sel.leadTotal!==null?`Total: ${fmt1(sel.leadTotal)} dias`:sel.diasFabrica!==null?`${fmt1(sel.diasFabrica)} dias na fábrica até agora`:'Sem data de entrada'}>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))',gap:8}}>
+              {AREAS_PROD.map((a,i)=>{
+                const dur=duracaoEtapa(sel.reg,i);const atual=sel.idxAtual===i;
+                const[ini,fim]=janelaEtapa(sel.reg,i);
+                return(
+                  <div key={a.k} style={{background:atual?'var(--red-light)':'var(--smoke)',border:`1.5px solid ${atual?'#FFBDBD':'var(--border)'}`,borderTop:`4px solid ${a.cor}`,borderRadius:10,padding:10}}>
+                    <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',margin:'0 0 6px'}}>{a.curto}</p>
+                    <p style={{fontSize:18,fontWeight:800,margin:0,color:atual?'var(--red)':'var(--ink)'}}>{dur!==null?fmt1(dur)+' d':atual?fmt1(sel.diasEtapa)+' d':'—'}</p>
+                    <p style={{fontSize:8,fontWeight:700,color:'var(--muted)',margin:'3px 0 0'}}>{atual?'em andamento':`${fmtDataCurta(ini)} → ${fmtDataCurta(fim)}`}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </RcSecao>
+
+          <RcSecao titulo="Paradas de produção" sub={sel.probs.length?`${sel.probs.length} ocorrência(s) · ${fmt1(sel.diasParado)} dia(s) parado · ${sel.abertas.length} em aberto`:''}>
+            {sel.probs.length===0?<p style={{fontSize:10,color:'var(--muted)',margin:0}}>Nenhuma parada registrada para esta OS.</p>:(
+              <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                {[...sel.probs].sort((a,b)=>String(a.inicio).localeCompare(String(b.inicio))).map(p=><ProblemaCard key={p.id} p={p} onFoto={setFoto} compacto/>)}
+              </div>
+            )}
+          </RcSecao>
+
+          <RcSecao titulo="Peças" sub={sel.pecas.length?`${sel.pecas.length} item(ns) · ${sel.faltando.length} faltando${sel.atrasadas.length?` · ${sel.atrasadas.length} atrasada(s)`:''}`:''}>
+            {sel.pecas.length===0?<p style={{fontSize:10,color:'var(--muted)',margin:0}}>Nenhum pedido de peças para esta OS.</p>:(
+              <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                {sel.pecas.map((it,i)=>{
+                  const atras=it.status==='Comprado'&&it.deliveryDate&&new Date(it.deliveryDate+'T00:00:00')<new Date(new Date().setHours(0,0,0,0));
+                  return(
+                    <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',background:'var(--smoke)',border:'1px solid var(--border)',borderRadius:9,flexWrap:'wrap'}}>
+                      <span style={{fontSize:10,fontWeight:800,textTransform:'uppercase',flex:1,minWidth:140}}>{it.quantity}× {it.description||'(sem descrição)'}</span>
+                      <StatusBadge status={it.status||'Pendente'} orig={it.statusOriginal}/>
+                      {it.deliveryDate&&it.status!=='Concluído'&&<span style={{fontSize:8,fontWeight:700,color:atras?'var(--red)':'var(--muted)'}}>Prazo {new Date(it.deliveryDate+'T00:00:00').toLocaleDateString('pt-BR')}{atras?' (atrasada)':''}</span>}
+                      {it.actualDeliveryDate&&<span style={{fontSize:8,fontWeight:700,color:'#059669'}}>Entregue {new Date(it.actualDeliveryDate+'T00:00:00').toLocaleDateString('pt-BR')}</span>}
+                      {it.receivedFrom&&<span style={{fontSize:8,fontWeight:700,color:'#0A6B34'}}>Recebida da OS #{it.receivedFrom}</span>}
+                      {it.donatedTo&&!it.receivedFrom&&<span style={{fontSize:8,fontWeight:700,color:'var(--red)'}}>Doada p/ OS #{it.donatedTo}</span>}
+                      {it.recebidoDoEstoque&&<span style={{fontSize:8,fontWeight:700,color:'#6B21A8'}}>Do estoque</span>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </RcSecao>
+
+          <RcSecao titulo="Inspeções" sub={`${sel.inspFeitas} de ${ETAPAS_INSPECAO.length} realizadas`}>
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              {ETAPAS_INSPECAO.map(et=>{
+                const i=sel.inspPorEtapa[et];const k=corInsp(i);
+                if(!i)return(
+                  <div key={et} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',background:'var(--smoke)',border:'1px dashed var(--border)',borderRadius:10}}>
+                    <span style={{fontSize:9,fontWeight:800,padding:'2px 9px',borderRadius:999,background:'#fff',border:'1px solid var(--border)'}}>{et}</span>
+                    <span style={{fontSize:10,fontWeight:700,color:'var(--muted)'}}>Não realizada</span>
+                  </div>
+                );
+                const defeitos={};
+                RC_CATS.forEach(([ck])=>(i.fin[ck]||[]).forEach(p=>{if(!p.defeito)return;const nome=p.defeito==='OUTRO'&&p.defeitoOutro?'OUTRO: '+p.defeitoOutro:p.defeito;defeitos[nome]=(defeitos[nome]||0)+1;}));
+                return(
+                  <div key={et} style={{padding:'10px 12px',background:k.bg,border:'1px solid '+k.bd,borderRadius:10}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:i.arquivada?4:6}}>
+                      <span style={{fontSize:9,fontWeight:800,padding:'2px 9px',borderRadius:999,background:'var(--ink)',color:'#fff'}}>{et}</span>
+                      <span style={{fontSize:10,fontWeight:800,color:k.fg}}>{i.total} problema(s) · {i.pend} pendente(s)</span>
+                      <span style={{marginLeft:'auto',fontSize:8,fontWeight:700,color:'var(--muted)'}}>por {i.fin.criadoPor||'—'} em {i.fin.criadoEm?new Date(i.fin.criadoEm).toLocaleDateString('pt-BR'):'—'}</span>
+                    </div>
+                    {i.arquivada&&<p style={{fontSize:9,fontWeight:600,color:'var(--muted)',margin:'0 0 4px'}}>Inspeção arquivada — os detalhes ficam no PDF do Histórico.</p>}
+                    <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
+                      {RC_CATS.filter(([ck])=>i.porCat[ck]>0).map(([ck,label,cor])=>(
+                        <span key={ck} style={{fontSize:8,fontWeight:700,padding:'2px 8px',borderRadius:5,background:cor+'18',color:cor,border:`1px solid ${cor}55`}}>{label}: {i.porCat[ck]}</span>
+                      ))}
+                      {i.total===0&&!i.arquivada&&<span style={{fontSize:9,fontWeight:700,color:'#059669'}}>Nenhum problema apontado</span>}
+                    </div>
+                    {Object.keys(defeitos).length>0&&(
+                      <div style={{display:'flex',gap:5,flexWrap:'wrap',marginTop:6}}>
+                        {Object.entries(defeitos).sort((a,b)=>b[1]-a[1]).map(([nome,n])=>(
+                          <span key={nome} style={{fontSize:8,fontWeight:800,textTransform:'uppercase',padding:'2px 8px',borderRadius:999,background:'#fff',border:'1px solid var(--border)'}}>{nome}{n>1?` ×${n}`:''}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </RcSecao>
+        </DetailModal>
+      )}
+
+      {foto&&ReactDOM.createPortal((
+        <div onClick={()=>setFoto(null)} style={{position:'fixed',inset:0,zIndex:1000,background:'rgba(0,0,0,.92)',display:'flex',alignItems:'center',justifyContent:'center',padding:16,cursor:'zoom-out'}}>
+          <img src={foto} alt="Foto ampliada" style={{maxWidth:'100%',maxHeight:'100%',borderRadius:12}}/>
+        </div>
+      ),document.body)}
+    </div>
+  );
+}
+
 function App(){
   const[user,setUser]=useState(null);
   const[loggedIn,setLoggedIn]=useState(()=>{try{const s=localStorage.getItem('vrz_session');return s?JSON.parse(s):null;}catch(e){return null;}});
