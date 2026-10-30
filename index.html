@@ -9759,12 +9759,13 @@ function ResumoCarrosView({vehicles,requests,finalizacoes,loggedInUser,isMaster}
             <div style={{position:'absolute',left:11,top:'50%',transform:'translateY(-50%)',color:'var(--muted)'}}><Icon name="search" size={14}/></div>
           </div>
           <button onClick={exportarCSV} style={{display:'flex',alignItems:'center',gap:6,padding:'10px 14px',background:'#059669',color:'#fff',border:'none',borderRadius:10,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}><Icon name="file-text" size={13}/> Excel</button>
+          <button onClick={()=>exportarPDF(lista,'Resumo_Carros_Geral.pdf','VRZ - RESUMO DE CARROS')} disabled={gerandoPdf||!lista.length} style={{display:'flex',alignItems:'center',gap:6,padding:'10px 14px',background:gerandoPdf||!lista.length?'var(--muted)':'#2563EB',color:'#fff',border:'none',borderRadius:10,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:gerandoPdf||!lista.length?'not-allowed':'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
+            {gerandoPdf?<Icon name="refresh-cw" size={13} className="spin"/>:<Icon name="printer" size={13}/>} PDF ({lista.length})
+          </button>
         </div>
         <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
                     {chipFiltro(fParada,()=>setFParada(v=>!v),'Com parada em aberto',cParada,'#DC1F1F')}
-          <button onClick={()=>exportarPDF(lista,'Resumo_Carros_Geral.pdf','VRZ - RESUMO DE CARROS')} disabled={gerandoPdf||!lista.length} style={{display:'inline-flex',alignItems:'center',gap:6,padding:'7px 14px',marginLeft:'auto',background:gerandoPdf||!lista.length?'var(--smoke)':'#2563EB',color:gerandoPdf||!lista.length?'var(--muted)':'#fff',border:'none',borderRadius:999,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:gerandoPdf||!lista.length?'not-allowed':'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
-            {gerandoPdf?<Icon name="refresh-cw" size={13} className="spin"/>:<Icon name="printer" size={13}/>} PDF ({lista.length})
-          </button>
+          
           {chipFiltro(fPeca,()=>setFPeca(v=>!v),'Faltando peça',cPeca,'#C45E00')}
           {chipFiltro(fSemInsp,()=>setFSemInsp(v=>!v),'Sem nenhuma inspeção',cSemInsp,'#1A1A1A')}
         </div>
