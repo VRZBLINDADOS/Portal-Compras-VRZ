@@ -9920,6 +9920,14 @@ function ResumoCarrosView({vehicles,requests,finalizacoes,loggedInUser,isMaster}
   );
 }
 
+const GESTAO_GRUPOS=[
+  {k:'pedidos',label:'Pedidos',icon:'clipboard-list',tabs:['pending','quoting','bought','overdue','completed']},
+  {k:'doacoes',label:'Doações e Exclusões',icon:'git-merge',tabs:['donated','cancelDonation','deletedItems','excedentes']},
+  {k:'veiculos',label:'Veículos',icon:'car',tabs:['vehicles','limpezaVeiculos']},
+  {k:'sistema',label:'Sistema',icon:'settings',tabs:['users','storage'],soMaster:true},
+];
+const gestaoGrupoDe=(sv)=>(GESTAO_GRUPOS.find(g=>g.tabs.includes(sv))||GESTAO_GRUPOS[0]).k;
+
 function App(){
   const[user,setUser]=useState(null);
   const[loggedIn,setLoggedIn]=useState(()=>{try{const s=localStorage.getItem('vrz_session');return s?JSON.parse(s):null;}catch(e){return null;}});
@@ -10331,38 +10339,59 @@ const navItems=[
                         <LastUpdateBadge/>
                       </div>
                     </div>
-                   <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginBottom:16,flexWrap:'wrap'}}>
-  <button onClick={()=>setShowImport(true)} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 18px',background:'var(--ink)',color:'#fff',border:'none',borderRadius:10,fontSize:10,fontWeight:800,textTransform:'uppercase',cursor:'pointer',letterSpacing:'.08em',borderBottom:'3px solid var(--red)',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
-    <Icon name="file-up" size={14}/> Importar Planilha
-  </button>
-  <button onClick={()=>setSubView('cancelDonation')} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 18px',background:'var(--red)',color:'#fff',border:'none',borderRadius:10,fontSize:10,fontWeight:800,textTransform:'uppercase',cursor:'pointer',letterSpacing:'.08em',borderBottom:'3px solid var(--red-deep)',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
-    <Icon name="undo-2" size={14}/> Cancelar Doação
-  </button>
-  <button onClick={()=>setSubView('deletedItems')} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 18px',background:'#7C3AED',color:'#fff',border:'none',borderRadius:10,fontSize:10,fontWeight:800,textTransform:'uppercase',cursor:'pointer',letterSpacing:'.08em',borderBottom:'3px solid #5B21B6',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
-    <Icon name="archive-restore" size={14}/> Itens Excluídos
-  </button>
-</div>
-                    <div style={{display:'flex',gap:4,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)',overflowX:'auto',marginBottom:20}}>
-                      {[
-                        {key:'pending',label:`Pendentes (${tabCounts.pending})`,color:'#C45E00'},
-                        {key:'quoting',label:`Em Cotação (${tabCounts.quoting})`,color:'#1A4EC2'},
-                       {key:'bought',label:`Comprado (${tabCounts.bought})`,color:'#6B21A8'},
-                       {key:'overdue',label:`⚠ Atrasados (${tabCounts.overdue||0})`,color:'#DC1F1F'},
-                       {key:'completed',label:`Concluídos (${tabCounts.completed})`,color:'#0A6B34'},
-                        {key:'donated',label:`Doados (${tabCounts.donated})`,color:'#A81515'},
-                                              {key:'vehicles',label:`Veículos (${vehicles.length})`,color:'var(--ink)'},
-                        isMaster&&{key:'limpezaVeiculos',label:'Limpar Veículos',color:'#DC2626'},
-                        isMaster&&{key:'excedentes',label:`Pedidos Excedentes (${excedentesCount})`,color:'#DC2626'},
-                        isMaster&&{key:'users',label:'Usuários',color:'var(--red)'},
-                        isMaster&&{key:'storage',label:'Capacidade',color:'#7C3AED'},
-                      ].filter(Boolean).map(t=>(
-                        <button key={t.key} onClick={()=>setSubView(t.key)} style={{padding:'8px 14px',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',whiteSpace:'nowrap',border:'none',cursor:'pointer',letterSpacing:'.06em',transition:'all .15s',background:subView===t.key?'#fff':'transparent',color:subView===t.key?t.color:'var(--muted)',boxShadow:subView===t.key?'0 2px 8px rgba(0,0,0,.08)':'none',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
-                          {t.label}
-                        </button>
-                      ))}
-                    </div>
-
-                                                {subView==='users'&&isMaster&&<UserManagement users={users} onAdd={addUser} onDelete={deleteUser} onToggle={toggleUser} onRole={changeRole} onFinalizacaoAccess={toggleFinalizacaoAccess} onCleanDuplicates={cleanDuplicateUsers} loggedInUser={loggedIn} customRoles={customRolesData} onSaveCustomRole={saveCustomRole} onDeleteCustomRole={deleteCustomRole} onAssignCustomRole={assignCustomRole} onSaveAccess={saveUserAccess} onResetAccess={resetUserAccess}/>}
+     {(()=>{
+  const grupoAtual=gestaoGrupoDe(subView);
+  const tabsDef={
+    pending:{label:`Pendentes (${tabCounts.pending})`,color:'#C45E00'},
+    quoting:{label:`Em Cotação (${tabCounts.quoting})`,color:'#1A4EC2'},
+    bought:{label:`Comprado (${tabCounts.bought})`,color:'#6B21A8'},
+    overdue:{label:`⚠ Atrasados (${tabCounts.overdue||0})`,color:'#DC1F1F'},
+    completed:{label:`Concluídos (${tabCounts.completed})`,color:'#0A6B34'},
+    donated:{label:`Doados (${tabCounts.donated})`,color:'#A81515'},
+    cancelDonation:{label:'Cancelar Doação',color:'#DC1F1F'},
+    deletedItems:{label:'Itens Excluídos',color:'#7C3AED'},
+    excedentes:{label:`Pedidos Excedentes (${excedentesCount})`,color:'#DC2626'},
+    vehicles:{label:`Veículos (${vehicles.length})`,color:'var(--ink)'},
+    limpezaVeiculos:{label:'Limpar Veículos',color:'#DC2626'},
+    users:{label:'Usuários',color:'var(--red)'},
+    storage:{label:'Capacidade',color:'#7C3AED'},
+  };
+  const masterOnly=['cancelDonation','deletedItems','excedentes','limpezaVeiculos','users','storage'];
+  const gruposVisiveis=GESTAO_GRUPOS.filter(g=>!g.soMaster||isMaster);
+  const abas=(GESTAO_GRUPOS.find(g=>g.k===grupoAtual)?.tabs||[]).filter(k=>isMaster||!masterOnly.includes(k));
+  return(
+    <>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:8,marginBottom:12}}>
+        {gruposVisiveis.map(g=>{
+          const ativo=g.k===grupoAtual;
+          return(
+            <button key={g.k} onClick={()=>{if(!ativo)setSubView(g.tabs[0]);}} style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,padding:'12px 8px',borderRadius:12,border:ativo?'1.5px solid var(--ink)':'1.5px solid var(--border)',borderBottom:`3px solid ${ativo?'var(--red)':'var(--border)'}`,background:ativo?'var(--ink)':'#fff',color:ativo?'#fff':'var(--ink)',fontSize:10,fontWeight:800,textTransform:'uppercase',letterSpacing:'.06em',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
+              <Icon name={g.icon} size={15}/> <span>{g.label}</span>
+              {g.k==='pedidos'&&tabCounts.overdue>0&&<span style={{background:'var(--red)',color:'#fff',borderRadius:999,fontSize:8,fontWeight:800,minWidth:16,height:16,display:'inline-flex',alignItems:'center',justifyContent:'center',padding:'0 4px'}}>{tabCounts.overdue}</span>}
+            </button>
+          );
+        })}
+      </div>
+      {grupoAtual==='veiculos'&&(
+        <div style={{display:'flex',justifyContent:'flex-end',marginBottom:12}}>
+          <button onClick={()=>setShowImport(true)} style={{display:'flex',alignItems:'center',gap:8,padding:'10px 18px',background:'var(--ink)',color:'#fff',border:'none',borderRadius:10,fontSize:10,fontWeight:800,textTransform:'uppercase',cursor:'pointer',letterSpacing:'.08em',borderBottom:'3px solid var(--red)',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
+            <Icon name="file-up" size={14}/> Importar Planilha
+          </button>
+        </div>
+      )}
+      <div style={{display:'flex',gap:4,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)',overflowX:'auto',marginBottom:20}}>
+        {abas.map(k=>{
+          const t=tabsDef[k];
+          return(
+            <button key={k} onClick={()=>setSubView(k)} style={{padding:'8px 14px',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',whiteSpace:'nowrap',border:'none',cursor:'pointer',letterSpacing:'.06em',transition:'all .15s',background:subView===k?'#fff':'transparent',color:subView===k?t.color:'var(--muted)',boxShadow:subView===k?'0 2px 8px rgba(0,0,0,.08)':'none',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+    </>
+  );
+})()} users={users} onAdd={addUser} onDelete={deleteUser} onToggle={toggleUser} onRole={changeRole} onFinalizacaoAccess={toggleFinalizacaoAccess} onCleanDuplicates={cleanDuplicateUsers} loggedInUser={loggedIn} customRoles={customRolesData} onSaveCustomRole={saveCustomRole} onDeleteCustomRole={deleteCustomRole} onAssignCustomRole={assignCustomRole} onSaveAccess={saveUserAccess} onResetAccess={resetUserAccess}/>}
 {subView==='storage'&&isMaster&&<StorageView requests={requests} loggedInUser={loggedIn}/>}
 {subView==='cancelDonation'&&isMaster&&<CancelDonationView requests={requests} loggedInUser={loggedIn}/>}
 {subView==='deletedItems'&&isMaster&&<DeletedItemsView loggedInUser={loggedIn}/>}
