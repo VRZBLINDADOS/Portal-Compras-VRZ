@@ -4611,7 +4611,9 @@ async function buildFinalizacaoPDF(fin, pecasItems, comFoto=true){
     for(const[i,p] of items.entries()){
       if(y>255){doc.addPage();y=15;}
       doc.setFont('helvetica','bold');doc.setFontSize(9);
-      doc.text(`${i+1}. ${p.status==='Solucionado'?'[SOLUCIONADO] ':'[PENDENTE] '}${p.descricao||'(sem descrição)'}${p.tipo?' ['+p.tipo+']':''}`,12,y);y+=6;
+           const defTxt=p.defeito?`[${p.defeito==='OUTRO'&&p.defeitoOutro?'OUTRO: '+p.defeitoOutro:p.defeito}] `:'';
+      const tituloProb=doc.splitTextToSize(`${i+1}. ${p.status==='Solucionado'?'[SOLUCIONADO] ':'[PENDENTE] '}${defTxt}${p.descricao||'(sem descrição)'}${p.tipo?' ['+p.tipo+']':''}`,185);
+      doc.text(tituloProb,12,y);y+=tituloProb.length*4.5+1.5;
       if(p.status==='Solucionado'&&p.resolvidoPor){doc.setFont('helvetica','normal');doc.setFontSize(8);doc.text(`Resolvido por ${p.resolvidoPor} em ${p.resolvidoEm?new Date(p.resolvidoEm).toLocaleString('pt-BR'):''}`,14,y);y+=6;}
       if(comFoto&&p.foto){
         const dataUrl=await fotoParaDataURL(p.foto);
