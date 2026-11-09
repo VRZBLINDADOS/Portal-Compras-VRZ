@@ -1402,9 +1402,10 @@ function FinalizacaoAnalyticsReuniaoView({finalizacoes,requests,vehicles,linhasF
           })}
         </div>
       </div>
-<ParetoDefeitosCard ativas={ativasFiltradas} vehicleMap={vehicleMap} categorias={CATS_VIS}/>
+
      <div className="card" style={{padding:20,marginBottom:16}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8,marginBottom:4}}>
+          <ParetoDefeitosCard ativas={ativasFiltradas} vehicleMap={vehicleMap} categorias={CATS_VIS}/>
           <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',margin:0}}>Frequência de Problemas por Carro</p>
           <span className="pill" style={{fontSize:8}}>{stats.totalInspecoes} {stats.totalInspecoes===1?'OS no período':"OS's no período"}</span>
         </div>
