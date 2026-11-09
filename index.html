@@ -128,6 +128,89 @@ canvas{display:block}
 .progress-fill{height:100%;border-radius:999px;transition:width .7s cubic-bezier(.22,1,.36,1)}
 .btn-bought{background:#F3E8FF;color:#6B21A8;border:1px solid #D8B4FE;border-radius:8px;padding:6px 12px;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;cursor:pointer;transition:all .18s;display:flex;align-items:center;gap:5px;font-family:'Plus Jakarta Sans',sans-serif}
 .btn-bought:hover{background:#6B21A8;color:#fff;border-color:#6B21A8}
+  
+/* =========================================
+   IMPRESSÃO COMPLETA DO PORTAL VRZ
+========================================= */
+@media print {
+
+  @page {
+    size: A4 portrait;
+    margin: 10mm;
+  }
+
+  html, body {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  #root,
+  #root > div {
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* Esconde menus e navegação */
+  #desktop-nav,
+  #mobile-header,
+  .bottom-nav,
+  .bottom-nav {
+    display: none !important;
+  }
+
+  /* Libera a área principal */
+  #root main {
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    flex: none !important;
+  }
+
+  #main-pad {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+
+  /* Libera todas as rolagens internas */
+  .scroll-y,
+  .table-scroll {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* Evita cortes nos cartões e gráficos */
+  .card {
+    overflow: visible !important;
+    break-inside: avoid;
+  }
+
+  canvas {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+
+}
+
 </style>
 <script src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
