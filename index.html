@@ -224,6 +224,9 @@ canvas{display:block}
 <script src="https://unpkg.com/lucide@0.383.0/dist/umd/lucide.min.js" onerror="var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/lucide@0.383.0/dist/umd/lucide.min.js';document.head.appendChild(s);"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 </head>
 <body>
 <div id="root"></div>
@@ -10152,6 +10155,395 @@ function ResumoCarrosView({vehicles,requests,finalizacoes,loggedInUser,isMaster}
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// TESTE DE INSPEÇÃO 3D — somente Master 1
+// ═══════════════════════════════════════════════════════════════════════════
+const ZONAS_INSP=[
+  {k:'capo',label:'Capô'},
+  {k:'para_choque_diant',label:'Para-choque dianteiro'},
+  {k:'para_lama_diant_esq',label:'Paralama dianteiro esquerdo'},
+  {k:'para_lama_diant_dir',label:'Paralama dianteiro direito'},
+  {k:'porta_diant_esq',label:'Porta dianteira esquerda'},
+  {k:'porta_diant_dir',label:'Porta dianteira direita'},
+  {k:'porta_tras_esq',label:'Porta traseira esquerda'},
+  {k:'porta_tras_dir',label:'Porta traseira direita'},
+  {k:'lateral_tras_esq',label:'Lateral traseira esquerda'},
+  {k:'lateral_tras_dir',label:'Lateral traseira direita'},
+  {k:'teto',label:'Teto'},
+  {k:'porta_malas',label:'Porta-malas'},
+  {k:'para_choque_tras',label:'Para-choque traseiro'},
+  {k:'para_brisa',label:'Para-brisa'},
+  {k:'vidro_traseiro',label:'Vidro traseiro'},
+];
+// Mesmas categorias da inspeção atual (cor = cor da peça marcada no carro)
+const CATS_TESTE=[['ajuste','Ajuste','#F59E0B'],['martelinho','Martelinho','#DC1F1F'],['pintura','Pintura','#2563EB'],['vidro','Vidro','#0EA5E9'],['outro','Estética','#6B7280'],['instalacaoPecas','Instalação Peças','#10B981']];
+// Cadastre aqui os .glb reais: chave = modelo do veículo normalizado, valor = caminho/URL do arquivo.
+// Dentro do .glb, cada peça clicável precisa ter o NOME do objeto igual ao "k" da lista ZONAS_INSP (ex: porta_diant_esq).
+// Exemplo: 'amarok':'modelos/amarok.glb'
+const MODELOS_3D={};
+const COR_CARRO='#E9E5DC';
+// [zona, posição, tamanho, rotação Z, ehVidro] — carro genérico (frente = +X, lado esquerdo = -Z)
+const PECAS_PROC=[
+  ['capo',[1.4,0.95,0],[1.16,0.1,1.76]],
+  ['para_choque_diant',[2.2,0.5,0],[0.2,0.4,1.9]],
+  ['para_lama_diant_esq',[1.4,0.65,-0.95],[1.16,0.6,0.1]],
+  ['para_lama_diant_dir',[1.4,0.65,0.95],[1.16,0.6,0.1]],
+  ['porta_diant_esq',[0.375,0.65,-0.95],[0.81,0.6,0.1]],
+  ['porta_diant_dir',[0.375,0.65,0.95],[0.81,0.6,0.1]],
+  ['porta_tras_esq',[-0.5,0.65,-0.95],[0.86,0.6,0.1]],
+  ['porta_tras_dir',[-0.5,0.65,0.95],[0.86,0.6,0.1]],
+  ['lateral_tras_esq',[-1.475,0.65,-0.95],[1.01,0.6,0.1]],
+  ['lateral_tras_dir',[-1.475,0.65,0.95],[1.01,0.6,0.1]],
+  ['teto',[-0.15,1.58,0],[1.5,0.06,1.6]],
+  ['porta_malas',[-1.55,0.95,0],[0.86,0.1,1.76]],
+  ['para_choque_tras',[-2.2,0.5,0],[0.2,0.4,1.9]],
+  ['para_brisa',[0.775,1.275,0],[0.05,0.652,1.6],0.567,true],
+  ['vidro_traseiro',[-1.025,1.275,0],[0.05,0.604,1.6],-0.427,true],
+];
+
+function Carro3D({marcacoes,selecionada,onSelect,modeloUrl}){
+  const mountRef=useRef(null);
+  const dadosRef=useRef({});
+  const apiRef=useRef({});
+  dadosRef.current={marcacoes,selecionada,onSelect};
+
+  useEffect(()=>{
+    const el=mountRef.current;
+    if(!el||!window.THREE)return;
+    const T=window.THREE;
+    const meshes={};const clicaveis=[];
+    const renderer=new T.WebGLRenderer({antialias:true,alpha:true});
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+    renderer.setSize(el.clientWidth||600,el.clientHeight||420,false);
+    const dom=renderer.domElement;
+    dom.style.cssText='width:100%;height:100%;display:block;touch-action:none';
+    el.appendChild(dom);
+    const scene=new T.Scene();
+    const camera=new T.PerspectiveCamera(40,(el.clientWidth||600)/(el.clientHeight||420),0.1,100);
+    camera.position.set(5.5,3,5.5);
+    let controls=null;
+    if(T.OrbitControls){
+      controls=new T.OrbitControls(camera,dom);
+      controls.target.set(0,0.8,0);
+      controls.enableDamping=true;
+      controls.minDistance=4;controls.maxDistance=12;
+      controls.maxPolarAngle=Math.PI/2.05;
+      controls.update();
+    }
+    scene.add(new T.AmbientLight(0xffffff,0.75));
+    const sol=new T.DirectionalLight(0xffffff,0.9);sol.position.set(4,8,5);scene.add(sol);
+    const sol2=new T.DirectionalLight(0xffffff,0.35);sol2.position.set(-5,3,-4);scene.add(sol2);
+
+    const plat=new T.Mesh(new T.CylinderGeometry(3.4,3.4,0.06,64),new T.MeshStandardMaterial({color:'#15171C'}));
+    plat.position.y=-0.03;scene.add(plat);
+    const anel=new T.Mesh(new T.RingGeometry(3.3,3.4,64),new T.MeshBasicMaterial({color:'#DC1F1F',side:T.DoubleSide}));
+    anel.rotation.x=-Math.PI/2;anel.position.y=0.005;scene.add(anel);
+
+    const registrar=(mesh,zona)=>{
+      mesh.material=mesh.material.clone();
+      mesh.userData.zona=zona;
+      mesh.userData.base='#'+mesh.material.color.getHexString();
+      mesh.userData.opac=mesh.material.opacity;
+      (meshes[zona]=meshes[zona]||[]).push(mesh);
+      clicaveis.push(mesh);
+    };
+    const aplicarCores=()=>{
+      const{marcacoes:ms,selecionada:sel}=dadosRef.current;
+      Object.entries(meshes).forEach(([zona,arr])=>{
+        const daZ=(ms||[]).filter(m=>m.zona===zona);
+        const cat=daZ.length?CATS_TESTE.find(c=>c[0]===daZ[daZ.length-1].categoria):null;
+        const ativa=sel===zona;
+        arr.forEach(mesh=>{
+          mesh.material.color.set(ativa?'#FF8A00':cat?cat[2]:mesh.userData.base);
+          if(mesh.material.emissive)mesh.material.emissive.set(ativa?'#552200':'#000000');
+          mesh.material.opacity=(ativa||cat)?1:mesh.userData.opac;
+        });
+      });
+    };
+    apiRef.current.aplicar=aplicarCores;
+
+    const caixa=(tam,pos,cor,rotZ)=>{
+      const m=new T.Mesh(new T.BoxGeometry(tam[0],tam[1],tam[2]),new T.MeshStandardMaterial({color:cor,metalness:0.2,roughness:0.6}));
+      m.position.set(pos[0],pos[1],pos[2]);
+      if(rotZ)m.rotation.z=rotZ;
+      return m;
+    };
+
+    let cancelado=false;
+    if(modeloUrl&&T.GLTFLoader){
+      new T.GLTFLoader().load(modeloUrl,gltf=>{
+        if(cancelado)return;
+        gltf.scene.traverse(o=>{if(o.isMesh&&ZONAS_INSP.some(z=>z.k===o.name))registrar(o,o.name);});
+        scene.add(gltf.scene);
+        aplicarCores();
+      },undefined,err=>console.warn('Falha ao carregar modelo 3D:',err));
+    }else{
+      scene.add(caixa([4.4,0.6,1.8],[0,0.6,0],'#2A2A2E'));
+      scene.add(caixa([1.7,0.55,1.6],[-0.15,1.275,0],'#1B2733'));
+      [[1.4,-0.88],[1.4,0.88],[-1.4,-0.88],[-1.4,0.88]].forEach(([x,z])=>{
+        const r=new T.Mesh(new T.CylinderGeometry(0.36,0.36,0.24,24),new T.MeshStandardMaterial({color:'#111111'}));
+        r.rotation.x=Math.PI/2;r.position.set(x,0.36,z);scene.add(r);
+      });
+      PECAS_PROC.forEach(([zona,pos,tam,rot,vidro])=>{
+        const m=caixa(tam,pos,vidro?'#7FB6D9':COR_CARRO,rot);
+        if(vidro){m.material.transparent=true;m.material.opacity=0.65;}
+        scene.add(m);registrar(m,zona);
+      });
+      aplicarCores();
+    }
+
+    const ray=new T.Raycaster(),mouse=new T.Vector2();
+    let down=null;
+    const onDown=e=>{down={x:e.clientX,y:e.clientY};};
+    const onUp=e=>{
+      if(!down)return;
+      const dx=e.clientX-down.x,dy=e.clientY-down.y;down=null;
+      if(Math.hypot(dx,dy)>5)return; // foi arraste (girar), não clique
+      const r=dom.getBoundingClientRect();
+      mouse.x=((e.clientX-r.left)/r.width)*2-1;
+      mouse.y=-((e.clientY-r.top)/r.height)*2+1;
+      ray.setFromCamera(mouse,camera);
+      const hit=ray.intersectObjects(clicaveis,false)[0];
+      if(hit&&dadosRef.current.onSelect)dadosRef.current.onSelect(hit.object.userData.zona);
+    };
+    dom.addEventListener('pointerdown',onDown);
+    dom.addEventListener('pointerup',onUp);
+
+    const ro=typeof ResizeObserver!=='undefined'?new ResizeObserver(()=>{
+      const w=el.clientWidth,h=el.clientHeight;if(!w||!h)return;
+      renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();
+    }):null;
+    if(ro)ro.observe(el);
+
+    let raf;
+    const loop=()=>{raf=requestAnimationFrame(loop);if(controls)controls.update();renderer.render(scene,camera);};
+    loop();
+
+    return()=>{
+      cancelado=true;cancelAnimationFrame(raf);
+      if(ro)ro.disconnect();
+      dom.removeEventListener('pointerdown',onDown);
+      dom.removeEventListener('pointerup',onUp);
+      if(controls)controls.dispose();
+      renderer.dispose();
+      if(el.contains(dom))el.removeChild(dom);
+      apiRef.current.aplicar=null;
+    };
+  },[modeloUrl]);
+
+  useEffect(()=>{if(apiRef.current.aplicar)apiRef.current.aplicar();},[marcacoes,selecionada]);
+
+  if(!window.THREE)return <div style={{padding:30,textAlign:'center',fontSize:11,fontWeight:700,color:'var(--red)'}}>Biblioteca 3D não carregou. Verifique a conexão e recarregue a página.</div>;
+  return <div ref={mountRef} style={{width:'100%',height:'min(62vh,460px)',minHeight:300,position:'relative',overflow:'hidden',background:'radial-gradient(circle at 50% 35%,#2A2F3A,#0D0D0D)'}}/>;
+}
+
+function TesteInspecaoView({vehiclesDB,loggedInUser}){
+  const{data:testes}=useFirestore('testeInspecao');
+  const[etapa,setEtapa]=useState('');
+  const[os,setOs]=useState('');
+  const[vehicle,setVehicle]=useState(null);
+  const[marcacoes,setMarcacoes]=useState([]);
+  const[zona,setZona]=useState(null);
+  const[editId,setEditId]=useState(null);
+  const[categoria,setCategoria]=useState('ajuste');
+  const[defeito,setDefeito]=useState('');
+  const[defeitoOutro,setDefeitoOutro]=useState('');
+  const[descricao,setDescricao]=useState('');
+  const[foto,setFoto]=useState(null);
+  const[saving,setSaving]=useState(false);
+  const[msg,setMsg]=useState('');
+
+  const docId=vehicle&&etapa?String(vehicle.os).trim()+'_'+etapa:null;
+  const existente=useMemo(()=>docId?(testes||[]).find(t=>t.id===docId):null,[testes,docId]);
+  const totalFotos=marcacoes.filter(m=>m.foto).length;
+  const zonaObj=ZONAS_INSP.find(z=>z.k===zona)||null;
+  const daZona=marcacoes.filter(m=>m.zona===zona);
+  const modeloUrl=vehicle?(MODELOS_3D[normEstoqueTxt(vehicle.modelo)]||null):null;
+  const catInfo=(k)=>CATS_TESTE.find(c=>c[0]===k)||CATS_TESTE[0];
+
+  const limparForm=()=>{setEditId(null);setCategoria('ajuste');setDefeito('');setDefeitoOutro('');setDescricao('');setFoto(null);};
+
+  useEffect(()=>{
+    if(!docId){setMarcacoes([]);setZona(null);return;}
+    setMarcacoes(existente?.marcacoes||[]);setZona(null);limparForm();setMsg('');
+    // eslint-disable-next-line
+  },[docId,existente?.id]);
+
+  const onOSBlur=()=>{
+    const t=String(os).trim();if(!t)return;
+    if(!etapa){alert('Selecione a etapa ('+ETAPAS_INSPECAO.join(', ')+') antes de informar a OS.');return;}
+    const f=vehiclesDB.find(v=>String(v.os).trim()===t);
+    if(f)setVehicle(f);else{setVehicle(null);alert('OS não cadastrada.');}
+  };
+  const selecionarZona=(k)=>{setZona(k);limparForm();setMsg('');};
+
+  const adicionar=()=>{
+    if(!zonaObj)return;
+    if(!defeito)return alert('Escolha o defeito.');
+    if(defeito==='OUTRO'&&!defeitoOutro.trim())return alert('Informe qual é o defeito.');
+    if(!descricao.trim())return alert('Descreva o defeito.');
+    const antiga=editId?marcacoes.find(m=>m.id===editId):null;
+    if(foto&&!antiga?.foto&&totalFotos>=MAX_FOTOS_INSPECAO)return alert('Limite de '+MAX_FOTOS_INSPECAO+' fotos por inspeção atingido. Remova uma foto para adicionar outra.');
+    const nova=stripUndefined({
+      id:editId||String(Date.now())+Math.floor(Math.random()*999),
+      zona:zonaObj.k,zonaLabel:zonaObj.label,categoria,defeito,
+      defeitoOutro:defeito==='OUTRO'?defeitoOutro.trim():'',
+      descricao:descricao.trim(),foto:foto||null,
+      status:antiga?.status||'Pendente',
+      criadoPor:antiga?.criadoPor||loggedInUser.user,
+      criadoEm:antiga?.criadoEm||Date.now(),
+    });
+    setMarcacoes(p=>editId?p.map(m=>m.id===editId?nova:m):[...p,nova]);
+    limparForm();setMsg('');
+  };
+  const editar=(m)=>{
+    setZona(m.zona);setEditId(m.id);setCategoria(m.categoria||'ajuste');setDefeito(m.defeito||'');
+    setDefeitoOutro(m.defeitoOutro||'');setDescricao(m.descricao||'');setFoto(m.foto||null);
+  };
+  const remover=(id)=>{
+    if(!window.confirm('Remover esta marcação?'))return;
+    setMarcacoes(p=>p.filter(m=>m.id!==id));
+    if(editId===id)limparForm();
+  };
+  const salvar=async()=>{
+    if(!docId)return alert('Selecione a etapa e informe uma OS válida.');
+    const agora=Date.now();
+    const payload=stripUndefined({
+      os:String(vehicle.os).trim(),etapaInspecao:etapa,vehicleData:vehicle,marcacoes,
+      criadoPor:existente?.criadoPor||loggedInUser.user,criadoEm:existente?.criadoEm||agora,
+      atualizadoPor:loggedInUser.user,atualizadoEm:agora,
+    });
+    if(JSON.stringify(payload).length>900000)return alert('As fotos estão grandes demais para um único registro. Remova algumas fotos e tente novamente.');
+    setSaving(true);
+    try{
+      await col('testeInspecao').doc(docId).set(payload);
+      setMsg('Teste salvo em '+new Date(agora).toLocaleString('pt-BR'));
+    }catch(e){alert('Erro ao salvar: '+e.message);}
+    setSaving(false);
+  };
+
+  const lbl={fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',display:'block',marginBottom:6};
+
+  return(
+    <div className="fade-up" style={{paddingBottom:40}}>
+      <div style={{marginBottom:16}}>
+        <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.15em',color:'var(--red)',marginBottom:4}}>Inspeção 3D · Somente Master</p>
+        <h2 style={{fontSize:30,fontWeight:800,margin:0,letterSpacing:'-.02em'}}>Teste de Inspeção</h2>
+      </div>
+
+      <div className="card" style={{padding:20,marginBottom:16}}>
+        <label style={lbl}>Etapa da inspeção *</label>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:16}}>
+          {ETAPAS_INSPECAO.map(et=>(
+            <button key={et} type="button" onClick={()=>setEtapa(et)} style={{padding:'10px 22px',borderRadius:10,border:`2px solid ${etapa===et?'var(--red)':'var(--border)'}`,background:etapa===et?'var(--red)':'#fff',color:etapa===et?'#fff':'var(--ink)',fontSize:12,fontWeight:800,cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>{et}</button>
+          ))}
+        </div>
+        <label style={lbl}>Número da OS</label>
+        <input type="text" inputMode="numeric" value={os} onChange={e=>setOs(sanitize(e.target.value))} onBlur={onOSBlur} placeholder="Nº da OS" className="input" style={{fontSize:22,fontWeight:800,maxWidth:320}}/>
+      </div>
+
+      {!vehicle?(
+        <div style={{padding:'56px 20px',textAlign:'center',background:'#fff',borderRadius:16,border:'1.5px dashed var(--border)'}}>
+          <Icon name="car" size={30} style={{margin:'0 auto 10px',display:'block',color:'var(--muted)'}}/>
+          <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',margin:0}}>Escolha a etapa e informe a OS para abrir o carro 3D</p>
+        </div>
+      ):(
+        <div className="grid-2col" style={{display:'grid',gridTemplateColumns:'1.35fr 1fr',gap:16,alignItems:'start'}}>
+          <div className="card" style={{overflow:'hidden'}}>
+            <div style={{padding:'12px 16px',background:'var(--ink)',color:'#fff',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}>
+              <div>
+                <p style={{fontSize:16,fontWeight:800,margin:0,textTransform:'uppercase'}}>{vehicle.modelo||'—'}</p>
+                <p style={{fontSize:9,margin:'2px 0 0',color:'rgba(255,255,255,.5)',textTransform:'uppercase'}}>OS #{vehicle.os} · {etapa||'sem etapa'} · {vehicle.chassi||'—'}</p>
+              </div>
+              <span style={{fontSize:8,fontWeight:800,padding:'3px 10px',borderRadius:999,background:'rgba(255,255,255,.1)'}}>{modeloUrl?'Modelo 3D do veículo':'Modelo genérico'}</span>
+            </div>
+            <Carro3D key={modeloUrl||'proc'} marcacoes={marcacoes} selecionada={zona} onSelect={selecionarZona} modeloUrl={modeloUrl}/>
+            <div style={{padding:'10px 16px',display:'flex',gap:12,flexWrap:'wrap',alignItems:'center',borderTop:'1px solid var(--border)'}}>
+              {CATS_TESTE.map(([k,l,c])=><span key={k} style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:9,fontWeight:700}}><span style={{width:10,height:10,borderRadius:3,background:c,display:'inline-block'}}/>{l}</span>)}
+              <span style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:9,fontWeight:700}}><span style={{width:10,height:10,borderRadius:3,background:'#FF8A00',display:'inline-block'}}/>Peça selecionada</span>
+            </div>
+            <p style={{fontSize:9,color:'var(--muted)',fontWeight:600,margin:0,padding:'0 16px 12px'}}>Arraste para girar · role para aproximar · clique numa peça para registrar o defeito</p>
+          </div>
+
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            {!zonaObj?(
+              <div className="card" style={{padding:24,textAlign:'center'}}>
+                <Icon name="mouse-pointer-click" size={26} style={{margin:'0 auto 8px',display:'block',color:'var(--muted)'}}/>
+                <p style={{fontSize:10,fontWeight:800,textTransform:'uppercase',color:'var(--muted)',margin:0}}>Clique em uma peça do carro</p>
+              </div>
+            ):(
+              <div className="card">
+                <div style={{padding:'14px 18px',background:'var(--smoke)',borderBottom:'1px solid var(--border)'}}>
+                  <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--red)',margin:'0 0 2px'}}>Peça selecionada</p>
+                  <h4 style={{margin:0,fontSize:16,fontWeight:800}}>{zonaObj.label}</h4>
+                  <p style={{margin:'4px 0 0',fontSize:9,fontWeight:700,color:daZona.length?'var(--red)':'#059669'}}>{daZona.length?daZona.length+' avaria(s) registrada(s) nesta peça':'Nenhuma avaria registrada nesta peça'}</p>
+                </div>
+                <div style={{padding:18,display:'flex',flexDirection:'column',gap:12}}>
+                  {editId&&<p style={{fontSize:9,fontWeight:800,color:'#C45E00',margin:0,textTransform:'uppercase'}}>Editando marcação</p>}
+                  <div>
+                    <label style={lbl}>Categoria</label>
+                    <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                      {CATS_TESTE.map(([k,l,c])=>(
+                        <button key={k} type="button" onClick={()=>setCategoria(k)} style={{padding:'7px 12px',borderRadius:8,border:`2px solid ${categoria===k?c:'var(--border)'}`,background:categoria===k?c:'#fff',color:categoria===k?'#fff':'var(--ink)',fontSize:10,fontWeight:800,cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>{l}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{...lbl,color:'var(--red)'}}>Defeito *</label>
+                    <select value={defeito} onChange={e=>setDefeito(e.target.value)} className="input" style={{fontSize:12,fontWeight:700,appearance:'auto'}}>
+                      <option value="">Selecione o defeito...</option>
+                      {LISTA_DEFEITOS.map(d=><option key={d} value={d}>{d}</option>)}
+                    </select>
+                    {defeito==='OUTRO'&&<input type="text" value={defeitoOutro} onChange={e=>setDefeitoOutro(sanitize(e.target.value))} placeholder="Qual é o defeito?" className="input" style={{fontSize:12,fontWeight:700,marginTop:6,textTransform:'uppercase'}}/>}
+                  </div>
+                  <div>
+                    <label style={lbl}>Descrição *</label>
+                    <textarea value={descricao} onChange={e=>setDescricao(sanitize(e.target.value))} placeholder="Descreva onde e como o defeito aparece..." className="input" style={{minHeight:70,resize:'vertical',fontSize:12,fontWeight:500}}/>
+                  </div>
+                  <div>
+                    <label style={lbl}>📷 Foto (opcional) · {totalFotos}/{MAX_FOTOS_INSPECAO} na inspeção</label>
+                    <PhotoDropzone photo={foto} onChange={setFoto} disabled={false}/>
+                  </div>
+                  <div style={{display:'flex',gap:8}}>
+                    {editId&&<button type="button" onClick={limparForm} className="btn-ghost" style={{flex:1}}>Cancelar edição</button>}
+                    <button type="button" onClick={adicionar} className="btn-primary" style={{flex:2}}><Icon name={editId?'save':'plus-circle'} size={14}/> {editId?'Salvar alteração':'Adicionar marcação'}</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="card" style={{padding:16}}>
+              <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',margin:'0 0 10px'}}>Marcações deste carro ({marcacoes.length})</p>
+              {marcacoes.length===0?<p style={{fontSize:10,color:'var(--muted)',margin:0}}>Nenhuma marcação ainda.</p>:(
+                <div style={{display:'flex',flexDirection:'column',gap:6,maxHeight:300,overflowY:'auto'}} className="scroll-y">
+                  {marcacoes.map(m=>{
+                    const[,catLabel,catCor]=catInfo(m.categoria);
+                    return(
+                      <div key={m.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',background:m.zona===zona?'var(--red-light)':'var(--smoke)',border:`1px solid ${m.zona===zona?'#FFBDBD':'var(--border)'}`,borderRadius:9}}>
+                        {m.foto?<img src={m.foto} alt="Foto" style={{width:34,height:34,borderRadius:6,objectFit:'cover',flexShrink:0}}/>:<div style={{width:34,height:34,borderRadius:6,background:'#fff',border:'1px solid var(--border)',flexShrink:0}}/>}
+                        <div onClick={()=>selecionarZona(m.zona)} style={{flex:1,minWidth:0,cursor:'pointer'}}>
+                          <p style={{fontSize:10,fontWeight:800,margin:0,textTransform:'uppercase'}}>{m.zonaLabel}</p>
+                          <p style={{fontSize:9,fontWeight:600,margin:'2px 0 0',color:'var(--muted)'}}><span style={{fontWeight:800,color:catCor}}>{catLabel}</span> · {m.defeito==='OUTRO'&&m.defeitoOutro?'OUTRO: '+m.defeitoOutro:m.defeito} · {m.descricao}</p>
+                        </div>
+                        <button type="button" onClick={()=>editar(m)} style={{padding:'4px 8px',background:'#F59E0B',color:'#fff',border:'none',borderRadius:6,fontSize:8,fontWeight:800,textTransform:'uppercase',cursor:'pointer'}}>Editar</button>
+                        <button type="button" onClick={()=>remover(m.id)} style={{width:24,height:24,background:'#fff',border:'1px solid #FFBDBD',borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:'var(--red)',flexShrink:0}}><Icon name="trash-2" size={11}/></button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <button type="button" onClick={salvar} disabled={saving||!docId} className="btn-primary" style={{width:'100%',marginTop:12,padding:14}}>
+                {saving?<Icon name="refresh-cw" size={14} className="spin"/>:<Icon name="save" size={14}/>} Salvar Teste de Inspeção
+              </button>
+              {msg&&<p style={{fontSize:9,fontWeight:700,color:'#059669',textAlign:'center',margin:'8px 0 0'}}>✓ {msg}</p>}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const GESTAO_GRUPOS=[
   {k:'pedidos',label:'Pedidos',icon:'clipboard-list',tabs:['pending','quoting','bought','overdue','completed']},
   {k:'doacoes',label:'Doações e Exclusões',icon:'git-merge',tabs:['donated','cancelDonation','deletedItems','excedentes']},
@@ -10163,7 +10555,7 @@ const gestaoGrupoDe=(sv)=>(GESTAO_GRUPOS.find(g=>g.tabs.includes(sv))||GESTAO_GR
 const NAV_SECAO_ICONE={compras:'shopping-cart',producao:'factory',analises:'bar-chart-2'};
 const NAV_SECOES=[
   {k:'compras',label:'Compras',keys:['request','status','chegadas','estoque','donor','admin']},
-  {k:'producao',label:'Produção',keys:['finalizacao','problemasProducao','resumoCarros']},
+   {k:'producao',label:'Produção',keys:['finalizacao','problemasProducao','resumoCarros','testeInspecao']},
   {k:'analises',label:'Análises e Reuniões',keys:['feedbackFinalizacao','feedbackFinalizacaoReuniao','dashboard','resumo']},
 ];
 const navOrdem=(key)=>{let o=0;for(const s of NAV_SECOES){const i=s.keys.indexOf(key);if(i!==-1)return o+i;o+=s.keys.length;}return 999;};
@@ -10465,7 +10857,8 @@ const navItems=[
     ((isMaster||isAdmin)||ehCustom)&&(!ehCustom||telaLiberadaCustom(role,'dashboard'))&&{key:'dashboard',icon:'bar-chart-2',label:'Análises'},
         ((loggedIn?.user===MASTER_USER||loggedIn?.user==='Matheus.Ransi')||ehCustom)&&(!ehCustom||telaLiberadaCustom(role,'resumo'))&&{key:'resumo',icon:'presentation',label:'Resumo Reunião'},
         canAccessProblemasProd&&{key:'problemasProducao',icon:'alert-triangle',label:'Problemas de Produção'},
-    isMaster&&{key:'resumoCarros',icon:'car',label:'Resumo Carros'},
+       isMaster&&{key:'resumoCarros',icon:'car',label:'Resumo Carros'},
+    loggedIn?.user===MASTER_USER&&{key:'testeInspecao',icon:'box',label:'Teste de Inspeção'},
   ].filter(Boolean);
 
        const loading=reqLoad||arqLoad||vehLoad||usrLoad||estLoad||movLoad||finLoad;
@@ -10583,6 +10976,7 @@ const navComSecoes=buscandoNav?navVisiveis:[
 {view==='resumo'&&(loggedIn?.user===MASTER_USER||loggedIn?.user==='Matheus.Ransi')&&<ResumoReuniaoView requests={requestsComHistorico} vehicles={vehicles}/>}
 {view==='problemasProducao'&&canAccessProblemasProd&&<ProblemasProducaoView vehicles={vehicles} loggedInUser={loggedIn} isMaster={isMaster}/>}
 {view==='resumoCarros'&&isMaster&&<ResumoCarrosView vehicles={vehicles} requests={requests} finalizacoes={finalizacoesApp} loggedInUser={loggedIn} isMaster={isMaster}/>}
+{view==='testeInspecao'&&loggedIn?.user===MASTER_USER&&<TesteInspecaoView vehiclesDB={vehicles} loggedInUser={loggedIn}/>}
                 {view==='request'&&isSol&&<RequestForm user={user} loggedInUser={loggedIn} vehiclesDB={vehicles} requests={requests}/>}
                 {view==='status'&&<StatusView requests={requests} loggedInUser={loggedIn} vehicles={vehicles}/>}
                 {view==='chegadas'&&<ChegadasView requests={requests} loggedInUser={loggedIn} vehicles={vehicles}/>}
