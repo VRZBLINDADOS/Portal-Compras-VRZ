@@ -10173,7 +10173,50 @@ const ZONAS_INSP=[
   {k:'porta_malas',label:'Porta-malas'},
   {k:'para_choque_tras',label:'Para-choque traseiro'},
   {k:'para_brisa',label:'Para-brisa'},
-  {k:'vidro_traseiro',label:'Vidro traseiro'},
+    {k:'vidro_traseiro',label:'Vidro traseiro'},
+  {k:'coluna_a_esq',label:'Coluna A esquerda'},
+  {k:'coluna_a_dir',label:'Coluna A direita'},
+  {k:'coluna_b_esq',label:'Coluna B esquerda'},
+  {k:'coluna_b_dir',label:'Coluna B direita'},
+  {k:'coluna_c_esq',label:'Coluna C esquerda'},
+  {k:'coluna_c_dir',label:'Coluna C direita'},
+  {k:'coluna_d_esq',label:'Coluna D esquerda'},
+  {k:'coluna_d_dir',label:'Coluna D direita'},
+];
+const ZONAS_INT=[
+  {k:'painel',label:'Painel'},
+  {k:'volante',label:'Volante'},
+  {k:'console_central',label:'Console central'},
+  {k:'banco_diant_esq',label:'Banco dianteiro esquerdo'},
+  {k:'banco_diant_dir',label:'Banco dianteiro direito'},
+  {k:'banco_tras',label:'Banco traseiro'},
+  {k:'forro_teto',label:'Forro do teto'},
+  {k:'forro_porta_diant_esq',label:'Forro da porta dianteira esquerda'},
+  {k:'forro_porta_diant_dir',label:'Forro da porta dianteira direita'},
+  {k:'forro_porta_tras_esq',label:'Forro da porta traseira esquerda'},
+  {k:'forro_porta_tras_dir',label:'Forro da porta traseira direita'},
+  {k:'carpete',label:'Carpete / assoalho'},
+  {k:'porta_malas_int',label:'Porta-malas (interno)'},
+];
+const ZONAS_TODAS=[...ZONAS_INSP.map(z=>({...z,area:'externo'})),...ZONAS_INT.map(z=>({...z,area:'interno'}))];
+// z=zona, p=posição, s=tamanho, c=cor, r=rotação Z, torus=anel (volante), plano=plano virado para baixo (forro do teto)
+const PECAS_INT=[
+  {z:'carpete',p:[-0.1,0.4,0],s:[1.8,0.06,1.6],c:'#2B2B30'},
+  {z:'painel',p:[0.55,0.85,0],s:[0.35,0.35,1.5],c:'#2B2B30'},
+  {z:'volante',torus:true,p:[0.28,1.05,-0.4],c:'#111111'},
+  {z:'console_central',p:[0,0.58,0],s:[0.9,0.22,0.28],c:'#3A3A40'},
+  {z:'banco_diant_esq',p:[0,0.55,-0.4],s:[0.55,0.14,0.5],c:'#5A4A3F'},
+  {z:'banco_diant_esq',p:[-0.3,0.95,-0.4],s:[0.1,0.65,0.5],c:'#5A4A3F',r:0.15},
+  {z:'banco_diant_dir',p:[0,0.55,0.4],s:[0.55,0.14,0.5],c:'#5A4A3F'},
+  {z:'banco_diant_dir',p:[-0.3,0.95,0.4],s:[0.1,0.65,0.5],c:'#5A4A3F',r:0.15},
+  {z:'banco_tras',p:[-0.75,0.55,0],s:[0.5,0.14,1.4],c:'#5A4A3F'},
+  {z:'banco_tras',p:[-0.98,0.95,0],s:[0.1,0.65,1.4],c:'#5A4A3F',r:0.1},
+  {z:'forro_teto',plano:true,p:[-0.15,1.52,0],s:[1.5,1.6],c:'#CFCABF'},
+  {z:'forro_porta_diant_esq',p:[0.2,0.85,-0.8],s:[0.8,0.55,0.06],c:'#3A3A40'},
+  {z:'forro_porta_diant_dir',p:[0.2,0.85,0.8],s:[0.8,0.55,0.06],c:'#3A3A40'},
+  {z:'forro_porta_tras_esq',p:[-0.65,0.85,-0.8],s:[0.8,0.55,0.06],c:'#3A3A40'},
+  {z:'forro_porta_tras_dir',p:[-0.65,0.85,0.8],s:[0.8,0.55,0.06],c:'#3A3A40'},
+  {z:'porta_malas_int',p:[-1.55,0.5,0],s:[0.9,0.06,1.6],c:'#1F1F23'},
 ];
 // Mesmas categorias da inspeção atual (cor = cor da peça marcada no carro)
 const CATS_TESTE=[['ajuste','Ajuste','#F59E0B'],['martelinho','Martelinho','#DC1F1F'],['pintura','Pintura','#2563EB'],['vidro','Vidro','#0EA5E9'],['outro','Estética','#6B7280'],['instalacaoPecas','Instalação Peças','#10B981']];
@@ -10198,20 +10241,30 @@ const PECAS_PROC=[
   ['porta_malas',[-1.55,0.95,0],[0.86,0.1,1.76]],
   ['para_choque_tras',[-2.2,0.5,0],[0.2,0.4,1.9]],
   ['para_brisa',[0.775,1.275,0],[0.05,0.652,1.6],0.567,true],
-  ['vidro_traseiro',[-1.025,1.275,0],[0.05,0.604,1.6],-0.427,true],
+    ['vidro_traseiro',[-1.025,1.275,0],[0.05,0.604,1.6],-0.427,true],
+  // Colunas (esquerda = -Z, direita = +Z). A e D acompanham a inclinação do para-brisa e do vidro traseiro
+  ['coluna_a_esq',[0.775,1.275,-0.84],[0.07,0.652,0.1],0.567],
+  ['coluna_a_dir',[0.775,1.275,0.84],[0.07,0.652,0.1],0.567],
+  ['coluna_b_esq',[-0.05,1.275,-0.84],[0.12,0.55,0.1]],
+  ['coluna_b_dir',[-0.05,1.275,0.84],[0.12,0.55,0.1]],
+  ['coluna_c_esq',[-0.62,1.275,-0.84],[0.1,0.55,0.1]],
+  ['coluna_c_dir',[-0.62,1.275,0.84],[0.1,0.55,0.1]],
+  ['coluna_d_esq',[-1.025,1.275,-0.84],[0.07,0.604,0.1],-0.427],
+  ['coluna_d_dir',[-1.025,1.275,0.84],[0.07,0.604,0.1],-0.427],
 ];
 
-function Carro3D({marcacoes,selecionada,onSelect,modeloUrl}){
+function Carro3D({marcacoes,selecionada,onSelect,modeloUrl,modo}){
   const mountRef=useRef(null);
   const dadosRef=useRef({});
   const apiRef=useRef({});
-  dadosRef.current={marcacoes,selecionada,onSelect};
+  dadosRef.current={marcacoes,selecionada,onSelect,modo};
 
   useEffect(()=>{
     const el=mountRef.current;
     if(!el||!window.THREE)return;
     const T=window.THREE;
     const meshes={};const clicaveis=[];
+    const extras={ext:[],int:[]}; // peças não clicáveis que aparecem só no externo / só no interno
     const renderer=new T.WebGLRenderer({antialias:true,alpha:true});
     renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
     renderer.setSize(el.clientWidth||600,el.clientHeight||420,false);
@@ -10226,8 +10279,6 @@ function Carro3D({marcacoes,selecionada,onSelect,modeloUrl}){
       controls=new T.OrbitControls(camera,dom);
       controls.target.set(0,0.8,0);
       controls.enableDamping=true;
-      controls.minDistance=4;controls.maxDistance=12;
-      controls.maxPolarAngle=Math.PI/2.05;
       controls.update();
     }
     scene.add(new T.AmbientLight(0xffffff,0.75));
@@ -10242,6 +10293,7 @@ function Carro3D({marcacoes,selecionada,onSelect,modeloUrl}){
     const registrar=(mesh,zona)=>{
       mesh.material=mesh.material.clone();
       mesh.userData.zona=zona;
+      mesh.userData.tipo=ZONAS_INT.some(z=>z.k===zona)?'int':'ext';
       mesh.userData.base='#'+mesh.material.color.getHexString();
       mesh.userData.opac=mesh.material.opacity;
       (meshes[zona]=meshes[zona]||[]).push(mesh);
@@ -10260,7 +10312,26 @@ function Carro3D({marcacoes,selecionada,onSelect,modeloUrl}){
         });
       });
     };
+    const aplicarModo=()=>{
+      const interno=dadosRef.current.modo==='interno';
+      clicaveis.forEach(m=>{m.visible=(m.userData.tipo==='int')===interno;});
+      extras.ext.forEach(m=>{m.visible=!interno;});
+      extras.int.forEach(m=>{m.visible=interno;});
+      if(controls){
+        if(interno){
+          controls.minDistance=0.8;controls.maxDistance=6;controls.maxPolarAngle=Math.PI;
+          controls.target.set(-0.1,0.9,0);
+          camera.position.set(2.0,2.4,2.0);
+        }else{
+          controls.minDistance=4;controls.maxDistance=12;controls.maxPolarAngle=Math.PI/2.05;
+          controls.target.set(0,0.8,0);
+          camera.position.set(5.5,3,5.5);
+        }
+        controls.update();
+      }
+    };
     apiRef.current.aplicar=aplicarCores;
+    apiRef.current.aplicarModo=aplicarModo;
 
     const caixa=(tam,pos,cor,rotZ)=>{
       const m=new T.Mesh(new T.BoxGeometry(tam[0],tam[1],tam[2]),new T.MeshStandardMaterial({color:cor,metalness:0.2,roughness:0.6}));
@@ -10273,23 +10344,41 @@ function Carro3D({marcacoes,selecionada,onSelect,modeloUrl}){
     if(modeloUrl&&T.GLTFLoader){
       new T.GLTFLoader().load(modeloUrl,gltf=>{
         if(cancelado)return;
-        gltf.scene.traverse(o=>{if(o.isMesh&&ZONAS_INSP.some(z=>z.k===o.name))registrar(o,o.name);});
+        gltf.scene.traverse(o=>{
+          if(!o.isMesh)return;
+          if(ZONAS_TODAS.some(z=>z.k===o.name))registrar(o,o.name);
+          else if(String(o.name).startsWith('ext_'))extras.ext.push(o);
+          else if(String(o.name).startsWith('int_'))extras.int.push(o);
+        });
         scene.add(gltf.scene);
-        aplicarCores();
+        aplicarCores();aplicarModo();
       },undefined,err=>console.warn('Falha ao carregar modelo 3D:',err));
     }else{
-      scene.add(caixa([4.4,0.6,1.8],[0,0.6,0],'#2A2A2E'));
-      scene.add(caixa([1.7,0.55,1.6],[-0.15,1.275,0],'#1B2733'));
+      // ── EXTERNO ──
+      const ext=(m)=>{extras.ext.push(m);scene.add(m);return m;};
+      ext(caixa([4.4,0.6,1.8],[0,0.6,0],'#2A2A2E'));
+      ext(caixa([1.7,0.55,1.6],[-0.15,1.275,0],'#1B2733'));
       [[1.4,-0.88],[1.4,0.88],[-1.4,-0.88],[-1.4,0.88]].forEach(([x,z])=>{
         const r=new T.Mesh(new T.CylinderGeometry(0.36,0.36,0.24,24),new T.MeshStandardMaterial({color:'#111111'}));
-        r.rotation.x=Math.PI/2;r.position.set(x,0.36,z);scene.add(r);
+        r.rotation.x=Math.PI/2;r.position.set(x,0.36,z);ext(r);
       });
       PECAS_PROC.forEach(([zona,pos,tam,rot,vidro])=>{
         const m=caixa(tam,pos,vidro?'#7FB6D9':COR_CARRO,rot);
         if(vidro){m.material.transparent=true;m.material.opacity=0.65;}
         scene.add(m);registrar(m,zona);
       });
-      aplicarCores();
+      // ── INTERNO ──
+      PECAS_INT.forEach(p=>{
+        let m;
+        if(p.torus)m=new T.Mesh(new T.TorusGeometry(0.17,0.025,12,32),new T.MeshStandardMaterial({color:p.c}));
+        else if(p.plano)m=new T.Mesh(new T.PlaneGeometry(p.s[0],p.s[1]),new T.MeshStandardMaterial({color:p.c,side:T.FrontSide}));
+        else m=caixa(p.s,p.p,p.c,p.r);
+        m.position.set(p.p[0],p.p[1],p.p[2]);
+        if(p.torus)m.rotation.y=Math.PI/2;
+        if(p.plano)m.rotation.x=Math.PI/2; // normal para baixo: some visto de cima, aparece por dentro
+        scene.add(m);registrar(m,p.z);
+      });
+      aplicarCores();aplicarModo();
     }
 
     const ray=new T.Raycaster(),mouse=new T.Vector2();
@@ -10303,7 +10392,7 @@ function Carro3D({marcacoes,selecionada,onSelect,modeloUrl}){
       mouse.x=((e.clientX-r.left)/r.width)*2-1;
       mouse.y=-((e.clientY-r.top)/r.height)*2+1;
       ray.setFromCamera(mouse,camera);
-      const hit=ray.intersectObjects(clicaveis,false)[0];
+      const hit=ray.intersectObjects(clicaveis.filter(m=>m.visible),false)[0];
       if(hit&&dadosRef.current.onSelect)dadosRef.current.onSelect(hit.object.userData.zona);
     };
     dom.addEventListener('pointerdown',onDown);
@@ -10327,11 +10416,12 @@ function Carro3D({marcacoes,selecionada,onSelect,modeloUrl}){
       if(controls)controls.dispose();
       renderer.dispose();
       if(el.contains(dom))el.removeChild(dom);
-      apiRef.current.aplicar=null;
+      apiRef.current.aplicar=null;apiRef.current.aplicarModo=null;
     };
   },[modeloUrl]);
 
   useEffect(()=>{if(apiRef.current.aplicar)apiRef.current.aplicar();},[marcacoes,selecionada]);
+  useEffect(()=>{if(apiRef.current.aplicarModo)apiRef.current.aplicarModo();},[modo]);
 
   if(!window.THREE)return <div style={{padding:30,textAlign:'center',fontSize:11,fontWeight:700,color:'var(--red)'}}>Biblioteca 3D não carregou. Verifique a conexão e recarregue a página.</div>;
   return <div ref={mountRef} style={{width:'100%',height:'min(62vh,460px)',minHeight:300,position:'relative',overflow:'hidden',background:'radial-gradient(circle at 50% 35%,#2A2F3A,#0D0D0D)'}}/>;
@@ -10351,12 +10441,14 @@ function TesteInspecaoView({vehiclesDB,loggedInUser}){
   const[descricao,setDescricao]=useState('');
   const[foto,setFoto]=useState(null);
   const[saving,setSaving]=useState(false);
-  const[msg,setMsg]=useState('');
+    const[msg,setMsg]=useState('');
+  const[modo,setModo]=useState('externo');
+  const areaDe=(m)=>ZONAS_INT.some(z=>z.k===m.zona)?'interno':'externo';
 
   const docId=vehicle&&etapa?String(vehicle.os).trim()+'_'+etapa:null;
   const existente=useMemo(()=>docId?(testes||[]).find(t=>t.id===docId):null,[testes,docId]);
   const totalFotos=marcacoes.filter(m=>m.foto).length;
-  const zonaObj=ZONAS_INSP.find(z=>z.k===zona)||null;
+   const zonaObj=ZONAS_TODAS.find(z=>z.k===zona)||null;
   const daZona=marcacoes.filter(m=>m.zona===zona);
   const modeloUrl=vehicle?(MODELOS_3D[normEstoqueTxt(vehicle.modelo)]||null):null;
   const catInfo=(k)=>CATS_TESTE.find(c=>c[0]===k)||CATS_TESTE[0];
@@ -10375,7 +10467,10 @@ function TesteInspecaoView({vehiclesDB,loggedInUser}){
     const f=vehiclesDB.find(v=>String(v.os).trim()===t);
     if(f)setVehicle(f);else{setVehicle(null);alert('OS não cadastrada.');}
   };
-  const selecionarZona=(k)=>{setZona(k);limparForm();setMsg('');};
+   const selecionarZona=(k)=>{
+    setModo(ZONAS_INT.some(z=>z.k===k)?'interno':'externo');
+    setZona(k);limparForm();setMsg('');
+  };
 
   const adicionar=()=>{
     if(!zonaObj)return;
@@ -10386,7 +10481,7 @@ function TesteInspecaoView({vehiclesDB,loggedInUser}){
     if(foto&&!antiga?.foto&&totalFotos>=MAX_FOTOS_INSPECAO)return alert('Limite de '+MAX_FOTOS_INSPECAO+' fotos por inspeção atingido. Remova uma foto para adicionar outra.');
     const nova=stripUndefined({
       id:editId||String(Date.now())+Math.floor(Math.random()*999),
-      zona:zonaObj.k,zonaLabel:zonaObj.label,categoria,defeito,
+            zona:zonaObj.k,zonaLabel:zonaObj.label,area:zonaObj.area,categoria,defeito,
       defeitoOutro:defeito==='OUTRO'?defeitoOutro.trim():'',
       descricao:descricao.trim(),foto:foto||null,
       status:antiga?.status||'Pendente',
@@ -10457,7 +10552,14 @@ function TesteInspecaoView({vehiclesDB,loggedInUser}){
               </div>
               <span style={{fontSize:8,fontWeight:800,padding:'3px 10px',borderRadius:999,background:'rgba(255,255,255,.1)'}}>{modeloUrl?'Modelo 3D do veículo':'Modelo genérico'}</span>
             </div>
-            <Carro3D key={modeloUrl||'proc'} marcacoes={marcacoes} selecionada={zona} onSelect={selecionarZona} modeloUrl={modeloUrl}/>
+                       <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,margin:'10px 16px',borderRadius:12,border:'1px solid var(--border)',width:'fit-content'}}>
+              {[{k:'externo',l:'Externo',i:'car'},{k:'interno',l:'Interno',i:'armchair'}].map(t=>(
+                <button key={t.k} type="button" onClick={()=>{if(modo!==t.k){setModo(t.k);setZona(null);limparForm();}}} style={{display:'flex',alignItems:'center',gap:6,padding:'8px 16px',borderRadius:9,fontSize:10,fontWeight:800,textTransform:'uppercase',border:'none',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif',background:modo===t.k?'#fff':'transparent',color:modo===t.k?'var(--red)':'var(--muted)',boxShadow:modo===t.k?'0 2px 8px rgba(0,0,0,.08)':'none'}}>
+                  <Icon name={t.i} size={13}/> {t.l} ({marcacoes.filter(m=>areaDe(m)===t.k).length})
+                </button>
+              ))}
+            </div>
+            <Carro3D key={modeloUrl||'proc'} marcacoes={marcacoes} selecionada={zona} onSelect={selecionarZona} modeloUrl={modeloUrl} modo={modo}/>
             <div style={{padding:'10px 16px',display:'flex',gap:12,flexWrap:'wrap',alignItems:'center',borderTop:'1px solid var(--border)'}}>
               {CATS_TESTE.map(([k,l,c])=><span key={k} style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:9,fontWeight:700}}><span style={{width:10,height:10,borderRadius:3,background:c,display:'inline-block'}}/>{l}</span>)}
               <span style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:9,fontWeight:700}}><span style={{width:10,height:10,borderRadius:3,background:'#FF8A00',display:'inline-block'}}/>Peça selecionada</span>
