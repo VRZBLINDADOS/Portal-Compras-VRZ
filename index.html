@@ -10641,7 +10641,11 @@ scene.add(gltf.scene);
 aplicarCores();
 aplicarModo();
 
-      },undefined,err=>console.warn('Falha ao carregar modelo 3D:',err));
+     },undefined,err=>{
+  console.error('Falha ao carregar modelo 3D:',err);
+  alert('Não foi possível carregar o modelo 3D. Verifique a pasta modelos no GitHub.');
+});
+
     }else{
            montarCarroGenerico(T,scene,registrar,extras);
       aplicarCores();aplicarModo();
@@ -10719,7 +10723,7 @@ const[vista,setVista]=useState('orbital');
    const zonaObj=ZONAS_TODAS.find(z=>z.k===zona)||null;
   const daZona=marcacoes.filter(m=>m.zona===zona);
   const modeloUrl=vehicle
-  ? new URL('modelos/modelo_suv_inspecao.glb',document.baseURI).href
+  ? './modelos/modelo_suv_inspecao.glb'
   : null;
 
   const catInfo=(k)=>CATS_TESTE.find(c=>c[0]===k)||CATS_TESTE[0];
