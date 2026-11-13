@@ -10621,8 +10621,16 @@ if(o.name==='teto_solar'){
           else if(String(o.name).startsWith('ext_'))extras.ext.push(o);
           else if(String(o.name).startsWith('int_'))extras.int.push(o);
         });
-        scene.add(gltf.scene);
-        aplicarCores();aplicarModo();
+        // Ajusta o tamanho e a altura do modelo GLB
+gltf.scene.scale.set(6,6,6);
+
+gltf.scene.position.set(0,0.9,0);
+
+scene.add(gltf.scene);
+
+aplicarCores();
+aplicarModo();
+
       },undefined,err=>console.warn('Falha ao carregar modelo 3D:',err));
     }else{
            montarCarroGenerico(T,scene,registrar,extras);
