@@ -10603,6 +10603,20 @@ function Carro3D({marcacoes,selecionada,onSelect,modeloUrl,modo}){
         if(cancelado)return;
         gltf.scene.traverse(o=>{
           if(!o.isMesh)return;
+          if(o.name==='teto'){
+  o.material=o.material.clone();
+  o.material.color.set('#FFFFFF');
+}
+
+if(o.name==='teto_solar'){
+  o.material=o.material.clone();
+  o.material.color.set('#83AFC8');
+  o.material.transparent=true;
+  o.material.opacity=0.42;
+  o.material.roughness=0.12;
+  o.material.depthWrite=false;
+}
+
           if(ZONAS_TODAS.some(z=>z.k===o.name))registrar(o,o.name);
           else if(String(o.name).startsWith('ext_'))extras.ext.push(o);
           else if(String(o.name).startsWith('int_'))extras.int.push(o);
@@ -10686,7 +10700,10 @@ const[vista,setVista]=useState('orbital');
   const totalFotos=marcacoes.filter(m=>m.foto).length;
    const zonaObj=ZONAS_TODAS.find(z=>z.k===zona)||null;
   const daZona=marcacoes.filter(m=>m.zona===zona);
-  const modeloUrl=vehicle?(MODELOS_3D[normEstoqueTxt(vehicle.modelo)]||null):null;
+  const modeloUrl=vehicle
+  ? new URL('modelos/modelo_suv_inspecao.glb',document.baseURI).href
+  : null;
+
   const catInfo=(k)=>CATS_TESTE.find(c=>c[0]===k)||CATS_TESTE[0];
 
   const limparForm=()=>{setEditId(null);setCategoria('ajuste');setDefeito('');setDefeitoOutro('');setDescricao('');setFoto(null);};
