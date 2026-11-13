@@ -10601,26 +10601,36 @@ function Carro3D({marcacoes,selecionada,onSelect,modeloUrl,modo}){
     if(modeloUrl&&T.GLTFLoader){
       new T.GLTFLoader().load(modeloUrl,gltf=>{
         if(cancelado)return;
-        gltf.scene.traverse(o=>{
-          if(!o.isMesh)return;
-          if(o.name==='teto'){
-  o.material=o.material.clone();
-  o.material.color.set('#FFFFFF');
-}
+       gltf.scene.traverse(o=>{
+  if(!o.isMesh)return;
 
-if(o.name==='teto_solar'){
-  o.material=o.material.clone();
-  o.material.color.set('#83AFC8');
-  o.material.transparent=true;
-  o.material.opacity=0.42;
-  o.material.roughness=0.12;
-  o.material.depthWrite=false;
-}
+  o.visible=true;
+  o.frustumCulled=false;
 
-          if(ZONAS_TODAS.some(z=>z.k===o.name))registrar(o,o.name);
-          else if(String(o.name).startsWith('ext_'))extras.ext.push(o);
-          else if(String(o.name).startsWith('int_'))extras.int.push(o);
-        });
+  const materiais=Array.isArray(o.material)
+    ? o.material
+    : [o.material];
+
+  materiais.forEach(mat=>{
+    if(!mat)return;
+
+    mat.transparent=false;
+    mat.opacity=1;
+    mat.alphaTest=0;
+    mat.depthWrite=true;
+    mat.side=T.DoubleSide;
+    mat.needsUpdate=true;
+  });
+
+  if(ZONAS_TODAS.some(z=>o.name===z.k)){
+    registrar(o,o.name);
+  }else if(String(o.name).startsWith('ext_')){
+    extras.ext.push(o);
+  }else if(String(o.name).startsWith('int_')){
+    extras.int.push(o);
+  }
+});
+
         // Ajusta o tamanho e a altura do modelo GLB
 gltf.scene.scale.set(6,6,6);
 
