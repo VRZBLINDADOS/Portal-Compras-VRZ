@@ -227,8 +227,6 @@ canvas{display:block}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
-
 </head>
 <body>
 <div id="root"></div>
@@ -10600,63 +10598,18 @@ function Carro3D({marcacoes,selecionada,onSelect,modeloUrl,modo}){
     };
 
     let cancelado=false;
-    if(modeloUrl && T.GLTFLoader && T.DRACOLoader){
-  const dracoLoader = new T.DRACOLoader();
-  dracoLoader.setDecoderPath(
-    'https://www.gstatic.com/draco/versioned/decoders/1.5.6/'
-  );
-
-  const loader = new T.GLTFLoader();
-  loader.setDRACOLoader(dracoLoader);
-
-  loader.load(modeloUrl, gltf => {
-
+    if(modeloUrl&&T.GLTFLoader){
+      new T.GLTFLoader().load(modeloUrl,gltf=>{
         if(cancelado)return;
-       gltf.scene.traverse(o=>{
-  if(!o.isMesh)return;
-
-  o.visible=true;
-  o.frustumCulled=false;
-
-  const materiais=Array.isArray(o.material)
-    ? o.material
-    : [o.material];
-
-  materiais.forEach(mat=>{
-    if(!mat)return;
-
-    mat.transparent=false;
-    mat.opacity=1;
-    mat.alphaTest=0;
-    mat.depthWrite=true;
-    mat.side=T.DoubleSide;
-    mat.needsUpdate=true;
-  });
-
-  if(ZONAS_TODAS.some(z=>o.name===z.k)){
-    registrar(o,o.name);
-  }else if(String(o.name).startsWith('ext_')){
-    extras.ext.push(o);
-  }else if(String(o.name).startsWith('int_')){
-    extras.int.push(o);
-  }
-});
-
-        // Ajusta o tamanho e a altura do modelo GLB
-gltf.scene.scale.set(6,6,6);
-
-gltf.scene.position.set(0,0.9,0);
-
-scene.add(gltf.scene);
-
-aplicarCores();
-aplicarModo();
-
-     },undefined,err=>{
-  console.error('Falha ao carregar modelo 3D:',err);
-  alert('Não foi possível carregar o modelo 3D. Verifique a pasta modelos no GitHub.');
-});
-
+        gltf.scene.traverse(o=>{
+          if(!o.isMesh)return;
+          if(ZONAS_TODAS.some(z=>z.k===o.name))registrar(o,o.name);
+          else if(String(o.name).startsWith('ext_'))extras.ext.push(o);
+          else if(String(o.name).startsWith('int_'))extras.int.push(o);
+        });
+        scene.add(gltf.scene);
+        aplicarCores();aplicarModo();
+      },undefined,err=>console.warn('Falha ao carregar modelo 3D:',err));
     }else{
            montarCarroGenerico(T,scene,registrar,extras);
       aplicarCores();aplicarModo();
@@ -10724,8 +10677,6 @@ function TesteInspecaoView({vehiclesDB,loggedInUser}){
   const[saving,setSaving]=useState(false);
     const[msg,setMsg]=useState('');
   const[modo,setModo]=useState('externo');
-const[vista,setVista]=useState('orbital');
-
   const areaDe=(m)=>ZONAS_INT.some(z=>z.k===m.zona)?'interno':'externo';
 
   const docId=vehicle&&etapa?String(vehicle.os).trim()+'_'+etapa:null;
@@ -10733,10 +10684,7 @@ const[vista,setVista]=useState('orbital');
   const totalFotos=marcacoes.filter(m=>m.foto).length;
    const zonaObj=ZONAS_TODAS.find(z=>z.k===zona)||null;
   const daZona=marcacoes.filter(m=>m.zona===zona);
-  const modeloUrl=vehicle
-  ? './modelos/modelo_suv_inspecao.glb'
-  : null;
-
+  const modeloUrl=vehicle?(MODELOS_3D[normEstoqueTxt(vehicle.modelo)]||null):null;
   const catInfo=(k)=>CATS_TESTE.find(c=>c[0]===k)||CATS_TESTE[0];
 
   const limparForm=()=>{setEditId(null);setCategoria('ajuste');setDefeito('');setDefeitoOutro('');setDescricao('');setFoto(null);};
@@ -10845,22 +10793,7 @@ const[vista,setVista]=useState('orbital');
                 </button>
               ))}
             </div>
-            <div style={{display:'flex',gap:6,padding:'0 16px 8px'}}>
-  <button onClick={()=>setVista('orbital')}>360°</button>
-  <button onClick={()=>setVista('superior')}>Vista superior</button>
-  <button onClick={()=>setVista('inferior')}>Parte inferior</button>
-</div>
-
-<Carro3D
-  key={modeloUrl||'proc'}
-  marcacoes={marcacoes}
-  selecionada={zona}
-  onSelect={selecionarZona}
-  modeloUrl={modeloUrl}
-  modo={modo}
-  vista={vista}
-/>
-
+            <Carro3D key={modeloUrl||'proc'} marcacoes={marcacoes} selecionada={zona} onSelect={selecionarZona} modeloUrl={modeloUrl} modo={modo}/>
             <div style={{padding:'10px 16px',display:'flex',gap:12,flexWrap:'wrap',alignItems:'center',borderTop:'1px solid var(--border)'}}>
               {CATS_TESTE.map(([k,l,c])=><span key={k} style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:9,fontWeight:700}}><span style={{width:10,height:10,borderRadius:3,background:c,display:'inline-block'}}/>{l}</span>)}
               <span style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:9,fontWeight:700}}><span style={{width:10,height:10,borderRadius:3,background:'#FF8A00',display:'inline-block'}}/>Peça selecionada</span>
