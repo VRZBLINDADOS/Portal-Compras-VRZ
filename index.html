@@ -10677,6 +10677,8 @@ function TesteInspecaoView({vehiclesDB,loggedInUser}){
   const[saving,setSaving]=useState(false);
     const[msg,setMsg]=useState('');
   const[modo,setModo]=useState('externo');
+const[vista,setVista]=useState('orbital');
+
   const areaDe=(m)=>ZONAS_INT.some(z=>z.k===m.zona)?'interno':'externo';
 
   const docId=vehicle&&etapa?String(vehicle.os).trim()+'_'+etapa:null;
@@ -10793,7 +10795,22 @@ function TesteInspecaoView({vehiclesDB,loggedInUser}){
                 </button>
               ))}
             </div>
-            <Carro3D key={modeloUrl||'proc'} marcacoes={marcacoes} selecionada={zona} onSelect={selecionarZona} modeloUrl={modeloUrl} modo={modo}/>
+            <div style={{display:'flex',gap:6,padding:'0 16px 8px'}}>
+  <button onClick={()=>setVista('orbital')}>360°</button>
+  <button onClick={()=>setVista('superior')}>Vista superior</button>
+  <button onClick={()=>setVista('inferior')}>Parte inferior</button>
+</div>
+
+<Carro3D
+  key={modeloUrl||'proc'}
+  marcacoes={marcacoes}
+  selecionada={zona}
+  onSelect={selecionarZona}
+  modeloUrl={modeloUrl}
+  modo={modo}
+  vista={vista}
+/>
+
             <div style={{padding:'10px 16px',display:'flex',gap:12,flexWrap:'wrap',alignItems:'center',borderTop:'1px solid var(--border)'}}>
               {CATS_TESTE.map(([k,l,c])=><span key={k} style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:9,fontWeight:700}}><span style={{width:10,height:10,borderRadius:3,background:c,display:'inline-block'}}/>{l}</span>)}
               <span style={{display:'inline-flex',alignItems:'center',gap:5,fontSize:9,fontWeight:700}}><span style={{width:10,height:10,borderRadius:3,background:'#FF8A00',display:'inline-block'}}/>Peça selecionada</span>
