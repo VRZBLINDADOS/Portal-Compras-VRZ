@@ -10289,7 +10289,6 @@ const ZONAS_INT=[
   {k:'carpete_diant_frente',label:'Carpete dianteiro (à frente dos bancos)'},
   {k:'camera_parabrisa',label:'Câmera do para-brisa'},
   {k:'sensor_parabrisa',label:'Sensor do para-brisa (chuva/luz)'},
-  {k:'luz_cortesia_central',label:'Luz de cortesia central'},
     {k:'luz_teto_traseira',label:'Luz de teto do banco traseiro'},
 ];
 const ZONAS_TODAS=[
@@ -10551,9 +10550,7 @@ function montarCarroGenerico(T,scene,registrar,extras){
   zona(R(0.04,0.08,0.26,CE,[0.40,1.38,0],0,0.015),'retrovisor_interno');
   zona(R(0.20,0.035,0.18,CP,[0.18,1.51,0],0,0.01),'console_teto');
   [-0.04,0.04].forEach(z=>int(R(0.04,0.01,0.03,'#2A2A2E',[0.18,1.49,z],0,0.004)));
-  // luz de cortesia central
-  zona(R(0.24,0.03,0.14,'#D8D5CE',[-1.0,1.515,0],0,0.01),'luz_cortesia_central');
-  int(R(0.18,0.012,0.09,'#F4F1E6',[-1.0,1.497,0],0,0.003,{emissive:'#6A6658'}));
+  
     // luz de teto do banco traseiro
   zona(R(0.24,0.03,0.14,'#D8D5CE',[-0.78,1.515,0],0,0.01),'luz_teto_traseira');
   int(R(0.18,0.012,0.09,'#F4F1E6',[-0.78,1.497,0],0,0.003,{emissive:'#6A6658'}));
