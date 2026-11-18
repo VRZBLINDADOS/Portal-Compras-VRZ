@@ -10519,7 +10519,9 @@ const ZONAS_INT=[
   {k:'climatizador',label:'Comandos do ar-condicionado'},
   {k:'saidas_ar',label:'Saídas de ar'},
   {k:'porta_luvas',label:'Porta-luvas'},
-  {k:'volante',label:'Volante'},
+    {k:'volante',label:'Volante'},
+  {k:'alavanca_seta',label:'Alavanca da seta (pisca)'},
+  {k:'alavanca_limpador',label:'Alavanca do limpador'},
   {k:'pedais',label:'Pedais'},
   {k:'console_central',label:'Console central'},
   {k:'alavanca_cambio',label:'Alavanca de câmbio'},
@@ -10628,7 +10630,7 @@ const VISTAS_ORB={
 // ── Carro genérico (SUV) — frente = +X, lado esquerdo (motorista) = -Z ──
 function montarCarroGenerico(T,scene,registrar,extras){
   const CB=COR_CARRO;
-  const CM='#8F8D89',CD='#2B2B30',CE='#16161A',CS='#BDBAB2',CP='#B9B6AF',CPR='#1A1D22';
+  const CM='#D6CAB4',CD='#1E1E22',CE='#16161A',CS='#D9CEBA',CP='#2B2B30',CPR='#1A1D22';
   const mat=(cor,o)=>new T.MeshStandardMaterial(Object.assign({color:cor,metalness:0.15,roughness:0.65},o||{}));
   const ext=(m)=>{extras.ext.push(m);scene.add(m);return m;};
   const int=(m)=>{extras.int.push(m);scene.add(m);return m;};
@@ -10825,24 +10827,99 @@ function montarCarroGenerico(T,scene,registrar,extras){
   int(R(0.06,0.26,1.6,'#1F1F23',[0.89,0.55,0],0,0.01)); // parede do assoalho
 
   // painel
-  zona(R(0.36,0.12,1.66,CM,[0.72,1.0,0],0,0.03),'painel');
-  zona(R(0.30,0.28,1.62,CD,[0.75,0.80,0],0,0.02),'painel');
+    zona(R(0.36,0.12,1.66,'#1C1C20',[0.72,1.0,0],0,0.03),'painel');
+    zona(R(0.30,0.28,1.62,'#D6CAB4',[0.75,0.80,0],0,0.02),'painel');
+  // filete cromado que atravessa o painel (logo abaixo das saídas de ar)
+  zona(R(0.012,0.012,1.60,'#C9CBD0',[0.536,0.948,0],0,0.004,{metalness:0.85,roughness:0.25}),'painel');
   zona(R(0.14,0.13,0.44,CE,[0.62,1.12,-0.38],0,0.02),'quadro_instrumentos');
-  int(R(0.01,0.09,0.34,'#0B1622',[0.54,1.12,-0.38],0,0.003,{emissive:'#0A2A4A'}));
-  zona(R(0.06,0.22,0.36,'#101014',[0.60,1.14,0],0,0.015),'tela_multimidia');
-  int(R(0.01,0.17,0.31,'#1B3556',[0.565,1.14,0],0,0.003,{emissive:'#10284A'}));
-  zona(R(0.05,0.13,0.40,'#2D2D32',[0.57,0.84,0],0,0.01),'climatizador');
+    int(R(0.01,0.09,0.34,'#0B1622',[0.54,1.12,-0.38],0,0.003,{emissive:'#0A2A4A'}));
+  // helpers usados nos passos seguintes: lp = ponto entre a e b; cone = cilindro/cone de a até b (zona k, ou decorativo se k=null)
+  const lp=(a,b,t)=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];
+  const cone=(a,b,r1,r2,cor,k,mo)=>{
+    const va=new T.Vector3(a[0],a[1],a[2]),vb=new T.Vector3(b[0],b[1],b[2]);
+    const d=vb.clone().sub(va);const len=d.length();
+    const m=new T.Mesh(new T.CylinderGeometry(r2,r1,len,18),mat(cor,mo));
+    m.position.copy(va.clone().add(vb).multiplyScalar(0.5));
+    m.quaternion.setFromUnitVectors(new T.Vector3(0,1,0),d.normalize());
+    if(k)zona(m,k);else int(m);
+    return m;
+  };
+  const CROMO={metalness:0.85,roughness:0.25};
+  // capuz do quadro
+  zona(R(0.07,0.025,0.50,'#121216',[0.545,1.195,-0.38],0,0.01),'quadro_instrumentos');
+  // dois mostradores com aro azul, marcações e ponteiro
+  const mostrador=(zc,ang)=>{
+    cone([0.5375,1.115,zc],[0.5335,1.115,zc],0.066,0.066,'#0A1018',null,{emissive:'#08203A'});
+    const anelM=new T.Mesh(new T.TorusGeometry(0.068,0.005,8,36),mat('#2D8CFF',{emissive:'#1B5BCC'}));
+    anelM.rotation.y=Math.PI/2;anelM.position.set(0.5335,1.115,zc);int(anelM);
+    for(let i=0;i<9;i++){const a=-2.4+i*4.8/8;int(R(0.003,0.008,0.008,'#EDEFF2',[0.532,1.115+0.054*Math.cos(a),zc+0.054*Math.sin(a)],0,0.001));}
+    cone([0.531,1.115,zc],[0.531,1.115+0.055*Math.cos(ang),zc+0.055*Math.sin(ang)],0.004,0.002,'#FF6A1F',null,{emissive:'#FF4A00'});
+    cone([0.531,1.115,zc],[0.5285,1.115,zc],0.009,0.009,'#C9CBD0',null,CROMO);
+  };
+  mostrador(-0.52,-0.9);mostrador(-0.24,0.9);
+  // display central
+  int(R(0.006,0.075,0.10,'#10304F',[0.5335,1.115,-0.38],0,0.003,{emissive:'#1D6FB8'}));
+  int(R(0.003,0.010,0.07,'#BFE3FF',[0.5315,1.135,-0.38],0,0.001,{emissive:'#7CC4FF'}));
+  int(R(0.003,0.010,0.05,'#BFE3FF',[0.5315,1.110,-0.38],0,0.001,{emissive:'#7CC4FF'}));
+  int(R(0.003,0.010,0.06,'#BFE3FF',[0.5315,1.088,-0.38],0,0.001,{emissive:'#7CC4FF'}));
+    zona(R(0.06,0.23,0.42,'#101014',[0.60,1.14,0],0,0.015),'tela_multimidia');
+  [-0.18,0.18].forEach(z=>[1.20,1.165,1.13,1.095,1.06].forEach(y=>zona(R(0.012,0.024,0.026,'#2E2E34',[0.568,y,z],0,0.004),'tela_multimidia')));
+    int(R(0.01,0.17,0.30,'#1B3556',[0.565,1.14,0],0,0.003,{emissive:'#10284A'}));
+  int(R(0.003,0.022,0.30,'#0F1F36',[0.5585,1.215,0],0,0.001,{emissive:'#0A1830'}));
+  int(R(0.003,0.012,0.05,'#F2F0EA',[0.5575,1.215,0.10],0,0.001,{emissive:'#BBB8B0'}));
+  int(R(0.003,0.085,0.15,'#2F6E9E',[0.5585,1.14,-0.075],0,0.001,{emissive:'#143A5C'}));
+  int(R(0.003,0.006,0.13,'#EDEFF2',[0.5575,1.14,-0.075],0,0.001,{emissive:'#AAB0B8'}));
+  [1.175,1.14,1.105].forEach(y=>int(R(0.003,0.028,0.12,'#244B76',[0.5585,y,0.075],0,0.001,{emissive:'#10284A'})));
+    zona(R(0.05,0.14,0.44,'#15151A',[0.57,0.84,0],0,0.012),'climatizador');
+  int(R(0.008,0.006,0.44,'#C9CBD0',[0.543,0.912,0],0,0.002,CROMO));
+  int(R(0.008,0.006,0.44,'#C9CBD0',[0.543,0.768,0],0,0.002,CROMO));
+  [-0.15,0.15].forEach(z=>{
+    cone([0.545,0.835,z],[0.538,0.835,z],0.040,0.040,'#C9CBD0','climatizador',CROMO);
+    cone([0.545,0.835,z],[0.526,0.835,z],0.033,0.033,'#2A2A2F','climatizador');
+    int(R(0.004,0.022,0.06,'#0B1A20',[0.5445,0.888,z],0,0.002,{emissive:'#1A6A8A'}));
+    int(R(0.003,0.010,0.04,'#7BE0FF',[0.5425,0.888,z],0,0.001,{emissive:'#40B8E0'}));
+  });
+  [0.87,0.81].forEach(y=>[-0.06,0,0.06].forEach(z=>int(R(0.008,0.026,0.04,'#2F2F35',[0.543,y,z],0,0.004))));
   [-0.14,0,0.14].forEach(z=>int(R(0.03,0.04,0.04,'#B8B8BD',[0.54,0.84,z],0,0.01)));
-  [-0.80,-0.22,0.30,0.80].forEach(z=>zona(R(0.04,0.07,0.17,'#1F1F23',[0.545,0.97,z],0,0.01),'saidas_ar'));
+   [[-0.76,0.20],[0.76,0.20],[0.36,0.62]].forEach(([z,w])=>{
+    zona(R(0.032,0.05,w,'#141418',[0.543,0.985,z],0,0.008),'saidas_ar');
+    zona(R(0.012,0.006,w+0.02,'#C9CBD0',[0.532,1.012,z],0,0.003,{metalness:0.85,roughness:0.25}),'saidas_ar');
+    zona(R(0.012,0.006,w+0.02,'#C9CBD0',[0.532,0.958,z],0,0.003,{metalness:0.85,roughness:0.25}),'saidas_ar');
+    [-0.012,0.002,0.016].forEach(dy=>int(R(0.006,0.004,w*0.92,'#2C2C32',[0.529,0.985+dy,z],0,0.001)));
+  });
   zona(R(0.04,0.20,0.52,'#35353B',[0.595,0.72,0.42],0,0.01),'porta_luvas');
 
   // volante, coluna e pedais
-  const aro=new T.Mesh(new T.TorusGeometry(0.19,0.03,10,32),mat(CE));
+    const aro=new T.Mesh(new T.TorusGeometry(0.19,0.036,14,40),mat(CE,{roughness:0.85}));
   aro.position.set(0.46,1.0,-0.38);aro.rotation.y=Math.PI/2;zona(aro,'volante');
   zona(R(0.06,0.12,0.12,CE,[0.48,1.0,-0.38],0,0.02),'volante');
   zona(R(0.03,0.04,0.34,CE,[0.48,1.0,-0.38],0,0.01),'volante');
   zona(R(0.03,0.16,0.04,CE,[0.48,0.93,-0.38],0,0.01),'volante');
-  int(barra([0.48,0.96,-0.38],[0.62,0.84,-0.38],0.09,0.09,CE));
+    // carcaça da coluna
+  int(R(0.15,0.10,0.14,'#17171B',[0.56,0.905,-0.38],-0.7,0.025));
+  // logo no centro do volante
+  cone([0.452,1.0,-0.38],[0.444,1.0,-0.38],0.036,0.036,'#D5D7DC','volante',CROMO);
+  cone([0.444,1.0,-0.38],[0.441,1.0,-0.38],0.022,0.022,'#6E7178','volante');
+  // botões de comando nos raios
+  [-0.50,-0.26].forEach(z=>zona(R(0.012,0.045,0.07,'#34343A',[0.458,1.0,z],0,0.006),'volante'));
+
+  // alavancas (haste cônica, anel cromado, ponta)
+  const alavanca=(a,b,k)=>{
+    cone(a,lp(a,b,0.40),0.015,0.018,'#1A1A1E',k);
+    cone(lp(a,b,0.40),lp(a,b,0.96),0.021,0.023,'#27272C',k);
+    cone(lp(a,b,0.66),lp(a,b,0.72),0.0265,0.0265,'#C9CBD0',k,CROMO);
+    cone(lp(a,b,0.96),b,0.023,0.016,'#33333A',k);
+  };
+  // seta (lado esquerdo do motorista): anel do farol-baixo/neblina perto da ponta
+  const aSeta=[0.545,0.915,-0.42],bSeta=[0.51,0.90,-0.675];
+  alavanca(aSeta,bSeta,'alavanca_seta');
+  cone(lp(aSeta,bSeta,0.78),lp(aSeta,bSeta,0.88),0.0255,0.0255,'#3A3A40','alavanca_seta');
+  // limpador (lado direito): anel rotativo do intermitente, marcas brancas e botão do lavador
+  const aLimp=[0.545,0.915,-0.34],bLimp=[0.51,0.90,-0.085];
+  alavanca(aLimp,bLimp,'alavanca_limpador');
+  cone(lp(aLimp,bLimp,0.50),lp(aLimp,bLimp,0.62),0.0265,0.0265,'#3A3A40','alavanca_limpador');
+  [0.52,0.56,0.60].forEach(t=>{const p=lp(aLimp,bLimp,t);int(R(0.006,0.006,0.012,'#F2F0EA',[p[0],p[1]+0.028,p[2]],0,0.002));});
+  cone(bLimp,[bLimp[0]-0.005,bLimp[1]-0.002,bLimp[2]+0.02],0.012,0.012,'#8E9198','alavanca_limpador',CROMO);
   zona(R(0.03,0.15,0.07,'#555559',[0.50,0.52,-0.47],0,0.01),'pedais');
   zona(R(0.03,0.15,0.045,'#555559',[0.50,0.52,-0.30],0,0.01),'pedais');
   // ═════ ALAVANCAS NA COLUNA DE DIREÇÃO ═════
@@ -10866,10 +10943,12 @@ function montarCarroGenerico(T,scene,registrar,extras){
     const c=new T.Mesh(new T.CylinderGeometry(0.05,0.05,0.03,18),mat('#0E0E10'));
     c.position.set(0.30,0.765,z);zona(c,'porta_copos');
   });
-  const stem=new T.Mesh(new T.CylinderGeometry(0.012,0.012,0.14,10),mat('#2A2A2E'));
-  stem.position.set(0.48,0.82,0);zona(stem,'alavanca_cambio');
-  const knob=new T.Mesh(new T.SphereGeometry(0.04,14,10),mat('#1A1A1E'));
-  knob.position.set(0.48,0.92,0);zona(knob,'alavanca_cambio');
+  cone([0.48,0.755,0],[0.48,0.80,0],0.062,0.036,'#1E1E22','alavanca_cambio',{roughness:0.9});
+  cone([0.48,0.80,0],[0.48,0.808,0],0.042,0.042,'#C9CBD0','alavanca_cambio',CROMO);
+  cone([0.48,0.808,0],[0.48,0.875,0],0.014,0.014,'#2A2A2E','alavanca_cambio');
+  const knob=new T.Mesh(new T.SphereGeometry(0.036,18,12),mat('#1A1A1E',{roughness:0.8}));
+  knob.scale.set(0.95,1.35,0.8);knob.position.set(0.48,0.905,0);zona(knob,'alavanca_cambio');
+  zona(R(0.010,0.020,0.020,'#C9CBD0',[0.514,0.915,0],0,0.003,{metalness:0.85,roughness:0.25}),'alavanca_cambio');
   zona(R(0.34,0.10,0.24,'#3A3A40',[0.02,0.80,0],0,0.03),'apoio_braco_central');
 
   // bancos dianteiros
@@ -10902,7 +10981,15 @@ function montarCarroGenerico(T,scene,registrar,extras){
       zona(R(0.84,0.24,0.07,CD,[x,0.56,s*0.80],0,0.02),'forro_porta_'+p+'_'+nome);
       int(R(0.55,0.06,0.10,'#6F6D69',[x-0.02,0.84,s*0.745],0,0.02));
       const xh=x-(p==='diant'?0.34:0.30);
-      zona(R(0.20,0.04,0.045,'#C5C2BB',[xh,0.90,s*0.755],0,0.012),'macaneta_int_'+p+'_'+nome);
+            const kM='macaneta_int_'+p+'_'+nome;
+      zona(R(0.34,0.12,0.016,'#C9CBD0',[xh,0.90,s*0.757],0,0.008,CROMO),kM);
+      zona(R(0.31,0.09,0.02,'#0D0D10',[xh,0.90,s*0.749],0,0.006),kM);
+      zona(R(0.25,0.032,0.026,'#E6E7EA',[xh,0.905,s*0.733],0,0.012,{metalness:0.9,roughness:0.18}),kM);
+      zona(R(0.22,0.010,0.016,'#9A9DA4',[xh,0.882,s*0.727],0,0.004,{metalness:0.8,roughness:0.3}),kM);
+      [-0.115,0.115].forEach(dx=>cone([xh+dx,0.905,s*0.742],[xh+dx,0.905,s*0.752],0.016,0.016,'#8E9198',kM,CROMO));
+      zona(R(0.03,0.03,0.022,'#2A2A2F',[xh+0.12,0.945,s*0.745],0,0.008),kM);
+      // filete cromado vertical na porta, como na foto
+      zona(R(0.02,0.30,0.014,'#C9CBD0',[x+0.37,0.70,s*0.761],0,0.006,CROMO),'forro_porta_'+p+'_'+nome);
       // encosto de braço
       zona(R(0.50,0.06,0.17,'#3A3A40',[x+0.06,0.90,s*0.69],0,0.02),'apoio_braco_porta_'+p+'_'+nome);
       // comando do vidro (um por porta, zona própria)
@@ -10922,12 +11009,19 @@ function montarCarroGenerico(T,scene,registrar,extras){
   cortina.rotation.x=Math.PI/2;cortina.position.set(-0.32,1.525,0);
   zona(cortina,'cortina_teto_solar').userData.opacAtiva=0.8;
   lados.forEach(([nome,s])=>{
-    zona(R(0.18,0.04,0.06,'#BDBAB3',[0.15,1.49,s*0.70],0,0.012),'alca_teto_diant_'+nome);
-    zona(R(0.18,0.04,0.06,'#BDBAB3',[-0.62,1.49,s*0.70],0,0.012),'alca_teto_tras_'+nome);
+        [[0.15,'diant'],[-0.62,'tras']].forEach(([ax,ap])=>{
+      const kA='alca_teto_'+ap+'_'+nome;
+      zona(R(0.22,0.02,0.07,'#26262A',[ax,1.505,s*0.70],0,0.01),kA);
+      [-0.09,0.09].forEach(dx=>zona(R(0.03,0.045,0.05,'#2E2E33',[ax+dx,1.478,s*0.70],0,0.01),kA));
+      zona(R(0.20,0.024,0.04,'#3A3A40',[ax,1.46,s*0.70],0,0.01),kA);
+      zona(R(0.16,0.008,0.008,'#C9CBD0',[ax,1.46,s*0.678],0,0.003,{metalness:0.85,roughness:0.25}),kA);
+    });
+    
     zona(R(0.30,0.025,0.42,'#C4C1BA',[0.22,1.485,s*0.40],0,0.01),'quebra_sol_'+nome);
   });
   int(R(0.02,0.10,0.02,CE,[0.43,1.47,0],0,0.005));
-  zona(R(0.04,0.08,0.26,CE,[0.40,1.38,0],0,0.015),'retrovisor_interno');
+    zona(R(0.04,0.08,0.30,CE,[0.40,1.38,0],0,0.015),'retrovisor_interno');
+  zona(R(0.008,0.062,0.27,'#9FB4C4',[0.377,1.38,0],0,0.003,{metalness:0.8,roughness:0.1}),'retrovisor_interno');
   zona(R(0.20,0.035,0.18,CP,[0.18,1.51,0],0,0.01),'console_teto');
   [-0.04,0.04].forEach(z=>int(R(0.04,0.01,0.03,'#2A2A2E',[0.18,1.49,z],0,0.004)));
   
