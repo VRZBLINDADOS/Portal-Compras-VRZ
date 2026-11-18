@@ -10886,10 +10886,7 @@ function montarCarroGenerico(T,scene,registrar,extras){
 
     // ---------- laterais ----------
     lados.forEach(([nome,s])=>zona(R(1.1,0.64,0.06,'#2C2C30',[-1.52,0.76,s*0.80],0,0.01),'lateral_porta_malas_'+nome));
-    // caixa de roda direita (grande, arredondada, com aba na base)
-    zona(R(0.50,0.22,0.10,PLD,[-1.40,0.70,0.65],0,0.11),'lateral_porta_malas_dir');
-    zona(R(0.84,0.02,0.20,PL2,[-1.40,0.915,0.64],0,0.006),'lateral_porta_malas_dir');
-    zona(R(0.98,0.03,0.12,PL2,[-1.40,0.505,0.55],0,0.008),'lateral_porta_malas_dir');
+       // (caixa de roda direita removida — atrapalhava a seleção do macaco)
     // degrau baixo na esquerda
     zona(R(0.92,0.07,0.10,PLD,[-1.40,0.525,-0.75],0,0.02),'lateral_porta_malas_esq');
 
