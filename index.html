@@ -10506,6 +10506,11 @@ const ZONAS_EXT_EXTRA=[
   {k:'saia_lateral_dir',label:'Saia lateral direita'},
   {k:'antena',label:'Antena'},
   {k:'aerofolio',label:'Aerofólio'},
+    {k:'seta_retrovisor_esq',label:'Seta do retrovisor esquerdo'},
+  {k:'seta_retrovisor_dir',label:'Seta do retrovisor direito'},
+  {k:'lanterna_regua',label:'Lanterna régua da tampa traseira'},
+  {k:'limpador_parabrisa',label:'Limpador do para-brisa'},
+  {k:'limpador_traseiro',label:'Limpador do vidro traseiro (vigia)'},
 ];
 const ZONAS_INT=[
   {k:'painel',label:'Painel'},
@@ -10597,6 +10602,8 @@ const ZONAS_INT=[
   {k:'fechadura_tampa',label:'Fechadura da tampa do porta-malas'},
   {k:'borracha_vedacao_tampa',label:'Borracha de vedação da tampa'},
   {k:'alavanca_rebatimento_banco',label:'Alavancas de rebatimento do banco'},
+    {k:'alavanca_seta',label:'Alavanca de seta (chave de seta)'},
+  {k:'alavanca_limpador',label:'Alavanca dos limpadores'},
 ];
 const ZONAS_TODAS=[
   ...ZONAS_INSP.map(z=>({...z,area:'externo'})),
@@ -10634,6 +10641,7 @@ function montarCarroGenerico(T,scene,registrar,extras){
   const naTampa=(m)=>{m.position.x-=HX;m.position.y-=HY;tampa.add(m);return m;};
   const zonaT=(m,k)=>{registrar(m,k);return naTampa(m);};
   const zonaIntT=(m,k)=>{registrar(m,k,'int');return naTampa(m);};
+    const extT=(m)=>{extras.ext.push(m);return naTampa(m);}; // peça fixa da tampa, não clicável, só no externo
   const vid=(m,op)=>{m.material.transparent=true;m.material.opacity=op||0.5;m.material.roughness=0.15;m.material.depthWrite=false;return m;};
   const geoRBox=(sx,sy,sz,b)=>{
     b=Math.min(b,sx/2.2,sy/2.2,sz/2.2);
@@ -10743,6 +10751,9 @@ function montarCarroGenerico(T,scene,registrar,extras){
       zona(lat(poly(pts),0.09,s*0.90,CPR),'coluna_'+cn+'_'+nome);
     });
     zona(R(0.16,0.13,0.22,CB,[0.70,1.07,s*1.06],0,0.03),'retrovisor_'+nome);
+        // seta no retrovisor (lateral + frente da carcaça)
+    zona(R(0.12,0.04,0.02,'#FFA31A',[0.70,1.09,s*1.172],0,0.008),'seta_retrovisor_'+nome);
+    zona(R(0.02,0.04,0.07,'#FFA31A',[0.782,1.09,s*1.13],0,0.008),'seta_retrovisor_'+nome);
     ext(R(0.05,0.04,0.14,'#2A2A2E',[0.72,1.04,s*0.97],0,0.01));
     zona(R(0.14,0.13,0.46,'#DDEBF5',[2.14,0.88,s*0.64],0,0.02),'farol_'+nome);
     ext(R(0.03,0.03,0.42,'#2D7BFF',[2.215,0.79,s*0.64],0,0.005,{emissive:'#1B5BCC'}));
@@ -10759,7 +10770,44 @@ function montarCarroGenerico(T,scene,registrar,extras){
     roda(1.40,s,nome,true);
     roda(-1.40,s,nome,false);
   });
+  // ═════ LANTERNA RÉGUA da tampa (duas metades + emblema central) ═════
+  {
+    const LX=-2.262,LY=0.93;
+    extT(R(0.02,0.115,1.20,'#17090C',[-2.243,LY,0],0,0.01)); // moldura escura
+    [[-0.56,-0.10],[0.10,0.56]].forEach(([z0,z1])=>{
+      zonaT(R(0.03,0.06,z1-z0,'#D4202C',[LX,LY,(z0+z1)/2],0,0.01),'lanterna_regua');
+    });
+    const emblema=new T.Mesh(new T.CylinderGeometry(0.065,0.065,0.02,28),mat('#C9CBD0',{metalness:0.7,roughness:0.3}));
+    emblema.rotation.z=Math.PI/2;emblema.position.set(-2.268,LY,0);extT(emblema);
+    const emblemaI=new T.Mesh(new T.CylinderGeometry(0.045,0.045,0.022,28),mat('#14161A'));
+    emblemaI.rotation.z=Math.PI/2;emblemaI.position.set(-2.272,LY,0);extT(emblemaI);
+  }
 
+  // ═════ LIMPADORES DO PARA-BRISA (2 braços + 2 palhetas, em repouso) ═════
+  {
+    const A=0.805,WC=[0.625,1.26],Wn=[Math.cos(A),Math.sin(A)],Wu=[-Math.sin(A),Math.cos(A)];
+    const Pw=(ln,lu,z)=>[WC[0]+ln*Wn[0]+lu*Wu[0],WC[1]+ln*Wn[1]+lu*Wu[1],z]; // coordenada local do vidro -> mundo
+    const LB='#101012',LA='#1E1E22';
+    [[-0.78,-0.10],[0.02,0.70]].forEach(([z0,z1])=>{
+      const zm=(z0+z1)/2;
+      zona(barra(Pw(0.03,-0.30,z0),Pw(0.03,-0.285,z1),0.02,0.02,LB),'limpador_parabrisa'); // palheta
+      zona(barra(Pw(0.026,-0.36,z0),Pw(0.026,-0.30,zm),0.014,0.014,LA),'limpador_parabrisa'); // braço
+      const pv=new T.Mesh(new T.SphereGeometry(0.022,12,8),mat(LA));
+      const p=Pw(0.03,-0.36,z0);pv.position.set(p[0],p[1],p[2]);
+      zona(pv,'limpador_parabrisa'); // pivô
+    });
+  }
+
+  // ═════ LIMPADOR DO VIDRO TRASEIRO (vigia) — preso na tampa ═════
+  {
+    const A=-0.495,RC=[-1.925,1.25],Rn=[-Math.cos(A),-Math.sin(A)],Ru=[-Math.sin(A),Math.cos(A)];
+    const Qr=(ln,lu,z)=>[RC[0]+ln*Rn[0]+lu*Ru[0],RC[1]+ln*Rn[1]+lu*Ru[1],z];
+    zonaT(barra(Qr(0.03,-0.22,0.03),Qr(0.03,-0.19,0.55),0.02,0.02,'#101012'),'limpador_traseiro'); // palheta
+    zonaT(barra(Qr(0.026,-0.23,0.0),Qr(0.026,-0.20,0.30),0.014,0.014,'#1E1E22'),'limpador_traseiro'); // braço
+    const pv=new T.Mesh(new T.SphereGeometry(0.025,12,8),mat('#1E1E22'));
+    const p=Qr(0.03,-0.23,0.0);pv.position.set(p[0],p[1],p[2]);
+    zonaT(pv,'limpador_traseiro'); // pivô
+  }
   // ═════════════ INTERNO ═════════════
   // vidros vistos de dentro (clicáveis, mesma zona do vidro externo)
   zonaInt(vid(R(0.03,0.75,1.66,'#8CB7D6',[0.625,1.26,0],0.805,0.004),0.28),'para_brisa');
@@ -10797,7 +10845,19 @@ function montarCarroGenerico(T,scene,registrar,extras){
   int(barra([0.48,0.96,-0.38],[0.62,0.84,-0.38],0.09,0.09,CE));
   zona(R(0.03,0.15,0.07,'#555559',[0.50,0.52,-0.47],0,0.01),'pedais');
   zona(R(0.03,0.15,0.045,'#555559',[0.50,0.52,-0.30],0,0.01),'pedais');
-
+  // ═════ ALAVANCAS NA COLUNA DE DIREÇÃO ═════
+  {
+    const base=[0.54,0.908,-0.38];
+    int(R(0.07,0.09,0.09,CE,[0.55,0.905,-0.38],0,0.02)); // coluna/carcaça das alavancas
+    // esquerda (lado da porta do motorista): seta
+    zona(barra(base,[0.52,0.915,-0.64],0.032,0.026,'#1B1B1F'),'alavanca_seta');
+    zona(R(0.045,0.04,0.07,'#2A2A30',[0.52,0.915,-0.655],0,0.012),'alavanca_seta');
+    zona(R(0.012,0.012,0.03,'#E8A21A',[0.495,0.925,-0.655],0,0.004),'alavanca_seta');
+    // direita (lado do centro): limpadores
+    zona(barra(base,[0.52,0.915,-0.13],0.032,0.026,'#1B1B1F'),'alavanca_limpador');
+    zona(R(0.05,0.05,0.035,'#8A8D93',[0.52,0.915,-0.17],0,0.012),'alavanca_limpador');
+    zona(R(0.04,0.04,0.045,'#2A2A30',[0.52,0.915,-0.115],0,0.012),'alavanca_limpador');
+  }
   // console central
   int(R(0.40,0.20,0.26,'#2C2C31',[0.0,0.62,0],0,0.02));
   zona(R(0.38,0.24,0.27,'#3A3A40',[0.40,0.63,0],0,0.03),'console_central');
