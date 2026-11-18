@@ -10886,40 +10886,82 @@ function montarCarroGenerico(T,scene,registrar,extras){
     // tampão (semitransparente para não esconder o que está embaixo)
     zona(R(0.50,0.03,1.34,'#3A3A3F',[-1.25,1.02,0],0,0.008,{transparent:true,opacity:0.55,depthWrite:false}),'bandeja_traseira').userData.opacAtiva=0.9;
 
-    // estepe
-    const pneuEst=new T.Mesh(new T.CylinderGeometry(0.33,0.33,0.15,32),mat('#111114',{roughness:0.9}));
-    pneuEst.position.set(-1.52,0.515,0);zona(pneuEst,'estepe');
-    const aroEst=new T.Mesh(new T.CylinderGeometry(0.21,0.21,0.16,24),mat('#9FA2A8',{metalness:0.6,roughness:0.35}));
-    aroEst.position.set(-1.52,0.515,0);zona(aroEst,'estepe');
+    // estepe: pneu arredondado, aro com furos de ventilação, parafusos e capa central
+    const pocoEst=new T.Mesh(new T.CylinderGeometry(0.37,0.37,0.012,40),mat('#0C0C0F',{roughness:0.95}));
+    pocoEst.position.set(-1.52,0.446,0);int(pocoEst);
+    const pneuEst=new T.Mesh(new T.TorusGeometry(0.255,0.09,14,40),mat('#141417',{roughness:0.95}));
+    pneuEst.rotation.x=Math.PI/2;pneuEst.scale.z=0.95;pneuEst.position.set(-1.52,0.53,0);zona(pneuEst,'estepe');
+    const cilE=(r,h,cor,x,y,z,mo)=>{const m=new T.Mesh(new T.CylinderGeometry(r,r,h,24),mat(cor,mo));m.position.set(x,y,z);zona(m,'estepe');return m;};
+    cilE(0.19,0.07,'#AEB1B8',-1.52,0.53,0,{metalness:0.7,roughness:0.3});
+    cilE(0.15,0.02,'#8E9198',-1.52,0.56,0,{metalness:0.7,roughness:0.35});
+    for(let i=0;i<5;i++){
+      const a=i*Math.PI*2/5;
+      cilE(0.022,0.014,'#1A1A1E',-1.52+Math.cos(a)*0.115,0.571,Math.sin(a)*0.115);
+      cilE(0.014,0.024,'#D5D7DC',-1.52+Math.cos(a+Math.PI/5)*0.075,0.575,Math.sin(a+Math.PI/5)*0.075,{metalness:0.8,roughness:0.25});
+    }
+    cilE(0.045,0.03,'#2A2C30',-1.52,0.578,0);
 
-    // macaco (lado direito)
-    zona(R(0.32,0.07,0.12,'#6B6E75',[-1.52,0.52,0.555],0,0.015),'macaco');
-    zona(R(0.14,0.02,0.12,'#8A8D94',[-1.52,0.565,0.555],0,0.006),'macaco');
+       // macaco tipo tesoura (base, 4 braços, fuso e apoio superior)
+    const zJ=0.555,JL=[-1.64,0.533],JT=[-1.52,0.572],JR=[-1.40,0.533],JB=[-1.52,0.494];
+    zona(R(0.30,0.012,0.10,'#6E7178',[-1.52,0.491,zJ],0,0.004),'macaco');
+    zona(R(0.13,0.012,0.09,'#6E7178',[-1.52,0.578,zJ],0,0.004),'macaco');
+    [[JL,JT],[JT,JR],[JR,JB],[JB,JL]].forEach(([p,q])=>zona(barra([p[0],p[1],zJ],[q[0],q[1],zJ],0.06,0.014,'#9A9DA4'),'macaco'));
+    const fuso=new T.Mesh(new T.CylinderGeometry(0.008,0.008,0.28,10),mat('#C9CBD0',{metalness:0.8,roughness:0.3}));
+    fuso.rotation.z=Math.PI/2;fuso.position.set(-1.52,0.533,zJ);zona(fuso,'macaco');
+    zona(R(0.03,0.035,0.035,'#4A4D53',[-1.665,0.533,zJ],0,0.008),'macaco');
 
-    // extintor (deitado, lado direito)
-    const extCorpo=new T.Mesh(new T.CylinderGeometry(0.045,0.045,0.30,16),mat('#C21F1F'));
-    extCorpo.rotation.z=Math.PI/2;extCorpo.position.set(-1.52,0.53,0.42);zona(extCorpo,'extintor');
-    const extTampa=new T.Mesh(new T.CylinderGeometry(0.03,0.03,0.05,12),mat('#1A1A1E'));
-    extTampa.rotation.z=Math.PI/2;extTampa.position.set(-1.37,0.53,0.42);zona(extTampa,'extintor');
+        // extintor (deitado, lado direito)
+    const exC=-1.55,exZ=0.42,exY=0.535;
+    const exCil=(r,len,cor,x,mo)=>{const m=new T.Mesh(new T.CylinderGeometry(r,r,len,20),mat(cor,mo));m.rotation.z=Math.PI/2;m.position.set(x,exY,exZ);zona(m,'extintor');return m;};
+    exCil(0.05,0.26,'#C21F1F',exC,{metalness:0.3,roughness:0.4});
+    [-1.68,-1.42].forEach(x=>{const d=new T.Mesh(new T.SphereGeometry(0.05,18,10),mat('#C21F1F',{metalness:0.3,roughness:0.4}));d.scale.x=0.55;d.position.set(x,exY,exZ);zona(d,'extintor');});
+    exCil(0.0515,0.075,'#F2F0EA',exC,{roughness:0.8});
+    exCil(0.0525,0.016,'#1A1A1E',-1.64);
+    exCil(0.0525,0.016,'#1A1A1E',-1.46);
+    exCil(0.02,0.05,'#B8B8BD',-1.385,{metalness:0.8,roughness:0.3});
+    zona(R(0.06,0.05,0.045,'#1A1A1E',[-1.345,exY+0.005,exZ],0,0.012),'extintor');
+    zona(R(0.075,0.012,0.03,'#D9262B',[-1.335,exY+0.04,exZ],0,0.005),'extintor');
+    const manometro=new T.Mesh(new T.CylinderGeometry(0.014,0.014,0.012,14),mat('#E6E4DC'));
+    manometro.rotation.x=Math.PI/2;manometro.position.set(-1.365,exY+0.005,exZ+0.028);zona(manometro,'extintor');
 
     // kit de ferramentas e chave de roda (lado esquerdo)
-    zona(R(0.30,0.10,0.18,'#233A5E',[-1.52,0.535,-0.58],0,0.025),'kit_ferramentas');
-    zona(R(0.46,0.025,0.03,'#A5A8AE',[-1.52,0.50,-0.43],0,0.008),'chave_roda');
-    zona(R(0.03,0.025,0.12,'#A5A8AE',[-1.77,0.50,-0.43],0,0.008),'chave_roda');
+        zona(R(0.30,0.065,0.19,'#1F3A66',[-1.52,0.5175,-0.58],0,0.02),'kit_ferramentas');
+    zona(R(0.31,0.035,0.20,'#2C508F',[-1.52,0.5675,-0.58],0,0.02),'kit_ferramentas');
+    zona(R(0.14,0.012,0.022,'#14161A',[-1.52,0.592,-0.58],0,0.006),'kit_ferramentas');
+    [-0.07,0.07].forEach(dx=>zona(R(0.03,0.04,0.012,'#C9CBD0',[-1.52+dx,0.545,-0.482],0,0.004),'kit_ferramentas'));
+        const eixoCh=new T.Mesh(new T.CylinderGeometry(0.011,0.011,0.46,12),mat('#B9BCC2',{metalness:0.8,roughness:0.3}));
+    eixoCh.rotation.z=Math.PI/2;eixoCh.position.set(-1.52,0.497,-0.43);zona(eixoCh,'chave_roda');
+    const peCh=new T.Mesh(new T.CylinderGeometry(0.011,0.011,0.12,12),mat('#B9BCC2',{metalness:0.8,roughness:0.3}));
+    peCh.rotation.x=Math.PI/2;peCh.position.set(-1.76,0.497,-0.43);zona(peCh,'chave_roda');
+    const soqCh=new T.Mesh(new T.CylinderGeometry(0.022,0.022,0.05,6),mat('#8F9298',{metalness:0.8,roughness:0.3}));
+    soqCh.position.set(-1.29,0.51,-0.43);zona(soqCh,'chave_roda');
 
     // triângulo de sinalização (preso na lateral esquerda)
-    zona(lat(poly([[-1.82,0.58],[-1.52,0.58],[-1.67,0.84]]),0.03,-0.745,'#D6342B'),'triangulo_sinalizacao');
-    zona(lat(poly([[-1.76,0.62],[-1.58,0.62],[-1.67,0.78]]),0.034,-0.745,'#F2F0EA'),'triangulo_sinalizacao');
-
+       const triPts=(s)=>[[-1.82,0.58],[-1.52,0.58],[-1.67,0.84]].map(([x,y])=>new T.Vector2(-1.67+(x+1.67)*s,0.6667+(y-0.6667)*s));
+    const triMoldura=(sa,sb,esp,cor)=>{
+      const sh=new T.Shape(triPts(sa));sh.holes.push(new T.Path(triPts(sb)));
+      const g=new T.ExtrudeGeometry(sh,{depth:esp,bevelEnabled:false});g.translate(0,0,-esp/2);
+      const m=new T.Mesh(g,mat(cor));m.position.z=-0.745;return m;
+    };
+    zona(triMoldura(1,0.62,0.030,'#D6342B'),'triangulo_sinalizacao');
+    zona(triMoldura(0.80,0.74,0.034,'#F2F0EA'),'triangulo_sinalizacao');
+    [-1.80,-1.54].forEach(x=>zona(R(0.04,0.012,0.03,'#2A2A2E',[x,0.574,-0.745],0,0.004),'triangulo_sinalizacao'));
     // ganchos de amarração
     [[-1.95,0.66],[-1.95,-0.66],[-1.10,0.66],[-1.10,-0.66]].forEach(([x,z])=>{
-      const g=new T.Mesh(new T.TorusGeometry(0.035,0.009,8,16),mat('#B7BAC0',{metalness:0.7,roughness:0.3}));
-      g.rotation.x=Math.PI/2;g.position.set(x,0.50,z);zona(g,'ganchos_amarracao');
+          zona(R(0.085,0.012,0.085,'#7A7D84',[x,0.491,z],0,0.004),'ganchos_amarracao');
+      const g=new T.Mesh(new T.TorusGeometry(0.03,0.0075,8,18,Math.PI),mat('#C9CBD0',{metalness:0.8,roughness:0.3}));
+      g.position.set(x,0.497,z);zona(g,'ganchos_amarracao');
     });
 
     // tomada 12V (dir.) e luz do porta-malas (esq.)
-    zona(R(0.05,0.07,0.07,'#101014',[-1.45,0.78,0.755],0,0.01),'tomada_12v_porta_malas');
-    zona(R(0.16,0.04,0.05,'#EDE9DC',[-1.72,1.00,-0.755],0,0.01,{emissive:'#5A5648'}),'luz_porta_malas');
+      zona(R(0.085,0.085,0.016,'#2A2A2E',[-1.45,0.78,0.762],0,0.006),'tomada_12v_porta_malas');
+    const aroTom=new T.Mesh(new T.TorusGeometry(0.027,0.004,8,22),mat('#B9BCC2',{metalness:0.8,roughness:0.3}));
+    aroTom.position.set(-1.45,0.78,0.752);zona(aroTom,'tomada_12v_porta_malas');
+    const furoTom=new T.Mesh(new T.CylinderGeometry(0.022,0.022,0.012,18),mat('#050507'));
+    furoTom.rotation.x=Math.PI/2;furoTom.position.set(-1.45,0.78,0.754);zona(furoTom,'tomada_12v_porta_malas');
+    zona(R(0.008,0.008,0.004,'#2DFF6A',[-1.41,0.815,0.7525],0,0.002,{emissive:'#10A040'}),'tomada_12v_porta_malas');
+    zona(R(0.17,0.05,0.022,'#2A2A2E',[-1.72,1.00,-0.759],0,0.008),'luz_porta_malas');
+    zona(R(0.14,0.032,0.012,'#F4F1E6',[-1.72,1.00,-0.745],0,0.006,{emissive:'#7A7560'}),'luz_porta_malas');
 
     // alavancas de rebatimento do banco traseiro
     [-0.45,0.45].forEach(z=>zona(R(0.03,0.03,0.12,'#B9B6AF',[-0.99,1.20,z],0.15,0.008),'alavanca_rebatimento_banco'));
