@@ -10875,19 +10875,36 @@ function montarCarroGenerico(T,scene,registrar,extras){
   zona(R(0.24,0.03,0.14,'#D8D5CE',[-0.78,1.515,0],0,0.01),'luz_teto_traseira');
   int(R(0.18,0.012,0.09,'#F4F1E6',[-0.78,1.497,0],0,0.003,{emissive:'#6A6658'}));
 
-  // ═════ PORTA-MALAS ═════
+   // ═════ PORTA-MALAS (estilo SUV: assoalho plano, caixa de roda, banco bipartido) ═════
   {
-    // assoalho + carpete (4 faixas ao redor do vão do estepe)
-    zona(R(1.1,0.04,1.5,'#1E1E22',[-1.52,0.42,0],0,0.01),'porta_malas_int');
-    [[0.19,1.5,-1.065,0],[0.19,1.5,-1.975,0],[0.72,0.39,-1.52,-0.555],[0.72,0.39,-1.52,0.555]].forEach(([sx,sz,x,z])=>zona(R(sx,0.04,sz,'#34343A',[x,0.465,z],0,0.008),'carpete_porta_malas'));
+    const PL='#2B2B30',PL2='#3A3A40',PLD='#1C1C20',MET='#C9CBD0',BOR='#0E0E10';
 
-    // laterais
+    // ---------- assoalho + carpete (com vão do estepe) ----------
+    zona(R(1.14,0.04,1.54,PLD,[-1.51,0.43,0],0,0.01),'porta_malas_int');
+    [[0.19,1.5,-1.065,0],[0.19,1.5,-1.975,0],[0.72,0.39,-1.52,-0.555],[0.72,0.39,-1.52,0.555]]
+      .forEach(([sx,sz,x,z])=>zona(R(sx,0.04,sz,PL,[x,0.47,z],0,0.008),'carpete_porta_malas'));
+
+    // ---------- laterais ----------
     lados.forEach(([nome,s])=>zona(R(1.1,0.64,0.06,'#2C2C30',[-1.52,0.76,s*0.80],0,0.01),'lateral_porta_malas_'+nome));
+    // caixa de roda direita (grande, arredondada, com aba na base)
+    zona(R(0.92,0.42,0.30,PLD,[-1.40,0.70,0.65],0,0.11),'lateral_porta_malas_dir');
+    zona(R(0.84,0.02,0.20,PL2,[-1.40,0.915,0.64],0,0.006),'lateral_porta_malas_dir');
+    zona(R(0.98,0.03,0.12,PL2,[-1.40,0.505,0.55],0,0.008),'lateral_porta_malas_dir');
+    // degrau baixo na esquerda
+    zona(R(0.92,0.07,0.10,PLD,[-1.40,0.525,-0.75],0,0.02),'lateral_porta_malas_esq');
 
-    // tampão (semitransparente para não esconder o que está embaixo)
-    zona(R(0.50,0.03,1.34,'#3A3A3F',[-1.25,1.02,0],0,0.008,{transparent:true,opacity:0.55,depthWrite:false}),'bandeja_traseira').userData.opacAtiva=0.9;
+    // ---------- encosto do banco traseiro visto do porta-malas (60/40) ----------
+    const xs=(y)=>-0.957-0.15*(y-0.96);
+    zona(R(0.02,0.58,0.86,PL,[xs(0.96),0.96,-0.31],0.15,0.006),'banco_tras_esq');
+    zona(R(0.02,0.58,0.60,PL,[xs(0.96),0.96,0.44],0.15,0.006),'banco_tras_dir');
+    // faixa mais clara na base do encosto
+    zona(R(0.03,0.15,0.86,PL2,[xs(0.58)-0.005,0.58,-0.31],0.15,0.006),'banco_tras_esq');
+    zona(R(0.03,0.15,0.60,PL2,[xs(0.58)-0.005,0.58,0.44],0.15,0.006),'banco_tras_dir');
 
-    // estepe: pneu arredondado, aro com furos de ventilação, parafusos e capa central
+    // ---------- tampão (semitransparente, não esconde o que está embaixo) ----------
+    zona(R(0.50,0.03,1.34,'#3A3A3F',[-1.25,1.02,0],0,0.008,{transparent:true,opacity:0.35,depthWrite:false}),'bandeja_traseira').userData.opacAtiva=0.9;
+
+    // ---------- estepe no vão do assoalho ----------
     const pocoEst=new T.Mesh(new T.CylinderGeometry(0.37,0.37,0.012,40),mat('#0C0C0F',{roughness:0.95}));
     pocoEst.position.set(-1.52,0.446,0);int(pocoEst);
     const pneuEst=new T.Mesh(new T.TorusGeometry(0.255,0.09,14,40),mat('#141417',{roughness:0.95}));
@@ -10902,7 +10919,7 @@ function montarCarroGenerico(T,scene,registrar,extras){
     }
     cilE(0.045,0.03,'#2A2C30',-1.52,0.578,0);
 
-       // macaco tipo tesoura (base, 4 braços, fuso e apoio superior)
+    // ---------- macaco tipo tesoura ----------
     const zJ=0.555,JL=[-1.64,0.533],JT=[-1.52,0.572],JR=[-1.40,0.533],JB=[-1.52,0.494];
     zona(R(0.30,0.012,0.10,'#6E7178',[-1.52,0.491,zJ],0,0.004),'macaco');
     zona(R(0.13,0.012,0.09,'#6E7178',[-1.52,0.578,zJ],0,0.004),'macaco');
@@ -10911,7 +10928,7 @@ function montarCarroGenerico(T,scene,registrar,extras){
     fuso.rotation.z=Math.PI/2;fuso.position.set(-1.52,0.533,zJ);zona(fuso,'macaco');
     zona(R(0.03,0.035,0.035,'#4A4D53',[-1.665,0.533,zJ],0,0.008),'macaco');
 
-        // extintor (deitado, lado direito)
+    // ---------- extintor (deitado, lado direito, entre estepe e caixa de roda) ----------
     const exC=-1.55,exZ=0.42,exY=0.535;
     const exCil=(r,len,cor,x,mo)=>{const m=new T.Mesh(new T.CylinderGeometry(r,r,len,20),mat(cor,mo));m.rotation.z=Math.PI/2;m.position.set(x,exY,exZ);zona(m,'extintor');return m;};
     exCil(0.05,0.26,'#C21F1F',exC,{metalness:0.3,roughness:0.4});
@@ -10925,20 +10942,20 @@ function montarCarroGenerico(T,scene,registrar,extras){
     const manometro=new T.Mesh(new T.CylinderGeometry(0.014,0.014,0.012,14),mat('#E6E4DC'));
     manometro.rotation.x=Math.PI/2;manometro.position.set(-1.365,exY+0.005,exZ+0.028);zona(manometro,'extintor');
 
-    // kit de ferramentas e chave de roda (lado esquerdo)
-        zona(R(0.30,0.065,0.19,'#1F3A66',[-1.52,0.5175,-0.58],0,0.02),'kit_ferramentas');
+    // ---------- kit de ferramentas e chave de roda (lado esquerdo) ----------
+    zona(R(0.30,0.065,0.19,'#1F3A66',[-1.52,0.5175,-0.58],0,0.02),'kit_ferramentas');
     zona(R(0.31,0.035,0.20,'#2C508F',[-1.52,0.5675,-0.58],0,0.02),'kit_ferramentas');
     zona(R(0.14,0.012,0.022,'#14161A',[-1.52,0.592,-0.58],0,0.006),'kit_ferramentas');
-    [-0.07,0.07].forEach(dx=>zona(R(0.03,0.04,0.012,'#C9CBD0',[-1.52+dx,0.545,-0.482],0,0.004),'kit_ferramentas'));
-        const eixoCh=new T.Mesh(new T.CylinderGeometry(0.011,0.011,0.46,12),mat('#B9BCC2',{metalness:0.8,roughness:0.3}));
-    eixoCh.rotation.z=Math.PI/2;eixoCh.position.set(-1.52,0.497,-0.43);zona(eixoCh,'chave_roda');
+    [-0.07,0.07].forEach(dx=>zona(R(0.03,0.04,0.012,MET,[-1.52+dx,0.545,-0.482],0,0.004),'kit_ferramentas'));
+    const eixoCh=new T.Mesh(new T.CylinderGeometry(0.011,0.011,0.46,12),mat('#B9BCC2',{metalness:0.8,roughness:0.3}));
+    eixoCh.rotation.z=Math.PI/2;eixoCh.position.set(-1.52,0.51,-0.43);zona(eixoCh,'chave_roda');
     const peCh=new T.Mesh(new T.CylinderGeometry(0.011,0.011,0.12,12),mat('#B9BCC2',{metalness:0.8,roughness:0.3}));
-    peCh.rotation.x=Math.PI/2;peCh.position.set(-1.76,0.497,-0.43);zona(peCh,'chave_roda');
+    peCh.rotation.x=Math.PI/2;peCh.position.set(-1.76,0.51,-0.43);zona(peCh,'chave_roda');
     const soqCh=new T.Mesh(new T.CylinderGeometry(0.022,0.022,0.05,6),mat('#8F9298',{metalness:0.8,roughness:0.3}));
-    soqCh.position.set(-1.29,0.51,-0.43);zona(soqCh,'chave_roda');
+    soqCh.position.set(-1.29,0.52,-0.43);zona(soqCh,'chave_roda');
 
-    // triângulo de sinalização (preso na lateral esquerda)
-       const triPts=(s)=>[[-1.82,0.58],[-1.52,0.58],[-1.67,0.84]].map(([x,y])=>new T.Vector2(-1.67+(x+1.67)*s,0.6667+(y-0.6667)*s));
+    // ---------- triângulo de sinalização (preso na lateral esquerda, acima do degrau) ----------
+    const triPts=(s)=>[[-1.82,0.58],[-1.52,0.58],[-1.67,0.84]].map(([x,y])=>new T.Vector2(-1.67+(x+1.67)*s,0.6667+(y-0.6667)*s));
     const triMoldura=(sa,sb,esp,cor)=>{
       const sh=new T.Shape(triPts(sa));sh.holes.push(new T.Path(triPts(sb)));
       const g=new T.ExtrudeGeometry(sh,{depth:esp,bevelEnabled:false});g.translate(0,0,-esp/2);
@@ -10947,60 +10964,68 @@ function montarCarroGenerico(T,scene,registrar,extras){
     zona(triMoldura(1,0.62,0.030,'#D6342B'),'triangulo_sinalizacao');
     zona(triMoldura(0.80,0.74,0.034,'#F2F0EA'),'triangulo_sinalizacao');
     [-1.80,-1.54].forEach(x=>zona(R(0.04,0.012,0.03,'#2A2A2E',[x,0.574,-0.745],0,0.004),'triangulo_sinalizacao'));
-    // ganchos de amarração
-    [[-1.95,0.66],[-1.95,-0.66],[-1.10,0.66],[-1.10,-0.66]].forEach(([x,z])=>{
-          zona(R(0.085,0.012,0.085,'#7A7D84',[x,0.491,z],0,0.004),'ganchos_amarracao');
-      const g=new T.Mesh(new T.TorusGeometry(0.03,0.0075,8,18,Math.PI),mat('#C9CBD0',{metalness:0.8,roughness:0.3}));
-      g.position.set(x,0.497,z);zona(g,'ganchos_amarracao');
+
+    // ---------- ganchos de amarração (fora da caixa de roda) ----------
+    [[-1.95,0.66],[-1.95,-0.66],[-1.065,0.40],[-1.065,-0.40]].forEach(([x,z])=>{
+      zona(R(0.085,0.012,0.085,'#7A7D84',[x,0.496,z],0,0.004),'ganchos_amarracao');
+      const g=new T.Mesh(new T.TorusGeometry(0.03,0.0075,8,18,Math.PI),mat(MET,{metalness:0.8,roughness:0.3}));
+      g.position.set(x,0.502,z);zona(g,'ganchos_amarracao');
     });
 
-    // tomada 12V (dir.) e luz do porta-malas (esq.)
-      zona(R(0.085,0.085,0.016,'#2A2A2E',[-1.45,0.78,0.762],0,0.006),'tomada_12v_porta_malas');
+    // ---------- painel lateral direito (acima da caixa de roda): tomada 12V ----------
+    const tx=-1.10,ty=0.99;
+    zona(R(0.26,0.17,0.014,PL,[tx,ty-0.005,0.764],0,0.005),'lateral_porta_malas_dir');
+    zona(R(0.085,0.085,0.016,'#2A2A2E',[tx,ty,0.755],0,0.006),'tomada_12v_porta_malas');
     const aroTom=new T.Mesh(new T.TorusGeometry(0.027,0.004,8,22),mat('#B9BCC2',{metalness:0.8,roughness:0.3}));
-    aroTom.position.set(-1.45,0.78,0.752);zona(aroTom,'tomada_12v_porta_malas');
+    aroTom.position.set(tx,ty,0.746);zona(aroTom,'tomada_12v_porta_malas');
     const furoTom=new T.Mesh(new T.CylinderGeometry(0.022,0.022,0.012,18),mat('#050507'));
-    furoTom.rotation.x=Math.PI/2;furoTom.position.set(-1.45,0.78,0.754);zona(furoTom,'tomada_12v_porta_malas');
-    zona(R(0.008,0.008,0.004,'#2DFF6A',[-1.41,0.815,0.7525],0,0.002,{emissive:'#10A040'}),'tomada_12v_porta_malas');
+    furoTom.rotation.x=Math.PI/2;furoTom.position.set(tx,ty,0.748);zona(furoTom,'tomada_12v_porta_malas');
+    zona(R(0.008,0.008,0.004,'#2DFF6A',[tx+0.04,ty+0.035,0.7465],0,0.002,{emissive:'#10A040'}),'tomada_12v_porta_malas');
+
+    // luz do porta-malas (lado esquerdo)
     zona(R(0.17,0.05,0.022,'#2A2A2E',[-1.72,1.00,-0.759],0,0.008),'luz_porta_malas');
     zona(R(0.14,0.032,0.012,'#F4F1E6',[-1.72,1.00,-0.745],0,0.006,{emissive:'#7A7560'}),'luz_porta_malas');
 
     // alavancas de rebatimento do banco traseiro
     [-0.45,0.45].forEach(z=>zona(R(0.03,0.03,0.12,'#B9B6AF',[-0.99,1.20,z],0.15,0.008),'alavanca_rebatimento_banco'));
 
-        // régua do porta-malas (acabamento no fim do forro / soleira traseira)
-    zona(R(0.12,0.03,1.50,'#2E2E33',[-2.02,0.495,0],0,0.012),'regua_porta_malas');
-    zona(R(0.07,0.012,1.40,'#A4A7AE',[-2.015,0.516,0],0,0.004,{metalness:0.7,roughness:0.35}),'regua_porta_malas');
-    zona(R(0.018,0.026,1.50,'#1B1B1E',[-1.955,0.492,0],0,0.006),'regua_porta_malas');
-    [-0.60,-0.30,0,0.30,0.60].forEach(z=>zona(R(0.03,0.008,0.03,'#1A1A1E',[-2.015,0.524,z],0,0.003),'regua_porta_malas'));
+    // ---------- soleira traseira (régua) com nervuras ----------
+    zona(R(0.14,0.03,1.46,'#2A2A2E',[-2.02,0.505,0],0,0.012),'regua_porta_malas');
+    zona(R(0.018,0.026,1.50,BOR,[-1.955,0.495,0],0,0.006),'regua_porta_malas');
+    for(let i=-5;i<=5;i++)zona(R(0.02,0.008,0.075,PL2,[-2.00,0.524,i*0.125],0,0.003),'regua_porta_malas');
 
-    // batente (argola) onde a fechadura da tampa prende
-    zona(R(0.06,0.012,0.10,'#6E7178',[-2.0,0.528,0],0,0.004),'fechadura_tampa');
-    const batente=new T.Mesh(new T.TorusGeometry(0.035,0.007,8,18,Math.PI),mat('#C9CBD0',{metalness:0.8,roughness:0.3}));
-    batente.rotation.y=Math.PI/2;batente.position.set(-2.0,0.53,0);zona(batente,'fechadura_tampa');
+    // ---------- batente (argola) onde a fechadura prende ----------
+    zona(R(0.06,0.012,0.10,'#6E7178',[-2.0,0.538,0],0,0.004),'fechadura_tampa');
+    const batente=new T.Mesh(new T.TorusGeometry(0.035,0.007,8,18,Math.PI),mat(MET,{metalness:0.8,roughness:0.3}));
+    batente.rotation.y=Math.PI/2;batente.position.set(-2.0,0.54,0);zona(batente,'fechadura_tampa');
 
-    // itens presos na tampa (giram junto com ela)
-    zonaT(R(0.05,0.50,1.28,'#2C2C30',[-2.10,0.78,0],0,0.01),'forro_tampa_porta_malas');
-       // puxador interno: nicho, dois suportes, barra metálica e luva emborrachada
+    // ---------- borracha de vedação na carroceria (moldura do vão) ----------
+    lados.forEach(([nome,s])=>zona(R(0.05,0.80,0.05,BOR,[-2.04,0.95,s*0.735],0,0.015),'borracha_vedacao_tampa'));
+    zona(R(0.05,0.05,1.46,BOR,[-2.06,0.565,0],0,0.015),'borracha_vedacao_tampa');
+
+    // ---------- itens presos na tampa (giram junto com ela) ----------
+    zonaT(R(0.05,0.50,1.28,PL,[-2.10,0.78,0],0,0.01),'forro_tampa_porta_malas');
+    // puxador interno
     zonaT(R(0.022,0.085,0.36,'#1B1B1E',[-2.083,0.965,0],0,0.01),'puxador_interno_tampa');
-    [-0.14,0.14].forEach(z=>zonaT(R(0.05,0.05,0.04,'#3A3A40',[-2.062,0.965,z],0,0.01),'puxador_interno_tampa'));
+    [-0.14,0.14].forEach(z=>zonaT(R(0.05,0.05,0.04,PL2,[-2.062,0.965,z],0,0.01),'puxador_interno_tampa'));
     const pegaBarra=new T.Mesh(new T.CylinderGeometry(0.011,0.011,0.30,14),mat('#9A9DA4',{metalness:0.7,roughness:0.35}));
     pegaBarra.rotation.x=Math.PI/2;pegaBarra.position.set(-2.04,0.965,0);zonaT(pegaBarra,'puxador_interno_tampa');
     const pegaLuva=new T.Mesh(new T.CylinderGeometry(0.0165,0.0165,0.17,16),mat('#2A2A2E',{roughness:0.9}));
     pegaLuva.rotation.x=Math.PI/2;pegaLuva.position.set(-2.04,0.965,0);zonaT(pegaLuva,'puxador_interno_tampa');
-
-    // fechadura da tampa: placa plástica, corpo metálico, boca do trinco, parafusos e alavanca vermelha
+    // fechadura da tampa
     zonaT(R(0.025,0.12,0.26,'#2A2A2E',[-2.083,0.585,0],0,0.012),'fechadura_tampa');
     zonaT(R(0.05,0.07,0.12,'#B8B8BD',[-2.055,0.585,0],0,0.012,{metalness:0.7,roughness:0.35}),'fechadura_tampa');
     zonaT(R(0.022,0.026,0.07,'#0E0E10',[-2.03,0.585,0],0,0.005),'fechadura_tampa');
     [[-0.11,0.045],[-0.11,-0.045],[0.11,0.045],[0.11,-0.045]].forEach(([z,dy])=>{
-      const parafuso=new T.Mesh(new T.CylinderGeometry(0.009,0.009,0.012,10),mat('#C9CBD0',{metalness:0.8,roughness:0.3}));
+      const parafuso=new T.Mesh(new T.CylinderGeometry(0.009,0.009,0.012,10),mat(MET,{metalness:0.8,roughness:0.3}));
       parafuso.rotation.z=Math.PI/2;parafuso.position.set(-2.066,0.585+dy,z);zonaT(parafuso,'fechadura_tampa');
     });
     zonaT(R(0.02,0.012,0.07,'#D9262B',[-2.045,0.628,0.06],0,0.004),'fechadura_tampa');
-    [-0.67,0.67].forEach(z=>zonaT(R(0.06,0.50,0.03,'#0E0E10',[-2.08,0.78,z],0,0.008),'borracha_vedacao_tampa'));
-    zonaT(R(0.06,0.03,1.38,'#0E0E10',[-2.08,1.045,0],0,0.008),'borracha_vedacao_tampa');
+    // borracha de vedação na tampa
+    [-0.67,0.67].forEach(z=>zonaT(R(0.06,0.50,0.03,BOR,[-2.08,0.78,z],0,0.008),'borracha_vedacao_tampa'));
+    zonaT(R(0.06,0.03,1.38,BOR,[-2.08,1.045,0],0,0.008),'borracha_vedacao_tampa');
 
-    // amortecedores: tubo preso na carroceria + haste presa na tampa (esticam com a animação)
+    // ---------- amortecedores (esticam com a animação) ----------
     extras.struts=[];
     lados.forEach(([nome,s])=>{
       const k='amortecedor_tampa_'+nome;
