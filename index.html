@@ -10612,7 +10612,7 @@ const COR_CARRO='#E9E5DC';
 const zonaDupla=(k)=>k==='para_brisa'||String(k||'').startsWith('vidro_'); // peças com lado interno e externo
 const areaDaMarcacao=(m)=>m.modoVisto||(ZONAS_INT.some(z=>z.k===m.zona)?'interno':'externo');
 const ABERTURA_TAMPA=1.75; // radianos (~100 graus)
-const VISTAS_INT_LISTA=[{k:'motorista',l:'Motorista'},{k:'passageiro',l:'Passageiro'},{k:'tras_esq',l:'Traseiro esq.'},{k:'tras_dir',l:'Traseiro dir.'},{k:'porta_malas',l:'Porta-malas'},{k:'livre',l:'Visão livre'}];
+const VISTAS_INT_LISTA=[{k:'motorista',l:'Motorista'},{k:'passageiro',l:'Passageiro'},{k:'tras_esq',l:'Traseiro esq.'},{k:'tras_dir',l:'Traseiro dir.'},{k:'livre',l:'Porta-malas'}];
 const VISTAS_ORB={
   livre:{pos:[-4.3,2.1,2.6],alvo:[-1.6,0.8,0]},
   porta_malas:{pos:[-5.0,1.6,0.3],alvo:[-1.6,0.8,0]}
