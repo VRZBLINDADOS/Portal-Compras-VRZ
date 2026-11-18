@@ -6646,7 +6646,7 @@ try{
         <>
           {sub==='nova'&&<NovaFinalizacaoForm vehiclesDB={vehiclesDB} requests={requests} loggedInUser={loggedInUser} isMaster={isMaster} finalizacoes={finalizacoes}/>}
           {sub==='meus'&&<MeusCarrosView loggedInUser={loggedInUser} isMaster={isMaster} finalizacoes={finalizacoes} requests={requests}/>}
-                   {sub==='comparativo'&&<InspecaoComparativoView finalizacoes={finalizacoes} requests={requests} vehicles={vehiclesDB}/>}
+                   {sub==='comparativo'&&<InspecaoComparativoView finalizacoes={finalizacoes} requests={requests} vehicles={vehiclesDB} loggedInUser={loggedInUser} isMaster={isMaster}/>}
           {sub==='historico'&&isMaster&&<FinalizacaoHistoricoView/>}
         </>
       )}
@@ -6674,62 +6674,78 @@ function intervaloInspecao(tipo,offset){
   }
   return[ini.getTime(),fim.getTime()];
 }
-function InspetoresResumo({finalizacoes}){
-  const CATS_INSP=['ajuste','martelinho','pintura','vidro','outro','instalacaoPecas'];
+function InspetoresResumo({finalizacoes,loggedInUser,isMaster}){
+  const CATS_INSP=[['ajuste','Ajuste','#F59E0B'],['martelinho','Martelinho','#DC1F1F'],['pintura','Pintura','#2563EB'],['vidro','Vidro','#0EA5E9'],['outro','Estética','#6B7280'],['instalacaoPecas','Instalação Peças','#10B981']];
+  const COLS=['dia','semana','quinzena','mes','carros','defeitos','resolvidos','abertos'];
   const[etapaSel,setEtapaSel]=useState('todas');
   const[tipo,setTipo]=useState('diario');
   const[offset,setOffset]=useState(0);
+  const[detalhe,setDetalhe]=useState(null);
+  const[verCarro,setVerCarro]=useState(null);
   const[ini,fim]=useMemo(()=>intervaloInspecao(tipo,offset),[tipo,offset]);
 
   const{linhas,total}=useMemo(()=>{
     const rDia=intervaloInspecao('diario',0),rSem=intervaloInspecao('semanal',0),rQuin=intervaloInspecao('quinzenal',0),rMes=intervaloInspecao('mensal',0);
     const dentro=(t,r)=>t>=r[0]&&t<=r[1];
-    const novo=(nome)=>({nome,dia:0,semana:0,quinzena:0,mes:0,carros:0,defeitos:0,resolvidos:0,abertos:0});
+    const novo=(nome)=>{const g={nome,l:{}};COLS.forEach(c=>{g[c]=0;g.l[c]=[];});return g;};
     const map={};
-    (finalizacoes||[]).filter(f=>!f.arquivada&&f.criadoEm&&(etapaSel==='todas'||etapaOf(f)===etapaSel)).forEach(f=>{
+    (finalizacoes||[]).filter(f=>!f.arquivada&&f.criadoEm&&(etapaSel==='todas'||etapaOf(f)===etapaSel)&&(isMaster||f.criadoPor===loggedInUser?.user)).forEach(f=>{
       const nome=f.criadoPor||'—';
       const g=map[nome]||(map[nome]=novo(nome));
+      const todos=[];
+      CATS_INSP.forEach(([c,label,cor])=>(f[c]||[]).forEach(p=>todos.push({...p,categoria:label,cor})));
+      const add=(col)=>{g[col]++;g.l[col].push({fin:f,probs:todos});};
       const t=f.criadoEm;
-      if(dentro(t,rDia))g.dia++;
-      if(dentro(t,rSem))g.semana++;
-      if(dentro(t,rQuin))g.quinzena++;
-      if(dentro(t,rMes))g.mes++;
+      if(dentro(t,rDia))add('dia');
+      if(dentro(t,rSem))add('semana');
+      if(dentro(t,rQuin))add('quinzena');
+      if(dentro(t,rMes))add('mes');
       if(t>=ini&&t<=fim){
-        g.carros++;
-        CATS_INSP.forEach(c=>(f[c]||[]).forEach(p=>{
-          g.defeitos++;
-          if(p.status==='Solucionado')g.resolvidos++;else g.abertos++;
-        }));
+        add('carros');
+        const res=todos.filter(p=>p.status==='Solucionado');
+        const ab=todos.filter(p=>p.status!=='Solucionado');
+        g.defeitos+=todos.length;g.resolvidos+=res.length;g.abertos+=ab.length;
+        if(todos.length)g.l.defeitos.push({fin:f,probs:todos});
+        if(res.length)g.l.resolvidos.push({fin:f,probs:res});
+        if(ab.length)g.l.abertos.push({fin:f,probs:ab});
       }
     });
     const linhas=Object.values(map).filter(g=>g.dia||g.semana||g.quinzena||g.mes||g.carros).sort((a,b)=>b.carros-a.carros||b.mes-a.mes);
-    const total=linhas.reduce((a,g)=>{Object.keys(a).forEach(k=>{if(k!=='nome')a[k]+=g[k];});return a;},novo('TOTAL'));
+    const total=linhas.reduce((a,g)=>{COLS.forEach(c=>{a[c]+=g[c];a.l[c]=a.l[c].concat(g.l[c]);});return a;},novo('TOTAL'));
     return{linhas,total};
-  },[finalizacoes,etapaSel,ini,fim]);
+  },[finalizacoes,etapaSel,ini,fim,isMaster,loggedInUser?.user]);
 
   const media=(g)=>g.carros>0?fmt1(g.defeitos/g.carros):'—';
   const pct=(g)=>g.defeitos>0?Math.round(g.resolvidos/g.defeitos*100)+'%':'—';
   const fmtP=`${new Date(ini).toLocaleDateString('pt-BR')} – ${new Date(fim).toLocaleDateString('pt-BR')}`;
   const btnTab=(ativo)=>({padding:'7px 14px',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',border:'none',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif',background:ativo?'#fff':'transparent',color:ativo?'var(--red)':'var(--muted)',boxShadow:ativo?'0 2px 8px rgba(0,0,0,.08)':'none'});
   const th={textAlign:'center',whiteSpace:'nowrap'};
+
+  const abrir=(g,col,rotulo)=>{
+    if(!g[col])return;
+    setDetalhe({titulo:`${g.nome} — ${rotulo}`,col,entries:g.l[col]});
+  };
+  const cel=(g,col,rotulo,estilo,filho)=>(
+    <td onClick={()=>abrir(g,col,rotulo)} title={g[col]?'Clique para ver as OS\'s':''} style={{textAlign:'center',fontWeight:800,cursor:g[col]?'pointer':'default',textDecoration:g[col]?'underline dotted':'none',...estilo}}>{filho!==undefined?filho:g[col]}</td>
+  );
   const linhaTabela=(g,ehTotal)=>(
     <tr key={g.nome} style={ehTotal?{background:'var(--smoke)'}:undefined}>
       <td style={{fontWeight:800,textTransform:'uppercase',fontSize:11,whiteSpace:'nowrap'}}>{g.nome}</td>
-      <td style={{textAlign:'center',fontWeight:800}}>{g.dia}</td>
-      <td style={{textAlign:'center',fontWeight:800}}>{g.semana}</td>
-      <td style={{textAlign:'center',fontWeight:800}}>{g.quinzena}</td>
-      <td style={{textAlign:'center',fontWeight:800}}>{g.mes}</td>
-      <td style={{textAlign:'center',fontWeight:800,borderLeft:'2px solid var(--border)'}}>{g.carros}</td>
-      <td style={{textAlign:'center',fontWeight:800}}>{g.defeitos}</td>
+      {cel(g,'dia','Carros hoje')}
+      {cel(g,'semana','Carros na semana')}
+      {cel(g,'quinzena','Carros na quinzena')}
+      {cel(g,'mes','Carros no mês')}
+      {cel(g,'carros','Carros no período',{borderLeft:'2px solid var(--border)'})}
+      {cel(g,'defeitos','Defeitos apontados')}
       <td style={{textAlign:'center',fontWeight:800,color:'var(--red)'}}>{media(g)}</td>
-      <td style={{textAlign:'center',fontWeight:800,color:'#059669'}}>{g.resolvidos} <span style={{fontSize:9,color:'var(--muted)'}}>({pct(g)})</span></td>
-      <td style={{textAlign:'center',fontWeight:800,color:g.abertos?'#C45E00':'var(--muted)'}}>{g.abertos}</td>
+      {cel(g,'resolvidos','Resolvidos',{color:'#059669'},<>{g.resolvidos} <span style={{fontSize:9,color:'var(--muted)'}}>({pct(g)})</span></>)}
+      {cel(g,'abertos','Em aberto',{color:g.abertos?'#C45E00':'var(--muted)'})}
     </tr>
   );
 
   return(
     <div className="card" style={{padding:20,marginBottom:20}}>
-      <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',margin:'0 0 12px'}}>Produtividade por Inspetor</p>
+      <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',margin:'0 0 12px'}}>{isMaster?'Produtividade por Inspetor':'Minha Produtividade'}</p>
       <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)',width:'fit-content',marginBottom:10,flexWrap:'wrap'}}>
         {[{k:'todas',l:'Geral'},...ETAPAS_INSPECAO.map(et=>({k:et,l:et}))].map(t=><button key={t.k} onClick={()=>setEtapaSel(t.k)} style={btnTab(etapaSel===t.k)}>{t.l}</button>)}
       </div>
@@ -6763,11 +6779,59 @@ function InspetoresResumo({finalizacoes}){
           </table>
         </div>
       )}
-      <p style={{fontSize:9,color:'var(--muted)',fontWeight:600,margin:'10px 0 0'}}>Cada inspeção conta como um carro naquela etapa. Os defeitos são os dos carros que o inspetor criou, e o status (resolvido ou em aberto) é o de agora. Inspeções já arquivadas não entram, porque seus problemas são apagados no arquivamento.</p>
+      <p style={{fontSize:9,color:'var(--muted)',fontWeight:600,margin:'10px 0 0'}}>Clique em qualquer número para ver as OS's e o que foi apontado. Cada inspeção conta como um carro naquela etapa. Os defeitos são os dos carros que o inspetor criou, e o status (resolvido ou em aberto) é o de agora. Inspeções já arquivadas não entram, porque seus problemas são apagados no arquivamento.</p>
+
+      {detalhe&&(
+        <DetailModal title={detalhe.titulo} subtitle={`${detalhe.entries.length} inspeção(ões) · ${fmtP}`} onClose={()=>setDetalhe(null)}>
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            {[...detalhe.entries].sort((a,b)=>b.fin.criadoEm-a.fin.criadoEm).map(({fin,probs},i)=>(
+              <div key={fin.id+'_'+i} className="card" style={{padding:14}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,flexWrap:'wrap',marginBottom:probs.length?10:0}}>
+                  <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                    <span style={{fontSize:14,fontWeight:800}}>OS #{fin.os}</span>
+                    <span style={{fontSize:9,color:'var(--muted)',fontWeight:700,textTransform:'uppercase'}}>{fin.vehicleData?.modelo||'—'}</span>
+                    <span style={{fontSize:8,fontWeight:800,padding:'2px 9px',borderRadius:999,background:'var(--ink)',color:'#fff'}}>{etapaOf(fin)}</span>
+                    <span style={{fontSize:8,fontWeight:700,color:'var(--muted)'}}>por {fin.criadoPor||'—'} em {new Date(fin.criadoEm).toLocaleString('pt-BR')}</span>
+                  </div>
+                  <button onClick={()=>setVerCarro(fin)} style={{display:'inline-flex',alignItems:'center',gap:5,padding:'6px 12px',background:'var(--ink)',color:'#fff',border:'none',borderRadius:7,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}><Icon name="car" size={12}/> Ver carro</button>
+                </div>
+                {probs.length===0?(
+                  <p style={{fontSize:10,fontWeight:700,color:'#059669',margin:0}}>Nenhum problema apontado nesta inspeção.</p>
+                ):(
+                  <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                    {probs.map((p,pi)=>(
+                      <div key={(p.id||pi)+'_'+pi} style={{display:'flex',alignItems:'flex-start',gap:8,padding:'8px 10px',background:p.status==='Solucionado'?'#F0FBF5':'var(--smoke)',border:`1px solid ${p.status==='Solucionado'?'#AAE6C5':'var(--border)'}`,borderRadius:8}}>
+                        {p.foto&&<img src={p.foto} alt="Foto" style={{width:40,height:40,borderRadius:6,objectFit:'cover',flexShrink:0}}/>}
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:3}}>
+                            <span style={{fontSize:8,fontWeight:800,padding:'2px 7px',borderRadius:5,background:p.cor+'18',color:p.cor,border:`1px solid ${p.cor}55`}}>{p.categoria}</span>
+                            {p.tipo&&<span style={{fontSize:8,fontWeight:800,padding:'2px 7px',borderRadius:5,background:p.tipo==='Interno'?'#EAF0FF':'#FFF4E6',color:p.tipo==='Interno'?'#1A4EC2':'#C45E00',border:`1px solid ${p.tipo==='Interno'?'#C0D0F5':'#FFD9A8'}`}}>{p.tipo}</span>}
+                            <span style={{fontSize:10,fontWeight:800,textTransform:'uppercase'}}>{pecaDefeitoLabel(p)||'(sem peça/defeito)'}</span>
+                          </div>
+                          {p.descricao&&<p style={{fontSize:10,fontWeight:600,margin:0}}>{p.descricao}</p>}
+                          {p.status==='Solucionado'&&<p style={{fontSize:8,fontWeight:700,color:'#059669',margin:'3px 0 0'}}>✓ Resolvido{p.resolvidoPor?' por '+p.resolvidoPor:''}{p.resolvidoEm?' em '+new Date(p.resolvidoEm).toLocaleString('pt-BR'):''}{p.obsResolucao?' · Obs: '+p.obsResolucao:''}</p>}
+                          {p.status!=='Solucionado'&&<p style={{fontSize:8,fontWeight:800,color:'#C45E00',margin:'3px 0 0',textTransform:'uppercase'}}>Em aberto</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </DetailModal>
+      )}
+
+      {verCarro&&ReactDOM.createPortal(
+        <div style={{position:'fixed',inset:0,zIndex:1000}}>
+          <VerCarroModal fin={verCarro} onClose={()=>setVerCarro(null)}/>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
-function InspecaoComparativoView({finalizacoes,requests,vehicles}){
+function InspecaoComparativoView({finalizacoes,requests,vehicles,loggedInUser,isMaster}){
   const[osInput,setOsInput]=useState('');
   const CATS_COMP=[['ajuste','Ajuste'],['martelinho','Martelinho'],['pintura','Pintura'],['vidro','Vidro'],['outro','Estética'],['instalacaoPecas','Instalação Peças']];
 
@@ -6858,7 +6922,7 @@ function InspecaoComparativoView({finalizacoes,requests,vehicles}){
 
     return(
     <div className="fade-up">
-      <InspetoresResumo finalizacoes={finalizacoes}/>
+           <InspetoresResumo finalizacoes={finalizacoes} loggedInUser={loggedInUser} isMaster={isMaster}/>
       <div className="card" style={{padding:20,marginBottom:20}}>
         <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',marginBottom:12}}>Ranking Geral de Reincidência — todas as OS's ativas</p>
         {rankingGlobal.length===0?(
