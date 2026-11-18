@@ -10612,10 +10612,9 @@ const COR_CARRO='#E9E5DC';
 const zonaDupla=(k)=>k==='para_brisa'||String(k||'').startsWith('vidro_'); // peças com lado interno e externo
 const areaDaMarcacao=(m)=>m.modoVisto||(ZONAS_INT.some(z=>z.k===m.zona)?'interno':'externo');
 const ABERTURA_TAMPA=1.75; // radianos (~100 graus)
-const VISTAS_INT_LISTA=[{k:'motorista',l:'Motorista'},{k:'passageiro',l:'Passageiro'},{k:'tras_esq',l:'Traseiro esq.'},{k:'tras_dir',l:'Traseiro dir.'},{k:'porta_malas',l:'Porta-malas'},{k:'livre',l:'Visão livre'}];
+const VISTAS_INT_LISTA=[{k:'motorista',l:'Motorista'},{k:'passageiro',l:'Passageiro'},{k:'tras_esq',l:'Traseiro esq.'},{k:'tras_dir',l:'Traseiro dir.'},{k:'livre',l:'Visão livre'}];
 const VISTAS_ORB={
-  porta_malas:{pos:[-4.3,2.1,2.6],alvo:[-1.6,0.8,0]},
-  porta_malas_fora:{pos:[-4.3,2.1,2.6],alvo:[-1.6,0.8,0]}
+  livre:{pos:[-4.3,2.1,2.6],alvo:[-1.6,0.8,0]}
 };
 // ── Carro genérico (SUV) — frente = +X, lado esquerdo (motorista) = -Z ──
 function montarCarroGenerico(T,scene,registrar,extras){
@@ -10946,7 +10945,7 @@ function Carro3D({marcacoes,selecionada,onSelect,modeloUrl,modo,vista}){
   const mountRef=useRef(null);
   const dadosRef=useRef({});
   const apiRef=useRef({});
-        dadosRef.current={marcacoes,selecionada,onSelect,modo,vista,tampaAberta:modo==='interno'&&(vista==='porta_malas'||vista==='porta_malas_fora')};
+        dadosRef.current={marcacoes,selecionada,onSelect,modo,vista,tampaAberta:modo==='interno'&&vista==='livre'};
 
   useEffect(()=>{
     const el=mountRef.current;
