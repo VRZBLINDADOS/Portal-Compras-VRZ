@@ -5239,10 +5239,13 @@ function Inspecao3DEditor({vehicle,etapaInspecao,dados,setCat,disabled,limiteAti
   const catsDisp=CATS_TESTE.filter(([k])=>k!=='outro'||etapaInspecao==='FN2'||(dados.outro||[]).length>0);
   const marcacoes=useMemo(()=>CATS_TESTE.flatMap(([k])=>(dados[k]||[]).map(p=>({...p,categoria:k}))),
     [dados.ajuste,dados.martelinho,dados.pintura,dados.vidro,dados.outro,dados.instalacaoPecas]);
+   const areaDe=areaDaMarcacao;
   const zonaObj=ZONAS_TODAS.find(z=>z.k===zona)||null;
-  const daZona=marcacoes.filter(m=>m.zona===zona);
+  const zonaDuplaSel=!!zona&&zonaDupla(zona);
+  const sufixoDupla=zonaDuplaSel?(modo==='interno'?' · vista interna':' · vista externa'):'';
+  const daZona=marcacoes.filter(m=>m.zona===zona&&(!zonaDuplaSel||areaDe(m)===modo));
   const modeloUrl=MODELOS_3D[normEstoqueTxt(vehicle.modelo)]||null;
-  const areaDe=(m)=>m.modoVisto||(ZONAS_INT.some(z=>z.k===m.zona)?'interno':'externo');
+  const tipoEfetivo=zonaDuplaSel?(modo==='interno'?'Interno':'Externo'):tipo;
   const catInfo=(k)=>CATS_TESTE.find(c=>c[0]===k)||CATS_TESTE[0];
   const lbl={fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',display:'block',marginBottom:6};
 
@@ -5263,7 +5266,7 @@ function Inspecao3DEditor({vehicle,etapaInspecao,dados,setCat,disabled,limiteAti
       ...antiga,
       id:editId||String(Date.now())+Math.floor(Math.random()*999),
       zona:outraPeca?'outra':zonaObj.k,
-      zonaLabel:outraPeca?nomePeca.trim().toUpperCase():zonaObj.label,
+           zonaLabel:outraPeca?nomePeca.trim().toUpperCase():zonaObj.label+(zonaDupla(zonaObj.k)?(modo==='interno'?' (INTERNO)':' (EXTERNO)'):''),
       area:outraPeca?modo:zonaObj.area,
       modoVisto:modo,
       defeito,defeitoOutro:defeito==='OUTRO'?defeitoOutro.trim():'',
@@ -5271,7 +5274,7 @@ function Inspecao3DEditor({vehicle,etapaInspecao,dados,setCat,disabled,limiteAti
       status:antiga.status||'Pendente',
       criadoEm:antiga.criadoEm||Date.now(),
       criadoPor:antiga.criadoPor||loggedInUser?.user||'—',
-      tipo:TIPO_CATS_3D.includes(categoria)?tipo:undefined,
+           tipo:TIPO_CATS_3D.includes(categoria)?tipoEfetivo:undefined,
     });
     if(achada&&catAnt!==categoria){
       setCat(catAnt,(dados[catAnt]||[]).filter(p=>p.id!==editId));
@@ -5329,7 +5332,7 @@ function Inspecao3DEditor({vehicle,etapaInspecao,dados,setCat,disabled,limiteAti
           {(zonaObj||outraPeca)&&(
             <div style={{position:'absolute',top:10,left:10,right:10,zIndex:5,pointerEvents:'none',display:'flex',justifyContent:'center'}}>
               <span style={{background:'rgba(13,13,13,.88)',color:'#fff',border:'1.5px solid #FF8A00',borderRadius:10,padding:'7px 14px',fontSize:12,fontWeight:800,textTransform:'uppercase',textAlign:'center',boxShadow:'0 4px 14px rgba(0,0,0,.35)'}}>
-                {outraPeca?(nomePeca||'Outra peça'):zonaObj.label}{daZona.length>0?` · ${daZona.length} problema(s)`:''}
+                {outraPeca?(nomePeca||'Outra peça'):zonaObj.label+sufixoDupla}{daZona.length>0?` · ${daZona.length} problema(s)`:''}
               </span>
             </div>
           )}
@@ -5386,7 +5389,7 @@ function Inspecao3DEditor({vehicle,etapaInspecao,dados,setCat,disabled,limiteAti
               ):(
                 <>
                   <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--red)',margin:'0 0 2px'}}>Peça selecionada</p>
-                  <h4 style={{margin:0,fontSize:16,fontWeight:800}}>{zonaObj.label}</h4>
+                  <h4 style={{margin:0,fontSize:16,fontWeight:800}}>{zonaObj.label+sufixoDupla}</h4>
                   <p style={{margin:'4px 0 0',fontSize:9,fontWeight:700,color:daZona.length?'var(--red)':'#059669'}}>{daZona.length?daZona.length+' problema(s) registrado(s) nesta peça':'Nenhum problema registrado nesta peça'}</p>
                   <button type="button" onClick={()=>{setOutraPeca(true);setZona(null);limparForm();}} style={{marginTop:8,background:'none',border:'none',color:'var(--red)',fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',padding:0,fontFamily:'Plus Jakarta Sans,sans-serif'}}>Não é essa peça? Digitar o nome</button>
                 </>
@@ -5405,10 +5408,11 @@ function Inspecao3DEditor({vehicle,etapaInspecao,dados,setCat,disabled,limiteAti
               {TIPO_CATS_3D.includes(categoria)&&(
                 <div>
                   <label style={lbl}>Tipo de {catInfo(categoria)[1]}</label>
-                  <select value={tipo} onChange={e=>setTipo(e.target.value)} className="input" style={{fontSize:12,fontWeight:700,appearance:'auto'}}>
+                                   <select value={tipoEfetivo} onChange={e=>setTipo(e.target.value)} disabled={zonaDuplaSel} className="input" style={{fontSize:12,fontWeight:700,appearance:'auto',opacity:zonaDuplaSel?.7:1}}>
                     <option value="Interno">Interno</option>
                     <option value="Externo">Externo</option>
                   </select>
+                  {zonaDuplaSel&&<p style={{fontSize:9,fontWeight:700,color:'var(--muted)',margin:'4px 0 0'}}>Definido pela vista em que você marcou ({modo==='interno'?'interna':'externa'}).</p>}
                 </div>
               )}
               <div>
@@ -10559,7 +10563,7 @@ const ZONAS_INT=[
   {k:'porta_malas_int',label:'Assoalho do porta-malas'},
   {k:'lateral_porta_malas_esq',label:'Lateral do porta-malas esquerda'},
   {k:'lateral_porta_malas_dir',label:'Lateral do porta-malas direita'},
-  {k:'bandeja_traseira',label:'Bandeja traseira'},
+    {k:'bandeja_traseira',label:'Tampão do porta-malas (bandeja traseira)'},
   {k:'forro_tampa_porta_malas',label:'Forro da tampa do porta-malas'},
     {k:'comando_vidro_diant_esq',label:'Comando do vidro dianteiro esquerdo (motorista)'},
   {k:'comando_vidro_diant_dir',label:'Comando do vidro dianteiro direito'},
@@ -10576,6 +10580,22 @@ const ZONAS_INT=[
   {k:'camera_parabrisa',label:'Câmera do para-brisa'},
   {k:'sensor_parabrisa',label:'Sensor do para-brisa (chuva/luz)'},
     {k:'luz_teto_traseira',label:'Luz de teto do banco traseiro'},
+    {k:'carpete_porta_malas',label:'Carpete do porta-malas'},
+  {k:'estepe',label:'Estepe'},
+  {k:'macaco',label:'Macaco'},
+  {k:'chave_roda',label:'Chave de roda'},
+  {k:'triangulo_sinalizacao',label:'Triângulo de sinalização'},
+  {k:'kit_ferramentas',label:'Kit de ferramentas'},
+  {k:'extintor',label:'Extintor de incêndio'},
+  {k:'ganchos_amarracao',label:'Ganchos de amarração'},
+  {k:'tomada_12v_porta_malas',label:'Tomada 12V do porta-malas'},
+  {k:'luz_porta_malas',label:'Luz do porta-malas'},
+  {k:'amortecedor_tampa_esq',label:'Amortecedor da tampa esquerdo'},
+  {k:'amortecedor_tampa_dir',label:'Amortecedor da tampa direito'},
+  {k:'puxador_interno_tampa',label:'Puxador interno da tampa'},
+  {k:'fechadura_tampa',label:'Fechadura da tampa do porta-malas'},
+  {k:'borracha_vedacao_tampa',label:'Borracha de vedação da tampa'},
+  {k:'alavanca_rebatimento_banco',label:'Alavancas de rebatimento do banco'},
 ];
 const ZONAS_TODAS=[
   ...ZONAS_INSP.map(z=>({...z,area:'externo'})),
@@ -10589,7 +10609,11 @@ const CATS_TESTE=[['ajuste','Ajuste','#F59E0B'],['martelinho','Martelinho','#DC1
 // Exemplo: 'amarok':'modelos/amarok.glb'
 const MODELOS_3D={};
 const COR_CARRO='#E9E5DC';
-
+const zonaDupla=(k)=>k==='para_brisa'||String(k||'').startsWith('vidro_'); // peças com lado interno e externo
+const areaDaMarcacao=(m)=>m.modoVisto||(ZONAS_INT.some(z=>z.k===m.zona)?'interno':'externo');
+const ABERTURA_TAMPA=1.75; // radianos (~100 graus)
+const VISTAS_INT_LISTA=[{k:'motorista',l:'Motorista'},{k:'passageiro',l:'Passageiro'},{k:'tras_esq',l:'Traseiro esq.'},{k:'tras_dir',l:'Traseiro dir.'},{k:'porta_malas',l:'Porta-malas (dentro)'},{k:'porta_malas_fora',l:'Porta-malas (de fora)'},{k:'livre',l:'Visão livre'}];
+const VISTAS_ORB={porta_malas_fora:{pos:[-4.3,2.1,2.6],alvo:[-1.6,0.8,0]}};
 // ── Carro genérico (SUV) — frente = +X, lado esquerdo (motorista) = -Z ──
 function montarCarroGenerico(T,scene,registrar,extras){
   const CB=COR_CARRO;
@@ -10600,6 +10624,12 @@ function montarCarroGenerico(T,scene,registrar,extras){
   const zona=(m,k)=>{registrar(m,k);scene.add(m);return m;};
   // peça clicável que só existe na visão interna (mesma zona da versão externa, ex: vidros)
   const zonaInt=(m,k)=>{registrar(m,k,'int');scene.add(m);return m;};
+    // grupo da tampa: gira em torno da dobradiça (topo traseiro do teto)
+  const HX=-1.80,HY=1.56;
+  const tampa=new T.Group();tampa.position.set(HX,HY,0);scene.add(tampa);extras.tampa=tampa;
+  const naTampa=(m)=>{m.position.x-=HX;m.position.y-=HY;tampa.add(m);return m;};
+  const zonaT=(m,k)=>{registrar(m,k);return naTampa(m);};
+  const zonaIntT=(m,k)=>{registrar(m,k,'int');return naTampa(m);};
   const vid=(m,op)=>{m.material.transparent=true;m.material.opacity=op||0.5;m.material.roughness=0.15;m.material.depthWrite=false;return m;};
   const geoRBox=(sx,sy,sz,b)=>{
     b=Math.min(b,sx/2.2,sy/2.2,sz/2.2);
@@ -10661,8 +10691,8 @@ function montarCarroGenerico(T,scene,registrar,extras){
   antena.position.set(-1.30,1.595,0);
   zona(antena,'antena');
   zona(vid(R(0.03,0.75,1.66,'#8CB7D6',[0.625,1.26,0],0.805,0.004)),'para_brisa');
-  zona(vid(R(0.03,0.57,1.62,'#8CB7D6',[-1.925,1.25,0],-0.495,0.004)),'vidro_traseiro');
-  zona(R(0.09,0.50,1.2,CB,[-2.19,0.78,0],0,0.02),'porta_malas');
+  zonaT(vid(R(0.03,0.57,1.62,'#8CB7D6',[-1.925,1.25,0],-0.495,0.004)),'vidro_traseiro');
+    zonaT(R(0.09,0.50,1.2,CB,[-2.19,0.78,0],0,0.02),'porta_malas');
   zona(R(0.30,0.46,1.84,CB,[-2.10,0.50,0],0,0.03),'para_choque_tras');
   ext(R(0.12,0.14,1.4,'#1B1B1E',[-2.26,0.34,0],0,0.02));
   zona(R(0.32,0.55,1.84,CB,[2.12,0.55,0],0,0.04),'para_choque_diant');
@@ -10729,7 +10759,7 @@ function montarCarroGenerico(T,scene,registrar,extras){
   // ═════════════ INTERNO ═════════════
   // vidros vistos de dentro (clicáveis, mesma zona do vidro externo)
   zonaInt(vid(R(0.03,0.75,1.66,'#8CB7D6',[0.625,1.26,0],0.805,0.004),0.28),'para_brisa');
-  zonaInt(vid(R(0.03,0.57,1.62,'#8CB7D6',[-1.925,1.25,0],-0.495,0.004),0.28),'vidro_traseiro');
+ zonaIntT(vid(R(0.03,0.57,1.62,'#8CB7D6',[-1.925,1.25,0],-0.495,0.004),0.28),'vidro_traseiro');
 
   // câmera e sensor do para-brisa (atrás do vidro, no topo central)
   zonaInt(R(0.05,0.06,0.10,'#101014',[0.363,1.464,-0.06],0.805,0.01),'camera_parabrisa');
@@ -10841,18 +10871,79 @@ function montarCarroGenerico(T,scene,registrar,extras){
   zona(R(0.24,0.03,0.14,'#D8D5CE',[-0.78,1.515,0],0,0.01),'luz_teto_traseira');
   int(R(0.18,0.012,0.09,'#F4F1E6',[-0.78,1.497,0],0,0.003,{emissive:'#6A6658'}));
 
-  // porta-malas (bandeja menor para liberar tampa e laterais)
-  zona(R(1.1,0.06,1.5,'#26262B',[-1.52,0.46,0],0,0.01),'porta_malas_int');
-  lados.forEach(([nome,s])=>zona(R(1.1,0.58,0.06,'#2C2C30',[-1.52,0.78,s*0.80],0,0.01),'lateral_porta_malas_'+nome));
-  zona(R(0.40,0.03,1.30,'#3A3A3F',[-1.20,1.02,0],0,0.01),'bandeja_traseira');
-  zona(R(0.05,0.52,1.3,'#2C2C30',[-2.10,0.80,0],0,0.01),'forro_tampa_porta_malas');
+  // ═════ PORTA-MALAS ═════
+  {
+    // assoalho + carpete (4 faixas ao redor do vão do estepe)
+    zona(R(1.1,0.04,1.5,'#1E1E22',[-1.52,0.42,0],0,0.01),'porta_malas_int');
+    [[0.19,1.5,-1.065,0],[0.19,1.5,-1.975,0],[0.72,0.39,-1.52,-0.555],[0.72,0.39,-1.52,0.555]].forEach(([sx,sz,x,z])=>zona(R(sx,0.04,sz,'#34343A',[x,0.465,z],0,0.008),'carpete_porta_malas'));
+
+    // laterais
+    lados.forEach(([nome,s])=>zona(R(1.1,0.64,0.06,'#2C2C30',[-1.52,0.76,s*0.80],0,0.01),'lateral_porta_malas_'+nome));
+
+    // tampão (semitransparente para não esconder o que está embaixo)
+    zona(R(0.50,0.03,1.34,'#3A3A3F',[-1.25,1.02,0],0,0.008,{transparent:true,opacity:0.55,depthWrite:false}),'bandeja_traseira').userData.opacAtiva=0.9;
+
+    // estepe
+    const pneuEst=new T.Mesh(new T.CylinderGeometry(0.33,0.33,0.15,32),mat('#111114',{roughness:0.9}));
+    pneuEst.position.set(-1.52,0.515,0);zona(pneuEst,'estepe');
+    const aroEst=new T.Mesh(new T.CylinderGeometry(0.21,0.21,0.16,24),mat('#9FA2A8',{metalness:0.6,roughness:0.35}));
+    aroEst.position.set(-1.52,0.515,0);zona(aroEst,'estepe');
+
+    // macaco (lado direito)
+    zona(R(0.32,0.07,0.12,'#6B6E75',[-1.52,0.52,0.555],0,0.015),'macaco');
+    zona(R(0.14,0.02,0.12,'#8A8D94',[-1.52,0.565,0.555],0,0.006),'macaco');
+
+    // extintor (deitado, lado direito)
+    const extCorpo=new T.Mesh(new T.CylinderGeometry(0.045,0.045,0.30,16),mat('#C21F1F'));
+    extCorpo.rotation.z=Math.PI/2;extCorpo.position.set(-1.52,0.53,0.42);zona(extCorpo,'extintor');
+    const extTampa=new T.Mesh(new T.CylinderGeometry(0.03,0.03,0.05,12),mat('#1A1A1E'));
+    extTampa.rotation.z=Math.PI/2;extTampa.position.set(-1.37,0.53,0.42);zona(extTampa,'extintor');
+
+    // kit de ferramentas e chave de roda (lado esquerdo)
+    zona(R(0.30,0.10,0.18,'#233A5E',[-1.52,0.535,-0.58],0,0.025),'kit_ferramentas');
+    zona(R(0.46,0.025,0.03,'#A5A8AE',[-1.52,0.50,-0.43],0,0.008),'chave_roda');
+    zona(R(0.03,0.025,0.12,'#A5A8AE',[-1.77,0.50,-0.43],0,0.008),'chave_roda');
+
+    // triângulo de sinalização (preso na lateral esquerda)
+    zona(lat(poly([[-1.82,0.58],[-1.52,0.58],[-1.67,0.84]]),0.03,-0.745,'#D6342B'),'triangulo_sinalizacao');
+    zona(lat(poly([[-1.76,0.62],[-1.58,0.62],[-1.67,0.78]]),0.034,-0.745,'#F2F0EA'),'triangulo_sinalizacao');
+
+    // ganchos de amarração
+    [[-1.95,0.66],[-1.95,-0.66],[-1.10,0.66],[-1.10,-0.66]].forEach(([x,z])=>{
+      const g=new T.Mesh(new T.TorusGeometry(0.035,0.009,8,16),mat('#B7BAC0',{metalness:0.7,roughness:0.3}));
+      g.rotation.x=Math.PI/2;g.position.set(x,0.50,z);zona(g,'ganchos_amarracao');
+    });
+
+    // tomada 12V (dir.) e luz do porta-malas (esq.)
+    zona(R(0.05,0.07,0.07,'#101014',[-1.45,0.78,0.755],0,0.01),'tomada_12v_porta_malas');
+    zona(R(0.16,0.04,0.05,'#EDE9DC',[-1.72,1.00,-0.755],0,0.01,{emissive:'#5A5648'}),'luz_porta_malas');
+
+    // alavancas de rebatimento do banco traseiro
+    [-0.45,0.45].forEach(z=>zona(R(0.03,0.03,0.12,'#B9B6AF',[-0.99,1.20,z],0.15,0.008),'alavanca_rebatimento_banco'));
+
+    // itens presos na tampa (giram junto com ela)
+    zonaT(R(0.05,0.50,1.28,'#2C2C30',[-2.10,0.78,0],0,0.01),'forro_tampa_porta_malas');
+    zonaT(R(0.05,0.05,0.30,'#8A8A90',[-2.06,0.98,0],0,0.012),'puxador_interno_tampa');
+    zonaT(R(0.07,0.09,0.20,'#B8B8BD',[-2.06,0.58,0],0,0.015),'fechadura_tampa');
+    [-0.67,0.67].forEach(z=>zonaT(R(0.06,0.50,0.03,'#0E0E10',[-2.08,0.78,z],0,0.008),'borracha_vedacao_tampa'));
+    zonaT(R(0.06,0.03,1.38,'#0E0E10',[-2.08,1.045,0],0,0.008),'borracha_vedacao_tampa');
+
+    // amortecedores: tubo preso na carroceria + haste presa na tampa (esticam com a animação)
+    extras.struts=[];
+    lados.forEach(([nome,s])=>{
+      const k='amortecedor_tampa_'+nome;
+      const ancora=new T.Object3D();ancora.position.set(-2.03-HX,0.90-HY,s*0.68);tampa.add(ancora);
+      const cil=(cor,r)=>{const m=new T.Mesh(new T.CylinderGeometry(r,r,1,10),mat(cor,{metalness:0.5,roughness:0.4}));zona(m,k);return m;};
+      extras.struts.push({B:new T.Vector3(-1.78,1.38,s*0.74),ancora,tubo:cil('#1B1B1E',0.022),haste:cil('#C9CBD0',0.012)});
+    });
+  }
 }
 
 function Carro3D({marcacoes,selecionada,onSelect,modeloUrl,modo,vista}){
   const mountRef=useRef(null);
   const dadosRef=useRef({});
   const apiRef=useRef({});
-    dadosRef.current={marcacoes,selecionada,onSelect,modo,vista};
+        dadosRef.current={marcacoes,selecionada,onSelect,modo,vista,tampaAberta:modo==='interno'&&(vista==='porta_malas'||vista==='porta_malas_fora')};
 
   useEffect(()=>{
     const el=mountRef.current;
@@ -10914,20 +11005,21 @@ function Carro3D({marcacoes,selecionada,onSelect,modeloUrl,modo,vista}){
       (meshes[zona]=meshes[zona]||[]).push(mesh);
       clicaveis.push(mesh);
     };
-    const aplicarCores=()=>{
+       const aplicarCores=()=>{
       const{marcacoes:ms,selecionada:sel}=dadosRef.current;
       Object.entries(meshes).forEach(([zona,arr])=>{
-        const daZ=(ms||[]).filter(m=>m.zona===zona);
-        const catsZ=[...new Set(daZ.map(m=>m.categoria))].map(k=>CATS_TESTE.find(c=>c[0]===k)).filter(Boolean);
+        const dupla=zonaDupla(zona);
         const ativa=sel===zona;
         arr.forEach(mesh=>{
+          const areaMesh=mesh.userData.tipo==='int'?'interno':'externo';
+          const daZ=(ms||[]).filter(m=>m.zona===zona&&(!dupla||areaDaMarcacao(m)===areaMesh));
+          const catsZ=[...new Set(daZ.map(m=>m.categoria))].map(k=>CATS_TESTE.find(c=>c[0]===k)).filter(Boolean);
           const sp=mesh.userData.sp;
           const dividir=catsZ.length>1;
           if(sp){
             sp.uUse.value=dividir?1:0;
             if(dividir){sp.uN.value=catsZ.length;catsZ.forEach((c,i)=>sp.uCols.value[i].set(c[2]));}
           }
-          // laranja só se a peça está selecionada e ainda sem problema; com problema mantém a cor da categoria
           mesh.material.color.set(ativa&&!catsZ.length?'#FF8A00':catsZ.length?catsZ[0][2]:mesh.userData.base);
           if(mesh.material.emissive)mesh.material.emissive.set(ativa?'#552200':'#000000');
           mesh.material.opacity=(ativa||catsZ.length)?(mesh.userData.opacAtiva||1):mesh.userData.opac;
@@ -10963,10 +11055,11 @@ function Carro3D({marcacoes,selecionada,onSelect,modeloUrl,modo,vista}){
         camera.fov=40;camera.near=0.1;camera.updateProjectionMatrix();
         controls.enableZoom=true;controls.enablePan=true;
         controls.rotateSpeed=1;controls.minPolarAngle=0;
-        if(interno){
-          controls.minDistance=0.8;controls.maxDistance=6;controls.maxPolarAngle=Math.PI;
-          controls.target.set(-0.1,0.9,0);
-          camera.position.set(2.0,2.4,2.0);
+               if(interno){
+          const orb=VISTAS_ORB[vs];
+          controls.minDistance=orb?1:0.8;controls.maxDistance=orb?9:6;controls.maxPolarAngle=Math.PI;
+          if(orb){controls.target.set(orb.alvo[0],orb.alvo[1],orb.alvo[2]);camera.position.set(orb.pos[0],orb.pos[1],orb.pos[2]);}
+          else{controls.target.set(-0.1,0.9,0);camera.position.set(2.0,2.4,2.0);}
         }else{
           controls.minDistance=4;controls.maxDistance=12;controls.maxPolarAngle=Math.PI/2.05;
           controls.target.set(0,0.8,0);
@@ -11026,8 +11119,31 @@ function Carro3D({marcacoes,selecionada,onSelect,modeloUrl,modo,vista}){
     }):null;
     if(ro)ro.observe(el);
 
+       const vG=new T.Vector3(),vD=new T.Vector3(),vUp=new T.Vector3(0,1,0);
+    const atualizarAmortecedores=()=>{
+      if(!extras.struts)return;
+      extras.struts.forEach(st=>{
+        st.ancora.getWorldPosition(vG);
+        vD.subVectors(vG,st.B);const len=vD.length()||0.001;vD.normalize();
+        st.tubo.position.copy(st.B).addScaledVector(vD,len*0.25);
+        st.tubo.scale.set(1,len*0.5,1);st.tubo.quaternion.setFromUnitVectors(vUp,vD);
+        st.haste.position.copy(st.B).addScaledVector(vD,len*0.75);
+        st.haste.scale.set(1,len*0.5,1);st.haste.quaternion.setFromUnitVectors(vUp,vD);
+      });
+    };
     let raf;
-    const loop=()=>{raf=requestAnimationFrame(loop);if(controls)controls.update();renderer.render(scene,camera);};
+    const loop=()=>{
+      raf=requestAnimationFrame(loop);
+      const t=extras.tampa;
+      if(t){
+        const alvoRot=dadosRef.current.tampaAberta?-ABERTURA_TAMPA:0;
+        const dif=alvoRot-t.rotation.z;
+        t.rotation.z=Math.abs(dif)<0.002?alvoRot:t.rotation.z+dif*0.07;
+      }
+      atualizarAmortecedores();
+      if(controls)controls.update();
+      renderer.render(scene,camera);
+    };
     loop();
 
     return()=>{
@@ -11193,7 +11309,7 @@ function TesteInspecaoView({vehiclesDB,loggedInUser}){
                         {modo==='interno'&&(
               <div style={{display:'flex',gap:6,flexWrap:'wrap',padding:'0 16px 10px',alignItems:'center'}}>
                 <span style={{fontSize:8,fontWeight:800,textTransform:'uppercase',color:'var(--muted)'}}>Sentar em:</span>
-                {[{k:'motorista',l:'Motorista'},{k:'passageiro',l:'Passageiro'},{k:'tras_esq',l:'Traseiro esq.'},{k:'tras_dir',l:'Traseiro dir.'},{k:'porta_malas',l:'Porta-malas'},{k:'livre',l:'Visão livre'}].map(t=>(
+               {VISTAS_INT_LISTA.map(t=>(
                   <button key={t.k} type="button" onClick={()=>setVista(t.k)} style={{padding:'6px 12px',borderRadius:8,border:`2px solid ${vista===t.k?'var(--red)':'var(--border)'}`,background:vista===t.k?'var(--red)':'#fff',color:vista===t.k?'#fff':'var(--ink)',fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>{t.l}</button>
                 ))}
               </div>
