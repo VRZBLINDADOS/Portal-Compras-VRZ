@@ -10564,7 +10564,8 @@ const ZONAS_INT=[
   {k:'lateral_porta_malas_esq',label:'Lateral do porta-malas esquerda'},
   {k:'lateral_porta_malas_dir',label:'Lateral do porta-malas direita'},
     {k:'bandeja_traseira',label:'Tampão do porta-malas (bandeja traseira)'},
-  {k:'forro_tampa_porta_malas',label:'Forro da tampa do porta-malas'},
+    {k:'forro_tampa_porta_malas',label:'Forro da tampa do porta-malas'},
+  {k:'regua_porta_malas',label:'Régua do porta-malas (acabamento do forro)'},
     {k:'comando_vidro_diant_esq',label:'Comando do vidro dianteiro esquerdo (motorista)'},
   {k:'comando_vidro_diant_dir',label:'Comando do vidro dianteiro direito'},
   {k:'comando_vidro_tras_esq',label:'Comando do vidro traseiro esquerdo'},
@@ -10966,10 +10967,36 @@ function montarCarroGenerico(T,scene,registrar,extras){
     // alavancas de rebatimento do banco traseiro
     [-0.45,0.45].forEach(z=>zona(R(0.03,0.03,0.12,'#B9B6AF',[-0.99,1.20,z],0.15,0.008),'alavanca_rebatimento_banco'));
 
+        // régua do porta-malas (acabamento no fim do forro / soleira traseira)
+    zona(R(0.12,0.03,1.50,'#2E2E33',[-2.02,0.495,0],0,0.012),'regua_porta_malas');
+    zona(R(0.07,0.012,1.40,'#A4A7AE',[-2.015,0.516,0],0,0.004,{metalness:0.7,roughness:0.35}),'regua_porta_malas');
+    zona(R(0.018,0.026,1.50,'#1B1B1E',[-1.955,0.492,0],0,0.006),'regua_porta_malas');
+    [-0.60,-0.30,0,0.30,0.60].forEach(z=>zona(R(0.03,0.008,0.03,'#1A1A1E',[-2.015,0.524,z],0,0.003),'regua_porta_malas'));
+
+    // batente (argola) onde a fechadura da tampa prende
+    zona(R(0.06,0.012,0.10,'#6E7178',[-2.0,0.528,0],0,0.004),'fechadura_tampa');
+    const batente=new T.Mesh(new T.TorusGeometry(0.035,0.007,8,18,Math.PI),mat('#C9CBD0',{metalness:0.8,roughness:0.3}));
+    batente.rotation.y=Math.PI/2;batente.position.set(-2.0,0.53,0);zona(batente,'fechadura_tampa');
+
     // itens presos na tampa (giram junto com ela)
     zonaT(R(0.05,0.50,1.28,'#2C2C30',[-2.10,0.78,0],0,0.01),'forro_tampa_porta_malas');
-    zonaT(R(0.05,0.05,0.30,'#8A8A90',[-2.06,0.98,0],0,0.012),'puxador_interno_tampa');
-    zonaT(R(0.07,0.09,0.20,'#B8B8BD',[-2.06,0.58,0],0,0.015),'fechadura_tampa');
+       // puxador interno: nicho, dois suportes, barra metálica e luva emborrachada
+    zonaT(R(0.022,0.085,0.36,'#1B1B1E',[-2.083,0.965,0],0,0.01),'puxador_interno_tampa');
+    [-0.14,0.14].forEach(z=>zonaT(R(0.05,0.05,0.04,'#3A3A40',[-2.062,0.965,z],0,0.01),'puxador_interno_tampa'));
+    const pegaBarra=new T.Mesh(new T.CylinderGeometry(0.011,0.011,0.30,14),mat('#9A9DA4',{metalness:0.7,roughness:0.35}));
+    pegaBarra.rotation.x=Math.PI/2;pegaBarra.position.set(-2.04,0.965,0);zonaT(pegaBarra,'puxador_interno_tampa');
+    const pegaLuva=new T.Mesh(new T.CylinderGeometry(0.0165,0.0165,0.17,16),mat('#2A2A2E',{roughness:0.9}));
+    pegaLuva.rotation.x=Math.PI/2;pegaLuva.position.set(-2.04,0.965,0);zonaT(pegaLuva,'puxador_interno_tampa');
+
+    // fechadura da tampa: placa plástica, corpo metálico, boca do trinco, parafusos e alavanca vermelha
+    zonaT(R(0.025,0.12,0.26,'#2A2A2E',[-2.083,0.585,0],0,0.012),'fechadura_tampa');
+    zonaT(R(0.05,0.07,0.12,'#B8B8BD',[-2.055,0.585,0],0,0.012,{metalness:0.7,roughness:0.35}),'fechadura_tampa');
+    zonaT(R(0.022,0.026,0.07,'#0E0E10',[-2.03,0.585,0],0,0.005),'fechadura_tampa');
+    [[-0.11,0.045],[-0.11,-0.045],[0.11,0.045],[0.11,-0.045]].forEach(([z,dy])=>{
+      const parafuso=new T.Mesh(new T.CylinderGeometry(0.009,0.009,0.012,10),mat('#C9CBD0',{metalness:0.8,roughness:0.3}));
+      parafuso.rotation.z=Math.PI/2;parafuso.position.set(-2.066,0.585+dy,z);zonaT(parafuso,'fechadura_tampa');
+    });
+    zonaT(R(0.02,0.012,0.07,'#D9262B',[-2.045,0.628,0.06],0,0.004),'fechadura_tampa');
     [-0.67,0.67].forEach(z=>zonaT(R(0.06,0.50,0.03,'#0E0E10',[-2.08,0.78,z],0,0.008),'borracha_vedacao_tampa'));
     zonaT(R(0.06,0.03,1.38,'#0E0E10',[-2.08,1.045,0],0,0.008),'borracha_vedacao_tampa');
 
