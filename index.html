@@ -5219,7 +5219,54 @@ async function secaoProblemasPDF(doc,titulo,items,y,comFoto){
   }
   return y+4;
 }
-
+// ── Campo de busca com lista que vai filtrando conforme digita ──
+const PECAS_PORTA_MALAS=new Set(['porta_malas_int','bandeja_traseira','forro_tampa_porta_malas','regua_porta_malas','carpete_porta_malas','estepe','macaco','chave_roda','triangulo_sinalizacao','kit_ferramentas','extintor','ganchos_amarracao','tomada_12v_porta_malas','luz_porta_malas','puxador_interno_tampa','fechadura_tampa','borracha_vedacao_tampa','alavanca_rebatimento_banco']);
+// descobre de qual lugar sentar (vista) para enxergar a peça interna
+function vistaDaZona(k){
+  if(PECAS_PORTA_MALAS.has(k)||k.startsWith('amortecedor_tampa')||k.startsWith('lateral_porta_malas'))return 'livre';
+  const tras=/(_tras|banco_tras|cinto_tras|apoio_cabeca_tras|carpete_tras|luz_teto_traseira)/.test(k);
+  if(tras)return k.endsWith('_dir')?'tras_dir':'tras_esq';
+  return k.endsWith('_dir')?'passageiro':'motorista';
+}
+function BuscaLista({itens,placeholder,valorSelecionado,onEscolher,onNaoEncontrado,rotuloNaoEncontrado}){
+  const[q,setQ]=useState('');
+  const[aberto,setAberto]=useState(false);
+  const norm=(s)=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const filtrados=useMemo(()=>{
+    const palavras=norm(q).split(/\s+/).filter(Boolean);
+    if(!palavras.length)return itens;
+    return itens.filter(it=>{const n=norm(it.label);return palavras.every(p=>n.includes(p));});
+  },[q,itens]);
+  const escolher=(it)=>{onEscolher(it);setQ('');setAberto(false);};
+  const naoAchou=()=>{onNaoEncontrado(q.trim());setQ('');setAberto(false);};
+  const tagCor={Interna:['#EAF0FF','#1A4EC2','#C0D0F5'],Externa:['#FFF4E6','#C45E00','#FFD9A8']};
+  return(
+    <div>
+      <input type="text" value={aberto?q:(valorSelecionado||'')} onFocus={()=>{setAberto(true);setQ('');}} onChange={e=>{setQ(sanitize(e.target.value));setAberto(true);}} onBlur={()=>setTimeout(()=>setAberto(false),150)} placeholder={placeholder} className="input" style={{fontSize:12,fontWeight:700}} autoComplete="off"/>
+      {aberto&&(
+        <div style={{marginTop:6,border:'1.5px solid var(--border)',borderRadius:10,background:'#fff',overflow:'hidden'}}>
+          <div className="scroll-y" style={{maxHeight:220,overflowY:'auto'}}>
+            {filtrados.length===0&&<p style={{fontSize:10,fontWeight:700,color:'var(--muted)',margin:0,padding:'12px 14px'}}>Nenhum resultado para "{q}"</p>}
+            {filtrados.map(it=>{
+              const c=tagCor[it.tag]||['var(--smoke)','var(--muted)','var(--border)'];
+              return(
+                <div key={it.k} onMouseDown={e=>e.preventDefault()} onClick={()=>escolher(it)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,padding:'9px 14px',cursor:'pointer',borderBottom:'1px solid var(--smoke)',fontSize:11,fontWeight:700}} onMouseEnter={e=>e.currentTarget.style.background='var(--smoke)'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
+                  <span style={{textTransform:'uppercase'}}>{it.label}</span>
+                  {it.tag&&<span style={{fontSize:8,fontWeight:800,textTransform:'uppercase',padding:'2px 8px',borderRadius:999,background:c[0],color:c[1],border:'1px solid '+c[2],flexShrink:0}}>{it.tag}</span>}
+                </div>
+              );
+            })}
+          </div>
+          {q.trim()&&(
+            <div onMouseDown={e=>e.preventDefault()} onClick={naoAchou} style={{padding:'10px 14px',cursor:'pointer',background:'var(--red-light)',borderTop:'1px solid #FFBDBD',fontSize:10,fontWeight:800,textTransform:'uppercase',color:'var(--red)'}}>
+              + {rotuloNaoEncontrado}: "{q.trim()}"
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 // ── Inspeção com carro 3D (peça e defeito selecionados, descrição digitada) ──
 function Inspecao3DEditor({vehicle,etapaInspecao,dados,setCat,disabled,limiteAtingido,totalFotos,loggedInUser}){
   const TIPO_CATS_3D=['pintura','vidro'];
@@ -5251,6 +5298,20 @@ function Inspecao3DEditor({vehicle,etapaInspecao,dados,setCat,disabled,limiteAti
 
   const limparForm=()=>{setEditId(null);setCategoria('ajuste');setTipo('Interno');setDefeito('');setDefeitoOutro('');setDescricao('');setFoto(null);};
   const selecionarZona=(k)=>{setZona(k);setOutraPeca(false);setNomePeca('');limparForm();};
+
+  // ── Busca por digitação (peças e defeitos) ──
+  const itensPecas=useMemo(()=>ZONAS_TODAS.map(z=>({k:z.k,label:z.label,area:z.area,tag:zonaDupla(z.k)?'Externa / Interna':(z.area==='interno'?'Interna':'Externa')})).sort((a,b)=>a.label.localeCompare(b.label)),[]);
+  const itensDefeitos=useMemo(()=>LISTA_DEFEITOS.filter(d=>d!=='OUTRO').map(d=>({k:d,label:d})),[]);
+  const escolherPeca=(it)=>{
+    const dupla=zonaDupla(it.k);
+    const area=dupla?modo:it.area; // vidros/para-brisa existem nos dois lados: mantém a vista atual
+    if(area!==modo)setModo(area);
+    if(area==='interno'&&!dupla)setVista(vistaDaZona(it.k));
+    selecionarZona(it.k);
+  };
+  const naoEncontradaPeca=(txt)=>{
+    setZona(null);setOutraPeca(true);limparForm();setNomePeca(String(txt||'').toUpperCase());
+  };
 
   const adicionar=()=>{
     if(disabled)return;
@@ -5344,7 +5405,13 @@ function Inspecao3DEditor({vehicle,etapaInspecao,dados,setCat,disabled,limiteAti
         <p style={{fontSize:9,color:'var(--muted)',fontWeight:600,margin:0,padding:'0 16px 12px'}}>Arraste para girar · role para aproximar · clique numa peça para registrar o problema</p>
       </div>
 
-      <div style={{display:'flex',flexDirection:'column',gap:12}}>
+            <div style={{display:'flex',flexDirection:'column',gap:12}}>
+        {!disabled&&(
+          <div style={{background:'#fff',border:'1.5px solid var(--border)',borderRadius:16,padding:16}}>
+            <label style={lbl}>🔍 Buscar peça (digite o nome)</label>
+            <BuscaLista itens={itensPecas} placeholder="Ex: porta, banco, extintor, vidro..." onEscolher={escolherPeca} onNaoEncontrado={naoEncontradaPeca} rotuloNaoEncontrado="Peça não encontrada — digitar o nome"/>
+          </div>
+        )}
                 {disabled?(
           <div className="card" style={{padding:18}}>
             {!zonaObj?(
@@ -5417,10 +5484,7 @@ function Inspecao3DEditor({vehicle,etapaInspecao,dados,setCat,disabled,limiteAti
               )}
               <div>
                 <label style={{...lbl,color:'var(--red)'}}>Defeito *</label>
-                <select value={defeito} onChange={e=>setDefeito(e.target.value)} className="input" style={{fontSize:12,fontWeight:700,appearance:'auto'}}>
-                  <option value="">Selecione o defeito...</option>
-                  {LISTA_DEFEITOS.map(d=><option key={d} value={d}>{d}</option>)}
-                </select>
+                              <BuscaLista itens={itensDefeitos} placeholder="Digite o defeito..." valorSelecionado={defeito==='OUTRO'?'OUTRO (não listado)':defeito} onEscolher={it=>{setDefeito(it.k);setDefeitoOutro('');}} onNaoEncontrado={txt=>{setDefeito('OUTRO');setDefeitoOutro(String(txt||'').toUpperCase());}} rotuloNaoEncontrado="Defeito não encontrado — digitar o defeito"/>
                 {defeito==='OUTRO'&&<input type="text" value={defeitoOutro} onChange={e=>setDefeitoOutro(sanitize(e.target.value))} placeholder="Qual é o defeito?" className="input" style={{fontSize:12,fontWeight:700,marginTop:6,textTransform:'uppercase'}}/>}
               </div>
               <div>
