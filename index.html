@@ -10837,7 +10837,8 @@ const ZONAS_INT=[
   {k:'alavanca_limpador',label:'Alavanca do limpador'},
   {k:'pedais',label:'Pedais'},
   {k:'console_central',label:'Console central'},
-  {k:'alavanca_cambio',label:'Alavanca de câmbio'},
+    {k:'alavanca_cambio',label:'Alavanca de câmbio'},
+  {k:'freio_mao',label:'Freio de mão'},
   {k:'apoio_braco_central',label:'Apoio de braço central'},
   {k:'banco_diant_esq',label:'Banco dianteiro esquerdo'},
   {k:'banco_diant_dir',label:'Banco dianteiro direito'},
@@ -10917,8 +10918,7 @@ const ZONAS_INT=[
   {k:'fechadura_tampa',label:'Fechadura da tampa do porta-malas'},
   {k:'borracha_vedacao_tampa',label:'Borracha de vedação da tampa'},
   {k:'alavanca_rebatimento_banco',label:'Alavancas de rebatimento do banco'},
-    {k:'alavanca_seta',label:'Alavanca de seta (chave de seta)'},
-  {k:'alavanca_limpador',label:'Alavanca dos limpadores'},
+   
 ];
 const ZONAS_TODAS=(()=>{
   const vistos=new Set();
@@ -10941,6 +10941,8 @@ const COR_CARRO='#E9E5DC';
 const zonaDupla=(k)=>k==='para_brisa'||String(k||'').startsWith('vidro_'); // peças com lado interno e externo
 const areaDaMarcacao=(m)=>m.modoVisto||(ZONAS_INT.some(z=>z.k===m.zona)?'interno':'externo');
 const ABERTURA_TAMPA=1.75; // radianos (~100 graus)
+  // peças pequenas que ficam atrás de outras: se o raio do clique acertar a geometria delas, elas vencem
+const PRIORIDADE_CLIQUE=new Set(['alavanca_seta','alavanca_limpador','alavanca_cambio','freio_mao']);
 const VISTAS_INT_LISTA=[{k:'motorista',l:'Motorista'},{k:'passageiro',l:'Passageiro'},{k:'tras_esq',l:'Traseiro esq.'},{k:'tras_dir',l:'Traseiro dir.'},{k:'livre',l:'Porta-malas'}];
 const VISTAS_ORB={
   livre:{pos:[-4.3,2.1,2.6],alvo:[-1.6,0.8,0]},
@@ -11241,19 +11243,9 @@ function montarCarroGenerico(T,scene,registrar,extras){
   cone(bLimp,[bLimp[0]-0.005,bLimp[1]-0.002,bLimp[2]+0.02],0.012,0.012,'#8E9198','alavanca_limpador',CROMO);
   zona(R(0.03,0.15,0.07,'#555559',[0.50,0.52,-0.47],0,0.01),'pedais');
   zona(R(0.03,0.15,0.045,'#555559',[0.50,0.52,-0.30],0,0.01),'pedais');
-  // ═════ ALAVANCAS NA COLUNA DE DIREÇÃO ═════
-  {
-    const base=[0.54,0.908,-0.38];
-    int(R(0.07,0.09,0.09,CE,[0.55,0.905,-0.38],0,0.02)); // coluna/carcaça das alavancas
-    // esquerda (lado da porta do motorista): seta
-    zona(barra(base,[0.52,0.915,-0.64],0.032,0.026,'#1B1B1F'),'alavanca_seta');
-    zona(R(0.045,0.04,0.07,'#2A2A30',[0.52,0.915,-0.655],0,0.012),'alavanca_seta');
-    zona(R(0.012,0.012,0.03,'#E8A21A',[0.495,0.925,-0.655],0,0.004),'alavanca_seta');
-    // direita (lado do centro): limpadores
-    zona(barra(base,[0.52,0.915,-0.13],0.032,0.026,'#1B1B1F'),'alavanca_limpador');
-    zona(R(0.05,0.05,0.035,'#8A8D93',[0.52,0.915,-0.17],0,0.012),'alavanca_limpador');
-    zona(R(0.04,0.04,0.045,'#2A2A30',[0.52,0.915,-0.115],0,0.012),'alavanca_limpador');
-  }
+   // pontas grossas das alavancas, para fora do aro do volante (fáceis de clicar)
+  zona(R(0.05,0.05,0.04,'#33333A',[0.51,0.90,-0.70],0,0.012),'alavanca_seta');
+  zona(R(0.045,0.045,0.04,'#33333A',[0.51,0.90,-0.105],0,0.012),'alavanca_limpador');
   // console central
   int(R(0.40,0.20,0.26,'#2C2C31',[0.0,0.62,0],0,0.02));
   zona(R(0.38,0.24,0.27,'#3A3A40',[0.40,0.63,0],0,0.03),'console_central');
@@ -11268,7 +11260,16 @@ function montarCarroGenerico(T,scene,registrar,extras){
   const knob=new T.Mesh(new T.SphereGeometry(0.036,18,12),mat('#1A1A1E',{roughness:0.8}));
   knob.scale.set(0.95,1.35,0.8);knob.position.set(0.48,0.905,0);zona(knob,'alavanca_cambio');
   zona(R(0.010,0.020,0.020,'#C9CBD0',[0.514,0.915,0],0,0.003,{metalness:0.85,roughness:0.25}),'alavanca_cambio');
-  zona(R(0.34,0.10,0.24,'#3A3A40',[0.02,0.80,0],0,0.03),'apoio_braco_central');
+   zona(R(0.34,0.10,0.24,'#D8CFBA',[0.02,0.80,0],0,0.03),'apoio_braco_central');
+  int(R(0.30,0.008,0.012,'#8C8574',[0.02,0.852,0],0,0.003));
+  // freio de mão (alavanca entre o porta-copos e o câmbio, lado do motorista)
+  {
+    const fx=0.43,fz=-0.105;
+    zona(R(0.06,0.03,0.06,'#1A1A1E',[fx,0.765,fz],0,0.01),'freio_mao');
+    zona(barra([fx,0.775,fz],[fx-0.05,0.90,fz],0.035,0.035,'#26262A'),'freio_mao');
+    zona(R(0.05,0.04,0.055,'#3A3A40',[fx-0.055,0.915,fz],0,0.012),'freio_mao');
+    int(R(0.012,0.012,0.012,'#D9262B',[fx-0.055,0.9355,fz],0,0.003,{emissive:'#7A0A10'}));
+  }
 
   // bancos dianteiros
   lados.forEach(([nome,s])=>{
@@ -11296,9 +11297,15 @@ function montarCarroGenerico(T,scene,registrar,extras){
   // portas, colunas e vidros (visão interna)
   lados.forEach(([nome,s])=>{
     [['diant',0.40],['tras',-0.50]].forEach(([p,x])=>{
-      zona(R(0.84,0.32,0.07,CM,[x,0.84,s*0.80],0,0.02),'forro_porta_'+p+'_'+nome);
-      zona(R(0.84,0.24,0.07,CD,[x,0.56,s*0.80],0,0.02),'forro_porta_'+p+'_'+nome);
-      int(R(0.55,0.06,0.10,'#6F6D69',[x-0.02,0.84,s*0.745],0,0.02));
+           const BEGE='#D8CFBA',PRETO='#26262A',kf='forro_porta_'+p+'_'+nome;
+      zona(R(0.84,0.27,0.07,BEGE,[x,0.865,s*0.80],0,0.02),kf);
+      zona(R(0.84,0.30,0.07,PRETO,[x,0.59,s*0.80],0,0.02),kf);
+      int(R(0.82,0.012,0.08,'#8C8574',[x,0.735,s*0.80],0,0.003)); // costura entre as cores
+      // alto-falante (embaixo, na frente da porta)
+      zona(R(0.20,0.20,0.03,'#17171A',[x+0.27,0.54,s*0.755],0,0.02),kf);
+      for(let i=0;i<5;i++)int(R(0.17,0.008,0.012,'#4A4A50',[x+0.27,0.46+i*0.04,s*0.738],0,0.002));
+      // bolsão
+      int(R(0.34,0.12,0.05,'#1A1A1E',[x-0.12,0.60,s*0.745],0,0.02));
       const xh=x-(p==='diant'?0.34:0.30);
             const kM='macaneta_int_'+p+'_'+nome;
       zona(R(0.34,0.12,0.016,'#C9CBD0',[xh,0.90,s*0.757],0,0.008,CROMO),kM);
@@ -11309,11 +11316,14 @@ function montarCarroGenerico(T,scene,registrar,extras){
       zona(R(0.03,0.03,0.022,'#2A2A2F',[xh+0.12,0.945,s*0.745],0,0.008),kM);
       // filete cromado vertical na porta, como na foto
       zona(R(0.02,0.30,0.014,'#C9CBD0',[x+0.37,0.70,s*0.761],0,0.006,CROMO),'forro_porta_'+p+'_'+nome);
-      // encosto de braço
-      zona(R(0.50,0.06,0.17,'#3A3A40',[x+0.06,0.90,s*0.69],0,0.02),'apoio_braco_porta_'+p+'_'+nome);
-      // comando do vidro (um por porta, zona própria)
-      zona(R(0.22,0.03,0.12,'#16161A',[x+0.08,0.945,s*0.69],0,0.01),'comando_vidro_'+p+'_'+nome);
-      [0,1,2,3].forEach(i=>int(R(0.03,0.012,0.03,'#A0A0A5',[x+0.01+i*0.045,0.962,s*0.69],0,0.004)));
+           // encosto de braço escuro com friso cromado
+      zona(R(0.50,0.075,0.17,'#1E1E22',[x+0.06,0.80,s*0.69],0,0.025),'apoio_braco_porta_'+p+'_'+nome);
+      int(R(0.48,0.014,0.014,'#C9CBD0',[x+0.06,0.84,s*0.612],0,0.004,{metalness:0.85,roughness:0.25}));
+      // comandos do vidro (4 botões na porta do motorista, 1 nas outras) e botão do retrovisor
+      zona(R(0.26,0.022,0.12,'#15151A',[x+0.08,0.85,s*0.69],0,0.008),'comando_vidro_'+p+'_'+nome);
+      const nBot=(p==='diant'&&s<0)?4:1;
+      for(let i=0;i<nBot;i++)int(R(0.04,0.012,0.05,'#33333A',[x+0.00+i*0.055,0.862,s*0.69],0,0.004));
+      if(p==='diant'){const kn=new T.Mesh(new T.CylinderGeometry(0.02,0.02,0.015,16),mat('#101013'));kn.position.set(x+0.285,0.857,s*0.69);int(kn);}
     });
     ['a','b','c','d'].forEach(cn=>zona(lat(poly(colunas[cn]),0.05,s*0.78,CP),'revest_coluna_'+cn+'_'+nome));
     // vidros das portas vistos de dentro (mesma zona do vidro externo)
@@ -11336,7 +11346,7 @@ function montarCarroGenerico(T,scene,registrar,extras){
       zona(R(0.16,0.008,0.008,'#C9CBD0',[ax,1.46,s*0.678],0,0.003,{metalness:0.85,roughness:0.25}),kA);
     });
     
-    zona(R(0.30,0.025,0.42,'#C4C1BA',[0.22,1.485,s*0.40],0,0.01),'quebra_sol_'+nome);
+        zona(R(0.20,0.022,0.30,'#D8CFBA',[0.24,1.49,s*0.40],0,0.01),'quebra_sol_'+nome);
   });
   int(R(0.02,0.10,0.02,CE,[0.43,1.47,0],0,0.005));
     zona(R(0.04,0.08,0.30,CE,[0.40,1.38,0],0,0.015),'retrovisor_interno');
@@ -11674,7 +11684,12 @@ function Carro3D({marcacoes,selecionada,onSelect,modeloUrl,modo,vista}){
       mouse.x=((e.clientX-r.left)/r.width)*2-1;
       mouse.y=-((e.clientY-r.top)/r.height)*2+1;
       ray.setFromCamera(mouse,camera);
-      const hit=ray.intersectObjects(clicaveis.filter(m=>m.visible),false)[0];
+           const hits=ray.intersectObjects(clicaveis.filter(m=>m.visible),false);
+      let hit=hits[0];
+      if(hit){
+        const pri=hits.find(h=>PRIORIDADE_CLIQUE.has(h.object.userData.zona)&&h.distance-hit.distance<0.6);
+        if(pri)hit=pri;
+      }
       if(hit&&dadosRef.current.onSelect)dadosRef.current.onSelect(hit.object.userData.zona);
     };
     dom.addEventListener('pointerdown',onDown);
