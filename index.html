@@ -6678,7 +6678,7 @@ function InspetoresResumo({finalizacoes,loggedInUser,isMaster}){
   const CATS_INSP=[['ajuste','Ajuste','#F59E0B'],['martelinho','Martelinho','#DC1F1F'],['pintura','Pintura','#2563EB'],['vidro','Vidro','#0EA5E9'],['outro','Estética','#6B7280'],['instalacaoPecas','Instalação Peças','#10B981']];
   const COLS=['dia','semana','quinzena','mes','carros','defeitos','resolvidos','abertos'];
   const[etapaSel,setEtapaSel]=useState('todas');
-  const[tipo,setTipo]=useState('diario');
+  const[tipo,setTipo]=useState('mensal');
   const[offset,setOffset]=useState(0);
   const[detalhe,setDetalhe]=useState(null);
   const[verCarro,setVerCarro]=useState(null);
@@ -6716,73 +6716,124 @@ function InspetoresResumo({finalizacoes,loggedInUser,isMaster}){
   },[finalizacoes,etapaSel,ini,fim,isMaster,loggedInUser?.user]);
 
   const media=(g)=>g.carros>0?fmt1(g.defeitos/g.carros):'—';
-  const pct=(g)=>g.defeitos>0?Math.round(g.resolvidos/g.defeitos*100)+'%':'—';
+  const pctNum=(g)=>g.defeitos>0?Math.round(g.resolvidos/g.defeitos*100):0;
+  const pct=(g)=>g.defeitos>0?pctNum(g)+'%':'—';
   const fmtP=`${new Date(ini).toLocaleDateString('pt-BR')} – ${new Date(fim).toLocaleDateString('pt-BR')}`;
+  const nomeTipo={diario:'do dia',semanal:'da semana',quinzenal:'da quinzena',mensal:'do mês'}[tipo];
   const btnTab=(ativo)=>({padding:'7px 14px',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',border:'none',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif',background:ativo?'#fff':'transparent',color:ativo?'var(--red)':'var(--muted)',boxShadow:ativo?'0 2px 8px rgba(0,0,0,.08)':'none'});
+  const rotuloPasso={fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.1em',color:'var(--muted)',margin:'0 0 6px'};
   const th={textAlign:'center',whiteSpace:'nowrap'};
 
   const abrir=(g,col,rotulo)=>{
     if(!g[col])return;
-    setDetalhe({titulo:`${g.nome} — ${rotulo}`,col,entries:g.l[col]});
+    setDetalhe({titulo:`${g.nome==='TOTAL'?'Todos os inspetores':g.nome} — ${rotulo}`,entries:g.l[col]});
   };
-  const cel=(g,col,rotulo,estilo,filho)=>(
-    <td onClick={()=>abrir(g,col,rotulo)} title={g[col]?'Clique para ver as OS\'s':''} style={{textAlign:'center',fontWeight:800,cursor:g[col]?'pointer':'default',textDecoration:g[col]?'underline dotted':'none',...estilo}}>{filho!==undefined?filho:g[col]}</td>
+
+  const kpis=[
+    {l:'Carros',sub:'inspeções feitas',v:total.carros,col:'carros',rot:'Carros '+nomeTipo,dark:true},
+    {l:'Defeitos apontados',sub:'no período',v:total.defeitos,col:'defeitos',rot:'Defeitos apontados'},
+    {l:'Média por carro',sub:'defeitos / carro',v:media(total)},
+    {l:'Resolvidos',sub:pct(total)+' do total',v:total.resolvidos,col:'resolvidos',rot:'Resolvidos',green:true},
+    {l:'Em aberto',sub:'ainda pendentes',v:total.abertos,col:'abertos',rot:'Em aberto',red:true},
+  ];
+
+  const atalho=(g,col,rotulo,txt)=>(
+    <span key={col} onClick={()=>abrir(g,col,rotulo)} title={g[col]?"Clique para ver as OS's":''} style={{display:'inline-flex',gap:4,alignItems:'center',fontSize:8,fontWeight:800,textTransform:'uppercase',padding:'2px 8px',borderRadius:999,border:'1px solid var(--border)',background:g[col]?'#fff':'transparent',color:g[col]?'var(--ink)':'#C9C2BC',cursor:g[col]?'pointer':'default'}}>{txt} <b style={{color:g[col]?'var(--red)':'#C9C2BC'}}>{g[col]}</b></span>
+  );
+  const numero=(g,col,rotulo,cor)=>(
+    <td style={{textAlign:'center',padding:'12px 8px'}}>
+      <span onClick={()=>abrir(g,col,rotulo)} title={g[col]?"Clique para ver as OS's":''} style={{display:'inline-block',minWidth:34,padding:'4px 10px',borderRadius:8,fontSize:14,fontWeight:800,color:g[col]?cor:'#C9C2BC',background:g[col]?'var(--smoke)':'transparent',border:g[col]?'1px solid var(--border)':'1px solid transparent',cursor:g[col]?'pointer':'default'}}>{g[col]}</span>
+    </td>
   );
   const linhaTabela=(g,ehTotal)=>(
-    <tr key={g.nome} style={ehTotal?{background:'var(--smoke)'}:undefined}>
-      <td style={{fontWeight:800,textTransform:'uppercase',fontSize:11,whiteSpace:'nowrap'}}>{g.nome}</td>
-      {cel(g,'dia','Carros hoje')}
-      {cel(g,'semana','Carros na semana')}
-      {cel(g,'quinzena','Carros na quinzena')}
-      {cel(g,'mes','Carros no mês')}
-      {cel(g,'carros','Carros no período',{borderLeft:'2px solid var(--border)'})}
-      {cel(g,'defeitos','Defeitos apontados')}
-      <td style={{textAlign:'center',fontWeight:800,color:'var(--red)'}}>{media(g)}</td>
-      {cel(g,'resolvidos','Resolvidos',{color:'#059669'},<>{g.resolvidos} <span style={{fontSize:9,color:'var(--muted)'}}>({pct(g)})</span></>)}
-      {cel(g,'abertos','Em aberto',{color:g.abertos?'#C45E00':'var(--muted)'})}
+    <tr key={g.nome} style={{background:ehTotal?'var(--smoke)':'transparent',opacity:!ehTotal&&!g.carros?.6:1,borderTop:ehTotal?'2px solid var(--border)':undefined}}>
+      <td style={{padding:'12px 10px'}}>
+        <p style={{fontSize:12,fontWeight:800,textTransform:'uppercase',margin:'0 0 5px',whiteSpace:'nowrap'}}>{ehTotal?'Total geral':g.nome}</p>
+        <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+          {atalho(g,'dia','Carros hoje','Hoje')}
+          {atalho(g,'semana','Carros na semana','Semana')}
+          {atalho(g,'quinzena','Carros na quinzena','Quinzena')}
+          {atalho(g,'mes','Carros no mês','Mês')}
+        </div>
+      </td>
+      {numero(g,'carros','Carros '+nomeTipo,'var(--ink)')}
+      {numero(g,'defeitos','Defeitos apontados','var(--ink)')}
+      <td style={{textAlign:'center',fontSize:14,fontWeight:800,color:'var(--red)'}}>{media(g)}</td>
+      <td style={{padding:'12px 8px',minWidth:130}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8}}>
+          {numero(g,'resolvidos','Resolvidos','#059669')}
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:6,marginTop:-4}}>
+          <div className="progress-track" style={{flex:1}}><div className="progress-fill" style={{width:pctNum(g)+'%',background:'#059669'}}/></div>
+          <span style={{fontSize:9,fontWeight:800,color:'var(--muted)',width:30,textAlign:'right'}}>{pct(g)}</span>
+        </div>
+      </td>
+      {numero(g,'abertos','Em aberto',g.abertos?'#C45E00':'var(--muted)')}
     </tr>
   );
 
   return(
     <div className="card" style={{padding:20,marginBottom:20}}>
-      <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--muted)',margin:'0 0 12px'}}>{isMaster?'Produtividade por Inspetor':'Minha Produtividade'}</p>
-      <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)',width:'fit-content',marginBottom:10,flexWrap:'wrap'}}>
-        {[{k:'todas',l:'Geral'},...ETAPAS_INSPECAO.map(et=>({k:et,l:et}))].map(t=><button key={t.k} onClick={()=>setEtapaSel(t.k)} style={btnTab(etapaSel===t.k)}>{t.l}</button>)}
-      </div>
-      <div style={{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap',marginBottom:14}}>
-        <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)'}}>
-          {[{k:'diario',l:'Dia'},{k:'semanal',l:'Semana'},{k:'quinzenal',l:'Quinzena'},{k:'mensal',l:'Mês'}].map(t=><button key={t.k} onClick={()=>{setTipo(t.k);setOffset(0);}} style={btnTab(tipo===t.k)}>{t.l}</button>)}
-        </div>
-        <div style={{display:'flex',alignItems:'center',background:'#fff',border:'1.5px solid var(--border)',borderRadius:12,overflow:'hidden'}}>
-          <button onClick={()=>setOffset(o=>o-1)} style={{padding:'8px 12px',background:'none',border:'none',cursor:'pointer',display:'flex',alignItems:'center',gap:4,fontFamily:'Plus Jakarta Sans,sans-serif',fontSize:10,fontWeight:700}}><Icon name="chevron-left" size={13}/> Anterior</button>
-          <div style={{padding:'8px 14px',borderLeft:'1px solid var(--border)',borderRight:'1px solid var(--border)',textAlign:'center',minWidth:170}}>
-            <p style={{fontSize:11,fontWeight:800,margin:0}}>{fmtP}</p>
-            {offset===0&&<p style={{fontSize:7,fontWeight:800,textTransform:'uppercase',color:'var(--red)',margin:'2px 0 0'}}>Período atual</p>}
+      <p style={{fontSize:9,fontWeight:800,textTransform:'uppercase',letterSpacing:'.12em',color:'var(--red)',margin:'0 0 2px'}}>{isMaster?'Produtividade por Inspetor':'Minha Produtividade'}</p>
+      <p style={{fontSize:9,color:'var(--muted)',fontWeight:600,margin:'0 0 14px'}}>Escolha a etapa e o período. Tudo abaixo muda junto.</p>
+
+      <div style={{display:'flex',gap:20,flexWrap:'wrap',marginBottom:16}}>
+        <div>
+          <p style={rotuloPasso}>1 · Etapa da inspeção</p>
+          <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)',flexWrap:'wrap'}}>
+            {[{k:'todas',l:'Todas'},...ETAPAS_INSPECAO.map(et=>({k:et,l:et}))].map(t=><button key={t.k} onClick={()=>setEtapaSel(t.k)} style={btnTab(etapaSel===t.k)}>{t.l}</button>)}
           </div>
-          <button onClick={()=>setOffset(o=>o+1)} disabled={offset===0} style={{padding:'8px 12px',background:'none',border:'none',cursor:offset===0?'not-allowed':'pointer',color:offset===0?'#D0C9C4':'var(--ink)',display:'flex',alignItems:'center',gap:4,fontFamily:'Plus Jakarta Sans,sans-serif',fontSize:10,fontWeight:700}}>Próxima <Icon name="chevron-right" size={13}/></button>
+        </div>
+        <div>
+          <p style={rotuloPasso}>2 · Período</p>
+          <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+            <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:4,borderRadius:12,border:'1px solid var(--border)'}}>
+              {[{k:'diario',l:'Dia'},{k:'semanal',l:'Semana'},{k:'quinzenal',l:'Quinzena'},{k:'mensal',l:'Mês'}].map(t=><button key={t.k} onClick={()=>{setTipo(t.k);setOffset(0);}} style={btnTab(tipo===t.k)}>{t.l}</button>)}
+            </div>
+            <div style={{display:'flex',alignItems:'center',background:'#fff',border:'1.5px solid var(--border)',borderRadius:12,overflow:'hidden'}}>
+              <button onClick={()=>setOffset(o=>o-1)} style={{padding:'8px 10px',background:'none',border:'none',cursor:'pointer',display:'flex',alignItems:'center'}}><Icon name="chevron-left" size={14}/></button>
+              <div style={{padding:'6px 12px',borderLeft:'1px solid var(--border)',borderRight:'1px solid var(--border)',textAlign:'center',minWidth:150}}>
+                <p style={{fontSize:11,fontWeight:800,margin:0}}>{fmtP}</p>
+                {offset===0&&<p style={{fontSize:7,fontWeight:800,textTransform:'uppercase',color:'var(--red)',margin:'1px 0 0'}}>Período atual</p>}
+              </div>
+              <button onClick={()=>setOffset(o=>o+1)} disabled={offset===0} style={{padding:'8px 10px',background:'none',border:'none',cursor:offset===0?'not-allowed':'pointer',color:offset===0?'#D0C9C4':'var(--ink)',display:'flex',alignItems:'center'}}><Icon name="chevron-right" size={14}/></button>
+            </div>
+          </div>
         </div>
       </div>
+
       {linhas.length===0?(
-        <p style={{fontSize:10,color:'var(--muted)',margin:0}}>Nenhuma inspeção registrada para este filtro.</p>
+        <p style={{fontSize:10,color:'var(--muted)',margin:0,padding:'20px 0',textAlign:'center'}}>Nenhuma inspeção registrada para este filtro.</p>
       ):(
-        <div className="table-scroll">
-          <table className="vtable w-full" style={{minWidth:820}}>
-            <thead><tr>
-              <th>Inspetor</th>
-              <th style={th}>Carros hoje</th><th style={th}>Carros na semana</th><th style={th}>Carros na quinzena</th><th style={th}>Carros no mês</th>
-              <th style={{...th,borderLeft:'2px solid var(--border)'}}>Carros (período)</th><th style={th}>Defeitos</th><th style={th}>Média / carro</th><th style={th}>Resolvidos</th><th style={th}>Em aberto</th>
-            </tr></thead>
-            <tbody>
-              {linhas.map(g=>linhaTabela(g,false))}
-              {linhas.length>1&&linhaTabela(total,true)}
-            </tbody>
-          </table>
-        </div>
+        <>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:10,marginBottom:16}}>
+            {kpis.map((k,i)=>(
+              <div key={i} onClick={()=>k.col&&abrir(total,k.col,k.rot)} style={{cursor:k.col&&total[k.col]?'pointer':'default',background:k.dark?'var(--ink)':k.red?'var(--red)':k.green?'#059669':'var(--smoke)',color:k.dark||k.red||k.green?'#fff':'var(--ink)',border:(!k.dark&&!k.red&&!k.green)?'1.5px solid var(--border)':'none',borderRadius:12,padding:'12px 14px'}}>
+                <p style={{fontSize:26,fontWeight:800,lineHeight:1,margin:0}}>{k.v}</p>
+                <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.06em',margin:'6px 0 0',opacity:.85}}>{k.l}</p>
+                <p style={{fontSize:8,fontWeight:500,margin:'2px 0 0',opacity:.6}}>{k.sub}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="table-scroll">
+            <table className="vtable w-full" style={{minWidth:640}}>
+              <thead><tr>
+                <th>Inspetor</th>
+                <th style={th}>Carros</th><th style={th}>Defeitos</th><th style={th}>Média / carro</th><th style={th}>Resolvidos</th><th style={th}>Em aberto</th>
+              </tr></thead>
+              <tbody>
+                {linhas.map(g=>linhaTabela(g,false))}
+                {linhas.length>1&&linhaTabela(total,true)}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
-      <p style={{fontSize:9,color:'var(--muted)',fontWeight:600,margin:'10px 0 0'}}>Clique em qualquer número para ver as OS's e o que foi apontado. Cada inspeção conta como um carro naquela etapa. Os defeitos são os dos carros que o inspetor criou, e o status (resolvido ou em aberto) é o de agora. Inspeções já arquivadas não entram, porque seus problemas são apagados no arquivamento.</p>
+      <p style={{fontSize:9,color:'var(--muted)',fontWeight:600,margin:'12px 0 0'}}>Clique em qualquer número ou etiqueta para ver as OS's e o que foi apontado. As etiquetas Hoje, Semana, Quinzena e Mês mostram sempre o período atual. Os defeitos são dos carros que o inspetor criou, e o status (resolvido ou em aberto) é o de agora. Inspeções arquivadas não entram.</p>
 
       {detalhe&&(
-        <DetailModal title={detalhe.titulo} subtitle={`${detalhe.entries.length} inspeção(ões) · ${fmtP}`} onClose={()=>setDetalhe(null)}>
+        <DetailModal title={detalhe.titulo} subtitle={`${detalhe.entries.length} inspeção(ões)`} onClose={()=>setDetalhe(null)}>
           <div style={{display:'flex',flexDirection:'column',gap:12}}>
             {[...detalhe.entries].sort((a,b)=>b.fin.criadoEm-a.fin.criadoEm).map(({fin,probs},i)=>(
               <div key={fin.id+'_'+i} className="card" style={{padding:14}}>
