@@ -9708,7 +9708,7 @@ const diasDoProblema=(p,agora)=>{const ini=isoParaMs(p.inicio);if(!ini)return 0;
 function LeadTimeChart({meses,onSegmento,onMes}){
   const W=Math.max(640,meses.length*66+60),H=330,pl=40,pr=10,pt=36,pb=58;
   const totais=meses.map(m=>m.stacked?m.seg.reduce((a,b)=>a+(b||0),0):(m.tot||0));
-  const topV=Math.max(20,Math.ceil(Math.max(...totais,1)/20)*20);
+const topV=Math.max(20,Math.ceil(Math.max(...totais,...meses.map(m=>m.ref||0),1)/20)*20);
   const ch=H-pt-pb,cw=W-pl-pr,slot=cw/meses.length,bw=Math.min(slot*0.64,46);
   const y=v=>pt+ch-(v/topV)*ch;
   const ticks=[];for(let t=0;t<=topV;t+=20)ticks.push(t);
@@ -9727,6 +9727,12 @@ function LeadTimeChart({meses,onSegmento,onMes}){
           return(
             <g key={m.key}>
               {m.lista.length===0&&<text x={cx} y={y(0)-6} textAnchor="middle" fontSize="9" fill="#9A9189">sem dados</text>}
+              {m.ref!=null&&m.lista.length>0&&(
+                <g>
+                  <line x1={x-3} x2={x+bw+3} y1={y(m.ref)} y2={y(m.ref)} stroke="#DC1F1F" strokeWidth="2" strokeDasharray="4 3"/>
+                  <text x={x+bw+5} y={y(m.ref)+3} fontSize="9" fontWeight="800" fill="#DC1F1F">{Math.round(m.ref)}</text>
+                </g>
+              )}
               {m.lista.length>0&&!m.stacked&&(
                 <g onClick={()=>onMes(m)} style={{cursor:'pointer'}}>
                   <rect x={x} y={y(m.tot)} width={bw} height={Math.max(y(0)-y(m.tot),1)} fill="#1F1F1F" rx="3"/>
@@ -10007,7 +10013,8 @@ function ProblemasProducaoView({vehicles,loggedInUser,isMaster}){
   const{data:problemas,loading:probLoad}=useFirestore('problemasProducao');
   const[sub,setSub]=useState('painel');
     const[ano,setAno]=useState(new Date().getFullYear());
-  const[periodoAno,setPeriodoAno]=useState('ano');
+ const[periodoAno,setPeriodoAno]=useState('ano');
+  const[modoLT,setModoLT]=useState('real');
   const[detalhe,setDetalhe]=useState(null);
   const[foto,setFoto]=useState(null);
   const[doneNovo,setDoneNovo]=useState(false);
@@ -10091,6 +10098,33 @@ function ProblemasProducaoView({vehicles,loggedInUser,isMaster}){
 
   const problemasPorOS=useMemo(()=>{const m={};problemas.forEach(p=>{(m[String(p.os)]=m[String(p.os)]||[]).push(p);});return m;},[problemas]);
   const abertos=problemas.filter(p=>!p.fim);
+
+  // Simulação do lead time SEM paradas: de cada OS sai a união dos dias de problema lançados,
+  // recortada na janela de cada etapa (assim a soma das etapas bate com o total da OS).
+  const{mesesSim,resumoSim}=useMemo(()=>{
+    const agora=Date.now();
+    const paradaNaJanela=(probs,ini,fim)=>{
+      if(!ini||!fim||fim<=ini)return 0;
+      return diasUniao(probs.map(p=>{const a=isoParaMs(p.inicio);if(!a)return[0,0];const b=p.fim?isoParaMs(p.fim):agora;return[Math.max(a,ini),Math.min(b,fim)];}));
+    };
+    const todos=[];
+    const out=meses.map(m=>{
+      const lista=m.lista.map(c=>{
+        const real=(c.s-c.e)/DIA_MS;
+        const pt=paradaNaJanela(problemasPorOS[c.os]||[],c.e,c.s);
+        const x={real,pt,sim:Math.max(0,real-pt)};
+        todos.push(x);return x;
+      });
+      const seg=m.stacked?[0,1,2,3].map(i=>mediaArr(m.comp.map(c=>{
+        const[a,b]=janelaEtapa(c,i);
+        return Math.max(0,duracaoEtapa(c,i)-paradaNaJanela(problemasPorOS[c.os]||[],a,b));
+      }))):null;
+      const ref=m.stacked?m.seg.reduce((acc,v)=>acc+(v||0),0):m.tot;
+      return{...m,tot:lista.length?mediaArr(lista.map(x=>x.sim)):null,seg,ref:lista.length?ref:null};
+    });
+    const realMed=mediaArr(todos.map(x=>x.real)),simMed=mediaArr(todos.map(x=>x.sim));
+    return{mesesSim:out,resumoSim:{n:todos.length,realMed,simMed,perdidos:realMed!==null?realMed-simMed:null,pct:realMed?(realMed-simMed)/realMed*100:null,comParada:todos.filter(x=>x.pt>0).length}};
+  },[meses,problemasPorOS]);
 
   // Tabela de causas (últimos 6 meses pela data de início do problema)
   const causas=useMemo(()=>{
@@ -10295,7 +10329,29 @@ function ProblemasProducaoView({vehicles,loggedInUser,isMaster}){
               {AREAS_PROD.map(a=><span key={a.k} style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:9,fontWeight:700,color:'#374151'}}><span style={{width:11,height:11,background:a.cor,borderRadius:3,display:'inline-block'}}/>{a.curto}</span>)}
               <span style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:9,fontWeight:700,color:'#374151'}}><span style={{width:11,height:11,background:'#1F1F1F',borderRadius:3,display:'inline-block'}}/>Total (sem datas das etapas)</span>
             </div>
-            <LeadTimeChart meses={meses} onSegmento={(m,i)=>setDetalhe({tipo:'mes',m,etapa:i})} onMes={(m)=>setDetalhe({tipo:'mes',m,etapa:'total'})}/>
+            <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:3,borderRadius:10,border:'1px solid var(--border)',width:'fit-content',marginBottom:12,flexWrap:'wrap'}}>
+              {[{k:'real',l:'Real'},{k:'sem',l:'Sem paradas (simulado)'}].map(t=><button key={t.k} onClick={()=>setModoLT(t.k)} style={{padding:'7px 14px',borderRadius:8,fontSize:9,fontWeight:800,textTransform:'uppercase',border:'none',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif',background:modoLT===t.k?'#fff':'transparent',color:modoLT===t.k?'var(--red)':'var(--muted)',boxShadow:modoLT===t.k?'0 2px 6px rgba(0,0,0,.08)':'none'}}>{t.l}</button>)}
+            </div>
+            {modoLT==='sem'&&(
+              <div style={{marginBottom:14}}>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10,marginBottom:10}}>
+                  {[
+                    {l:'Lead time real',v:fmt1(resumoSim.realMed)+' d',sub:'média das OS do período'},
+                    {l:'Sem paradas',v:fmt1(resumoSim.simMed)+' d',sub:'se não houvesse nenhuma parada',red:true},
+                    {l:'Perdido em paradas',v:fmt1(resumoSim.perdidos)+' d',sub:resumoSim.pct!==null?Math.round(resumoSim.pct)+'% do lead time real':'—'},
+                    {l:"OS's com parada",v:resumoSim.comParada+' de '+resumoSim.n,sub:'tiveram ao menos 1 problema lançado'},
+                  ].map((k,i)=>(
+                    <div key={i} style={{background:k.red?'var(--red)':'var(--smoke)',color:k.red?'#fff':'var(--ink)',border:k.red?'none':'1.5px solid var(--border)',borderRadius:12,padding:'12px 14px'}}>
+                      <p style={{fontSize:22,fontWeight:800,lineHeight:1,margin:0}}>{k.v}</p>
+                      <p style={{fontSize:8,fontWeight:800,textTransform:'uppercase',letterSpacing:'.06em',margin:'6px 0 0',opacity:.85}}>{k.l}</p>
+                      <p style={{fontSize:8,fontWeight:500,margin:'2px 0 0',opacity:.6}}>{k.sub}</p>
+                    </div>
+                  ))}
+                </div>
+                <p style={{fontSize:9,color:'var(--muted)',fontWeight:600,margin:0}}>Simulação: de cada OS foram retirados os dias dos problemas lançados em Lançamentos (dias sobrepostos contam uma vez), etapa por etapa. A linha vermelha tracejada em cada mês marca o lead time real, para comparar com a barra simulada.</p>
+              </div>
+            )}
+            <LeadTimeChart meses={modoLT==='sem'?mesesSim:meses} onSegmento={(m,i)=>setDetalhe({tipo:'mes',m,etapa:i})} onMes={(m)=>setDetalhe({tipo:'mes',m,etapa:'total'})}/>
             <p style={{fontSize:9,color:'var(--muted)',fontWeight:600,margin:'8px 0 0'}}>Clique em uma etapa da barra para ver as OS's, os problemas lançados e quanto tempo levou cada um. Clique no nome do mês para ver todas as OS's do mês. Barras empilhadas usam só os carros com as 5 datas preenchidas.</p>
           </div>
 
