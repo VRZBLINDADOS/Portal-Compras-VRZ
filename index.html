@@ -10008,6 +10008,120 @@ function BotaoPDFProblemas({onClick,disabled}){
   );
 }
 
+// ── PDF comparativo: Lead Time real x sem paradas ──
+function buildLeadTimeSimPDF(periodoTxt,resumo,meses){
+  const{jsPDF}=window.jspdf;const doc=new jsPDF();
+  const M=10,LIM=282;let y=15;
+  const garante=(h)=>{if(y+h>LIM){doc.addPage();y=15;return true;}return false;};
+  const txt=(t,x,yy,o={})=>{
+    doc.setFont('helvetica',o.bold?'bold':'normal');doc.setFontSize(o.size||8);
+    const c=o.cor||[0,0,0];doc.setTextColor(c[0],c[1],c[2]);
+    doc.text(String(t),x,yy,o.align?{align:o.align}:undefined);
+  };
+  const titulo=(t)=>{garante(14);y+=2;txt(t,M,y,{bold:true,size:9,cor:[220,31,31]});y+=5;};
+  const f1=(n)=>n===null||n===undefined||isNaN(n)?'—':fmt1(n);
+  const RG=[150,150,150],VM=[192,0,0];
+
+  // cabeçalho
+  doc.setFillColor(13,13,13);doc.rect(0,0,210,30,'F');
+  doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(15);
+  doc.text('LEAD TIME DA PRODUÇÃO - REAL x SEM PARADAS',M,14);
+  doc.setFont('helvetica','normal');doc.setFontSize(8);
+  doc.text(`${periodoTxt}  ·  Gerado em ${new Date().toLocaleString('pt-BR')}`,M,23);
+  y=38;
+
+  // cartões
+  const cards=[
+    ['LEAD TIME REAL',f1(resumo.realMed)+' d','média das OS do período',false],
+    ['SEM PARADAS',f1(resumo.simMed)+' d','se não houvesse nenhuma parada',true],
+    ['PERDIDO EM PARADAS',f1(resumo.perdidos)+' d',resumo.pct!==null?Math.round(resumo.pct)+'% do lead time real':'—',false],
+    ["OS's COM PARADA",resumo.comParada+' de '+resumo.n,'com ao menos 1 problema lançado',false],
+  ];
+  const cw=44.5,gap=4;
+  cards.forEach(([l,v,s,red],i)=>{
+    const x=M+i*(cw+gap);
+    if(red)doc.setFillColor(192,0,0);else doc.setFillColor(245,242,240);
+    doc.rect(x,y,cw,22,'F');
+    const c1=red?[255,255,255]:[0,0,0],c2=red?[255,255,255]:[90,90,90];
+    txt(v,x+3,y+9,{bold:true,size:14,cor:c1});
+    txt(l,x+3,y+14.5,{bold:true,size:6.5,cor:c2});
+    txt(s,x+3,y+18.5,{size:6,cor:c2});
+  });
+  y+=30;
+
+  // gráfico de barras agrupadas
+  titulo('LEAD TIME MÉDIO POR MÊS DE ENTREGA (DIAS)');
+  const comDados=meses.filter(m=>m.lista.length>0);
+  const topoG=y+4,altG=50,baseG=topoG+altG,x0=M+10,larG=190-10;
+  const maxV=Math.max(20,...comDados.map(m=>Math.max(m.lt.real||0,m.lt.sim||0)));
+  const topV=Math.ceil(maxV/20)*20;
+  doc.setDrawColor(225,225,225);doc.setLineWidth(0.2);
+  [0,0.25,0.5,0.75,1].forEach(p=>{
+    const yy=baseG-altG*p;doc.line(x0,yy,x0+larG,yy);
+    txt(Math.round(topV*p),x0-2,yy+1,{size:6.5,cor:[110,110,110],align:'right'});
+  });
+  doc.setFillColor(RG[0],RG[1],RG[2]);doc.rect(M+120,topoG-5,3,3,'F');txt('Real',M+124.5,topoG-2.5,{size:7});
+  doc.setFillColor(VM[0],VM[1],VM[2]);doc.rect(M+140,topoG-5,3,3,'F');txt('Sem paradas',M+144.5,topoG-2.5,{size:7});
+  const slot=larG/meses.length,bw=Math.min(slot*0.36,9);
+  meses.forEach((m,i)=>{
+    const cx=x0+slot*i+slot/2;
+    txt(m.label,cx,baseG+4.5,{size:6.5,bold:true,align:'center'});
+    if(!m.lista.length){txt('sem dados',cx,baseG-2,{size:5.5,cor:[150,150,150],align:'center'});return;}
+    txt(m.lista.length+' OS',cx,baseG+8,{size:5.5,cor:[120,120,120],align:'center'});
+    [[m.lt.real,RG,-bw-0.4],[m.lt.sim,VM,0.4]].forEach(([v,cor,dx])=>{
+      const h=altG*((v||0)/topV);
+      doc.setFillColor(cor[0],cor[1],cor[2]);doc.rect(cx+dx,baseG-h,bw,h,'F');
+      txt(Math.round(v||0),cx+dx+bw/2,baseG-h-1,{size:6,bold:true,align:'center'});
+    });
+  });
+  y=baseG+13;
+
+  // tabela genérica
+  const tabela=(cab,linhas,larg)=>{
+    const xs=[];let a=M;larg.forEach(w=>{xs.push(a);a+=w;});
+    const cabec=()=>{doc.setFillColor(13,13,13);doc.rect(M,y-4,190,6,'F');cab.forEach((h,i)=>txt(h,i===0||(larg[i]>40&&i<3&&cab[0]==='OS')?xs[i]+2:xs[i]+larg[i]/2,y,{bold:true,size:7,cor:[255,255,255],align:i===0?undefined:(cab[0]==='OS'&&i===1?undefined:'center')}));y+=6;};
+    garante(18);cabec();
+    linhas.forEach((r,ri)=>{
+      if(garante(6))cabec();
+      if(ri%2===0){doc.setFillColor(248,246,244);doc.rect(M,y-3.8,190,5.4,'F');}
+      r.forEach((c,i)=>{
+        const esq=i===0||(cab[0]==='OS'&&i===1);
+        txt(c,esq?xs[i]+2:xs[i]+larg[i]/2,y,{size:7.5,bold:(i===0&&cab[0]!=='OS')||/^(TOTAL)/.test(String(r[0])),align:esq?undefined:'center'});
+      });
+      y+=5.4;
+    });
+    y+=3;
+  };
+
+  titulo('RESUMO POR MÊS (média de dias por OS)');
+  const linhasMes=comDados.map(m=>{
+    const perd=(m.lt.real||0)-(m.lt.sim||0);
+    return[m.label,m.lt.n,f1(m.lt.real),f1(m.lt.sim),f1(perd),m.lt.real?Math.round(perd/m.lt.real*100)+'%':'—',m.lt.comParada+' de '+m.lt.n];
+  });
+  linhasMes.push(['TOTAL',resumo.n,f1(resumo.realMed),f1(resumo.simMed),f1(resumo.perdidos),resumo.pct!==null?Math.round(resumo.pct)+'%':'—',resumo.comParada+' de '+resumo.n]);
+  tabela(['Mês',"OS's",'Real (d)','Sem paradas (d)','Perdido (d)','% perdido',"OS's c/ parada"],linhasMes,[30,18,28,30,28,22,34]);
+
+  const emp=meses.filter(m=>m.stacked&&m.seg&&m.segReal);
+  if(emp.length){
+    titulo('POR ETAPA - REAL / SEM PARADAS (dias; só OS com as 5 datas preenchidas)');
+    tabela(['Mês','Chegada-AT','AT-Desmontagem','Desmontagem-QA','QA-Saída'],
+      emp.map(m=>[m.label,...[0,1,2,3].map(i=>f1(m.segReal[i])+' / '+f1(m.seg[i]))]),[30,40,40,40,40]);
+  }
+
+  const top=[...resumo.todos].filter(x=>x.pt>0).sort((a,b)=>b.pt-a.pt).slice(0,15);
+  if(top.length){
+    titulo('OS\'s QUE MAIS PERDERAM DIAS COM PARADAS');
+    tabela(['OS','Modelo','Mês','Real (d)','Parado (d)','Sem paradas (d)'],
+      top.map(x=>['#'+x.os,String(x.modelo||'—').slice(0,34),x.mes,f1(x.real),f1(x.pt),f1(x.sim)]),[22,60,22,28,28,30]);
+  }
+  y+=1;
+  doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(110,110,110);
+  doc.splitTextToSize('Método: de cada OS foram retirados os dias dos problemas lançados em Problemas de Produção. Dias sobrepostos na mesma OS contam uma vez, e cada parada é dividida entre as etapas pelas datas. Paradas não lançadas não entram na simulação.',190).forEach(l=>{garante(4);doc.text(l,M,y);y+=3.6;});
+  const total=doc.internal.getNumberOfPages();
+  for(let p=1;p<=total;p++){doc.setPage(p);doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(120,120,120);doc.text(`Página ${p} de ${total}`,200,291,{align:'right'});}
+  return doc;
+}
+
 function ProblemasProducaoView({vehicles,loggedInUser,isMaster}){
   const{data:base,loading:baseLoad}=useFirestore('leadTimeBase');
   const{data:problemas,loading:probLoad}=useFirestore('problemasProducao');
@@ -10112,7 +10226,7 @@ function ProblemasProducaoView({vehicles,loggedInUser,isMaster}){
       const lista=m.lista.map(c=>{
         const real=(c.s-c.e)/DIA_MS;
         const pt=paradaNaJanela(problemasPorOS[c.os]||[],c.e,c.s);
-        const x={real,pt,sim:Math.max(0,real-pt)};
+        const x={os:c.os,modelo:c.modelo,mes:m.label,real,pt,sim:Math.max(0,real-pt)};
         todos.push(x);return x;
       });
       const seg=m.stacked?[0,1,2,3].map(i=>mediaArr(m.comp.map(c=>{
@@ -10120,10 +10234,10 @@ function ProblemasProducaoView({vehicles,loggedInUser,isMaster}){
         return Math.max(0,duracaoEtapa(c,i)-paradaNaJanela(problemasPorOS[c.os]||[],a,b));
       }))):null;
       const ref=m.stacked?m.seg.reduce((acc,v)=>acc+(v||0),0):m.tot;
-      return{...m,tot:lista.length?mediaArr(lista.map(x=>x.sim)):null,seg,ref:lista.length?ref:null};
+      return{...m,segReal:m.seg,tot:lista.length?mediaArr(lista.map(x=>x.sim)):null,seg,ref:lista.length?ref:null,lt:{n:lista.length,real:mediaArr(lista.map(x=>x.real)),sim:mediaArr(lista.map(x=>x.sim)),comParada:lista.filter(x=>x.pt>0).length}};
     });
     const realMed=mediaArr(todos.map(x=>x.real)),simMed=mediaArr(todos.map(x=>x.sim));
-    return{mesesSim:out,resumoSim:{n:todos.length,realMed,simMed,perdidos:realMed!==null?realMed-simMed:null,pct:realMed?(realMed-simMed)/realMed*100:null,comParada:todos.filter(x=>x.pt>0).length}};
+    return{mesesSim:out,resumoSim:{n:todos.length,realMed,simMed,perdidos:realMed!==null?realMed-simMed:null,pct:realMed?(realMed-simMed)/realMed*100:null,comParada:todos.filter(x=>x.pt>0).length,todos}};
   },[meses,problemasPorOS]);
 
   // Tabela de causas (últimos 6 meses pela data de início do problema)
@@ -10332,6 +10446,13 @@ function ProblemasProducaoView({vehicles,loggedInUser,isMaster}){
             <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:3,borderRadius:10,border:'1px solid var(--border)',width:'fit-content',marginBottom:12,flexWrap:'wrap'}}>
               {[{k:'real',l:'Real'},{k:'sem',l:'Sem paradas (simulado)'}].map(t=><button key={t.k} onClick={()=>setModoLT(t.k)} style={{padding:'7px 14px',borderRadius:8,fontSize:9,fontWeight:800,textTransform:'uppercase',border:'none',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif',background:modoLT===t.k?'#fff':'transparent',color:modoLT===t.k?'var(--red)':'var(--muted)',boxShadow:modoLT===t.k?'0 2px 6px rgba(0,0,0,.08)':'none'}}>{t.l}</button>)}
             </div>
+            {modoLT==='sem'&&(
+              <div style={{display:'flex',justifyContent:'flex-end',marginBottom:10}}>
+                <button type="button" onClick={()=>{try{buildLeadTimeSimPDF(ano+' - '+(periodoAno==='ano'?'ano todo':periodoAno==='s1'?'1º semestre':'2º semestre'),resumoSim,mesesSim).save('Lead_Time_Sem_Paradas_'+ano+'_'+periodoAno+'.pdf');}catch(e){alert('Erro ao gerar PDF: '+e.message);}}} style={{display:'inline-flex',alignItems:'center',gap:6,padding:'8px 16px',background:'#2563EB',color:'#fff',border:'none',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
+                  <Icon name="file-down" size={13}/> PDF comparativo
+                </button>
+              </div>
+            )}
             {modoLT==='sem'&&(
               <div style={{marginBottom:14}}>
                 <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10,marginBottom:10}}>
