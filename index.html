@@ -9933,6 +9933,75 @@ function ProblemaForm({modo,inicial,buscarCarro,onSalvar,onCancelar}){
 }
 
 // ── Aba principal ─────────────────────────────────────────────────────────
+// ── PDF das OS's que compõem um número do painel de Problemas de Produção ──
+function buildProblemasPDF(titulo,subtitulo,itens){
+  const{jsPDF}=window.jspdf;const doc=new jsPDF();
+  const agora=Date.now();const M=10,LIM=282;let y=15;
+  const garante=(h)=>{if(y+h>LIM){doc.addPage();y=15;}};
+  const linha=(t,o={})=>{
+    const x=o.x||M,size=o.size||8;
+    doc.setFont('helvetica',o.bold?'bold':'normal');doc.setFontSize(size);
+    const c=o.cor||[0,0,0];doc.setTextColor(c[0],c[1],c[2]);
+    doc.splitTextToSize(String(t),200-x).forEach(l=>{garante(size*0.42+1.6);doc.text(l,x,y);y+=size*0.42+1.6;});
+  };
+  const dataBR=(iso)=>iso?new Date(iso+'T00:00:00').toLocaleDateString('pt-BR'):'—';
+  const diasUniaoOS=(probs)=>diasUniao(probs.map(p=>{const a=isoParaMs(p.inicio);return a?[a,p.fim?isoParaMs(p.fim):agora]:[0,0];}));
+
+  const porMotivo={};let totProb=0,totDias=0;
+  itens.forEach(it=>{
+    totDias+=diasUniaoOS(it.probs);
+    it.probs.forEach(p=>{const m=p.motivo||'—';(porMotivo[m]=porMotivo[m]||{n:0,dias:0});porMotivo[m].n++;porMotivo[m].dias+=diasDoProblema(p,agora);totProb++;});
+  });
+
+  doc.setFillColor(13,13,13);doc.rect(0,0,210,32,'F');
+  doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(14);
+  doc.text(doc.splitTextToSize(String(titulo||''),190),10,14);
+  doc.setFont('helvetica','normal');doc.setFontSize(8);
+  doc.text(`${subtitulo||''}  ·  Gerado em ${new Date().toLocaleString('pt-BR')}`,10,27);
+  y=42;
+
+  linha('RESUMO',{bold:true,size:9,cor:[220,31,31]});y+=1;
+  linha(`${itens.length} OS(s)  ·  ${totProb} problema(s) lançado(s)  ·  ${Math.round(totDias)} dia(s) de impacto no total (dias sobrepostos na mesma OS contam uma vez)`,{bold:true});
+  y+=1;
+  Object.entries(porMotivo).sort((a,b)=>b[1].dias-a[1].dias).forEach(([m,v])=>{
+    linha(`${m}: ${v.n} ocorrência(s)  ·  ${Math.round(v.dias)} dia(s)`,{x:14});
+  });
+  if(!totProb)linha('Nenhum problema de produção lançado para estas OS.',{x:14,cor:[110,110,110]});
+  y+=5;
+
+  itens.forEach(it=>{
+    garante(22);
+    doc.setFillColor(245,242,240);doc.rect(8,y-4,194,9,'F');
+    doc.setFont('helvetica','bold');doc.setFontSize(10);doc.setTextColor(0,0,0);
+    doc.text(`OS #${it.os}  -  ${it.modelo||'—'}`,12,y+2);y+=10;
+    if(it.resumo)linha(it.resumo,{x:12,cor:[90,90,90]});
+    if(!it.probs.length)linha('Nenhum problema lançado.',{x:14,cor:[110,110,110]});
+    [...it.probs].sort((a,b)=>String(a.inicio).localeCompare(String(b.inicio))).forEach(p=>{
+      const area=AREAS_PROD.find(a=>a.k===p.area);
+      const dias=diasDoProblema(p,agora);
+      const impacto=p.fim?`${fmtDiasInt(dias)} (da criação até a solução)`:`${fmtDiasInt(dias)} e ainda em aberto`;
+      linha(`${p.fim?'[RESOLVIDO]':'[EM ABERTO]'} ${area?area.curto+' - ':''}${p.motivo||'—'}  |  Início ${dataBR(p.inicio)}${p.fim?'  |  Solução '+dataBR(p.fim):''}  |  Impacto: ${impacto}`,{x:14,bold:true});
+      if(p.descricao)linha(`Descrição: ${p.descricao}`,{x:18,size:7.5});
+      if(p.comoResolveu)linha(`Como resolveu: ${p.comoResolveu}`,{x:18,size:7.5,cor:[10,107,52]});
+      linha(`Lançado por ${p.criadoPor||'—'}`,{x:18,size:7,cor:[130,130,130]});
+      y+=1.5;
+    });
+    y+=4;
+  });
+  const total=doc.internal.getNumberOfPages();
+  for(let p=1;p<=total;p++){doc.setPage(p);doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(120,120,120);doc.text(`Página ${p} de ${total}`,200,291,{align:'right'});}
+  return doc;
+}
+function BotaoPDFProblemas({onClick,disabled}){
+  return(
+    <div style={{display:'flex',justifyContent:'flex-end',marginBottom:12}}>
+      <button type="button" onClick={onClick} disabled={disabled} style={{display:'inline-flex',alignItems:'center',gap:6,padding:'8px 16px',background:disabled?'var(--muted)':'#2563EB',color:'#fff',border:'none',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:disabled?'not-allowed':'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
+        <Icon name="file-down" size={13}/> Exportar PDF
+      </button>
+    </div>
+  );
+}
+
 function ProblemasProducaoView({vehicles,loggedInUser,isMaster}){
   const{data:base,loading:baseLoad}=useFirestore('leadTimeBase');
   const{data:problemas,loading:probLoad}=useFirestore('problemasProducao');
@@ -10084,6 +10153,24 @@ function ProblemasProducaoView({vehicles,loggedInUser,isMaster}){
   if(baseLoad||probLoad)return<Skeleton/>;
 
   // ── Conteúdo do modal de detalhe ──
+    const exportarPDFProblemas=(titulo,sub,itens)=>{
+    try{buildProblemasPDF(titulo,sub,itens).save('Problemas_Producao_'+String(titulo).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,'_').replace(/^_+|_+$/g,'')+'.pdf');}
+    catch(e){alert('Erro ao gerar PDF: '+e.message);}
+  };
+  const linhasMes=(carros,etapa,total)=>{
+    const agora=Date.now();
+    return carros.map(({c,dur})=>{
+      const probs=(problemasPorOS[c.os]||[]).filter(p=>total||p.area===AREAS_PROD[etapa].k);
+      const janela=total?[c.e,c.s]:janelaEtapa(c,etapa);
+      const explicados=diasUniao(probs.map(p=>{const a=isoParaMs(p.inicio);const b=p.fim?isoParaMs(p.fim):agora;return[Math.max(a||0,janela[0]),Math.min(b||0,janela[1])];}));
+      return{os:c.os,modelo:c.modelo,probs,resumo:fmt1(dur)+' d '+(total?'no total':'na etapa')+' · '+(probs.length?fmt1(explicados)+' d explicados por problemas':'sem problema lançado')};
+    });
+  };
+  const linhasPorOS=(lista)=>{
+    const m={};
+    lista.forEach(p=>{const k=String(p.os);(m[k]=m[k]||{os:p.os,modelo:p.vehicleData?.modelo,probs:[],resumo:''}).probs.push(p);});
+    return Object.values(m).sort((a,b)=>String(a.os).localeCompare(String(b.os),undefined,{numeric:true}));
+  };
   const renderDetalhe=()=>{
     if(!detalhe)return null;
     const agora=Date.now();
@@ -10096,7 +10183,8 @@ function ProblemasProducaoView({vehicles,loggedInUser,isMaster}){
       return(
         <DetailModal title={titulo} subtitle={`${carros.length} OS${carros.length!==1?"'s":''} · média ${fmt1(mediaDur)} dias`} onClose={()=>setDetalhe(null)}>
           <div style={{display:'flex',flexDirection:'column',gap:12}}>
-            {carros.length===0&&<p style={{fontSize:10,color:'var(--muted)',textAlign:'center',padding:'20px 0'}}>Nenhuma OS neste recorte.</p>}
+            <BotaoPDFProblemas disabled={!carros.length} onClick={()=>exportarPDFProblemas(titulo,`${carros.length} OS${carros.length!==1?"'s":''} · média ${fmt1(mediaDur)} dias`,linhasMes(carros,etapa,total))}/>
+{carros.length===0&&<p style={{fontSize:10,color:'var(--muted)',textAlign:'center',padding:'20px 0'}}>Nenhuma OS neste recorte.</p>}
             {carros.map(({c,dur})=>{
               const probs=(problemasPorOS[c.os]||[]).filter(p=>total||p.area===AREAS_PROD[etapa].k);
               const janela=total?[c.e,c.s]:janelaEtapa(c,etapa);
@@ -10129,7 +10217,8 @@ function ProblemasProducaoView({vehicles,loggedInUser,isMaster}){
       return(
         <DetailModal title={`Em andamento — ${AREAS_PROD[i].label}`} subtitle={`${l.length} OS${l.length!==1?"'s":''} nesta etapa agora`} onClose={()=>setDetalhe(null)}>
           <div style={{display:'flex',flexDirection:'column',gap:10}}>
-            {l.length===0&&<p style={{fontSize:10,color:'var(--muted)',textAlign:'center',padding:'20px 0'}}>Nenhum carro nesta etapa.</p>}
+            <BotaoPDFProblemas disabled={!l.length} onClick={()=>exportarPDFProblemas(`Em andamento - ${AREAS_PROD[i].label}`,`${l.length} OS${l.length!==1?"'s":''} nesta etapa agora`,l.map(a=>({os:a.os,modelo:a.modelo,probs:problemasPorOS[a.os]||[],resumo:fmt1(a.dias)+' d na etapa · '+fmt1(a.diasTotal)+' d desde a chegada'})))}/>
+{l.length===0&&<p style={{fontSize:10,color:'var(--muted)',textAlign:'center',padding:'20px 0'}}>Nenhum carro nesta etapa.</p>}
             {l.map(a=>{
               const probs=(problemasPorOS[a.os]||[]);
               const acima=medEtapas.v[i]!==null&&a.dias>medEtapas.v[i];
@@ -10159,7 +10248,8 @@ function ProblemasProducaoView({vehicles,loggedInUser,isMaster}){
       return(
         <DetailModal title={detalhe.titulo} subtitle={`${detalhe.lista.length} ocorrência(s)`} onClose={()=>setDetalhe(null)}>
           <div style={{display:'flex',flexDirection:'column',gap:8}}>
-            {detalhe.lista.map(p=><ProblemaCard key={p.id} p={p} onFoto={setFoto}/>)}
+            <BotaoPDFProblemas disabled={!detalhe.lista.length} onClick={()=>exportarPDFProblemas(detalhe.titulo,`${detalhe.lista.length} ocorrência(s)`,linhasPorOS(detalhe.lista))}/>
+{detalhe.lista.map(p=><ProblemaCard key={p.id} p={p} onFoto={setFoto}/>)}
           </div>
         </DetailModal>
       );
