@@ -10217,6 +10217,19 @@ function ProblemasProducaoView({vehicles,loggedInUser,isMaster}){
   // recortada na janela de cada etapa (assim a soma das etapas bate com o total da OS).
   const{mesesSim,resumoSim}=useMemo(()=>{
     const agora=Date.now();
+    // Parada em dias (união) dos problemas informados; cada problema vale na ÁREA em que foi lançado
+    const paradaDias=(probs)=>diasUniao(probs.map(p=>{const a=isoParaMs(p.inicio);if(!a)return[0,0];return[a,p.fim?isoParaMs(p.fim):agora];}));
+    const reducoes=(c)=>{
+      const probs=problemasPorOS[c.os]||[];
+      const real=(c.s-c.e)/DIA_MS;
+      const reds=[0,1,2,3].map(i=>{
+        const r=paradaDias(probs.filter(p=>p.area===AREAS_PROD[i].k));
+        const d=duracaoEtapa(c,i);
+        return d===null?r:Math.min(r,Math.max(d,0));
+      });
+      const pt=Math.min(Math.max(real,0),reds.reduce((a,v)=>a+v,0));
+      return{real,reds,pt};
+    };
     const paradaNaJanela=(probs,ini,fim)=>{
       if(!ini||!fim||fim<=ini)return 0;
       return diasUniao(probs.map(p=>{const a=isoParaMs(p.inicio);if(!a)return[0,0];const b=p.fim?isoParaMs(p.fim):agora;return[Math.max(a,ini),Math.min(b,fim)];}));
@@ -10225,13 +10238,13 @@ function ProblemasProducaoView({vehicles,loggedInUser,isMaster}){
     const out=meses.map(m=>{
       const lista=m.lista.map(c=>{
         const real=(c.s-c.e)/DIA_MS;
-        const pt=paradaNaJanela(problemasPorOS[c.os]||[],c.e,c.s);
-        const x={os:c.os,modelo:c.modelo,mes:m.label,real,pt,sim:Math.max(0,real-pt)};
+        const pt=reducoes(c).pt;
+        const x={os:c.os,modelo:c.modelo,mes:m.label,real,pt,sim:real-pt};
         todos.push(x);return x;
       });
       const seg=m.stacked?[0,1,2,3].map(i=>mediaArr(m.comp.map(c=>{
         const[a,b]=janelaEtapa(c,i);
-        return Math.max(0,duracaoEtapa(c,i)-paradaNaJanela(problemasPorOS[c.os]||[],a,b));
+        return duracaoEtapa(c,i)-reducoes(c).reds[i];
       }))):null;
       const ref=m.stacked?m.seg.reduce((acc,v)=>acc+(v||0),0):m.tot;
       return{...m,segReal:m.seg,tot:lista.length?mediaArr(lista.map(x=>x.sim)):null,seg,ref:lista.length?ref:null,lt:{n:lista.length,real:mediaArr(lista.map(x=>x.real)),sim:mediaArr(lista.map(x=>x.sim)),comParada:lista.filter(x=>x.pt>0).length}};
