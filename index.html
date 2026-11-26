@@ -10009,7 +10009,210 @@ function BotaoPDFProblemas({onClick,disabled}){
 }
 
 // ── PDF comparativo: Lead Time real x sem paradas ──
-function buildLeadTimeSimPDF(periodoTxt,resumo,meses){
+// ── PDF comparativo: Lead Time real x sem paradas ──
+function buildLeadTimeSimPDF(periodoTxt,resumo,meses,problemasPorOS,problemas){
+  const{jsPDF}=window.jspdf;const doc=new jsPDF();
+  const M=10,LIM=282;let y=15;const agora=Date.now();
+  const garante=(h)=>{if(y+h>LIM){doc.addPage();y=15;return true;}return false;};
+  const txt=(t,x,yy,o={})=>{
+    doc.setFont('helvetica',o.bold?'bold':'normal');doc.setFontSize(o.size||8);
+    const c=o.cor||[0,0,0];doc.setTextColor(c[0],c[1],c[2]);
+    doc.text(String(t),x,yy,o.align?{align:o.align}:undefined);
+  };
+  const titulo=(t)=>{garante(30);y+=2;txt(t,M,y,{bold:true,size:9,cor:[220,31,31]});y+=5;};
+  const f1=(n)=>n===null||n===undefined||isNaN(n)?'—':fmt1(n);
+  const dataBR=(iso)=>iso?new Date(String(iso).slice(0,10)+'T00:00:00').toLocaleDateString('pt-BR'):'—';
+  const dataCurta=(ms)=>ms?new Date(ms).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit'}):'—';
+  const RG=[150,150,150],VM=[192,0,0];
+
+  // ── quando começou a medição de paradas ──
+  const inis=(problemas||[]).map(p=>p.inicio).filter(Boolean).sort();
+  const inicioMed=inis[0]||null;
+  const lanc=(problemas||[]).map(p=>p.criadoEm).filter(Boolean);
+  const primeiroLanc=lanc.length?Math.min(...lanc):null;
+  const keyIni=inicioMed?inicioMed.slice(0,7):null,diaIni=inicioMed?+inicioMed.slice(8,10):1;
+  const statusMes=(m)=>!keyIni||m.key<keyIni?'sem':(m.key===keyIni&&diaIni>1?'parcial':'completa');
+  const comDados=meses.filter(m=>m.lista.length>0);
+  const medidos=comDados.filter(m=>statusMes(m)!=='sem');
+  const semMed=comDados.filter(m=>statusMes(m)==='sem');
+  const parcial=comDados.find(m=>statusMes(m)==='parcial');
+  const rangeTxt=(l)=>l.length?(l.length>1?`${l[0].label} a ${l[l.length-1].label}`:l[0].label):'—';
+
+  // números do período medido (os cartões consideram só os meses medidos)
+  const nM=medidos.reduce((a,m)=>a+m.lt.n,0);
+  const realM=nM?medidos.reduce((a,m)=>a+m.lt.n*m.lt.real,0)/nM:null;
+  const simM=nM?medidos.reduce((a,m)=>a+m.lt.n*m.lt.sim,0)/nM:null;
+  const perdM=nM?realM-simM:null,pctM=nM&&realM?perdM/realM*100:null;
+  const parM=medidos.reduce((a,m)=>a+m.lt.comParada,0);
+
+  // cabeçalho
+  doc.setFillColor(13,13,13);doc.rect(0,0,210,30,'F');
+  doc.setTextColor(255,255,255);doc.setFont('helvetica','bold');doc.setFontSize(15);
+  doc.text('LEAD TIME DA PRODUÇÃO - REAL x SEM PARADAS',M,14);
+  doc.setFont('helvetica','normal');doc.setFontSize(8);
+  doc.text(`${periodoTxt}  ·  Gerado em ${new Date().toLocaleString('pt-BR')}`,M,23);
+  y=38;
+
+  // cartões (período medido)
+  const subM=medidos.length?'meses medidos: '+rangeTxt(medidos):'sem meses medidos';
+  const cards=[
+    ['LEAD TIME REAL',f1(realM)+' d',subM,false],
+    ['SEM PARADAS',f1(simM)+' d','se não houvesse nenhuma parada',true],
+    ['PERDIDO EM PARADAS',f1(perdM)+' d',pctM!==null?Math.round(pctM)+'% do lead time real':'—',false],
+    ["OS's COM PARADA",parM+' de '+nM,'com ao menos 1 problema lançado',false],
+  ];
+  const cw=44.5,gap=4;
+  cards.forEach(([l,v,s,red],i)=>{
+    const x=M+i*(cw+gap);
+    if(red)doc.setFillColor(192,0,0);else doc.setFillColor(245,242,240);
+    doc.rect(x,y,cw,22,'F');
+    const c1=red?[255,255,255]:[0,0,0],c2=red?[255,255,255]:[90,90,90];
+    txt(v,x+3,y+9,{bold:true,size:14,cor:c1});
+    txt(l,x+3,y+14.5,{bold:true,size:6.5,cor:c2});
+    txt(s,x+3,y+18.5,{size:6,cor:c2});
+  });
+  y+=28;
+
+  // ── aviso: início da medição ──
+  const tituloAviso=inicioMed?`ATENÇÃO: AS PARADAS PASSARAM A SER MEDIDAS EM ${dataBR(inicioMed)}`:'ATENÇÃO: NENHUMA PARADA DE PRODUÇÃO FOI LANÇADA ATÉ AGORA';
+  const aviso=[];
+  if(inicioMed){
+    aviso.push(`Os problemas de produção só começaram a ser lançados no portal a partir de ${dataBR(inicioMed)}${primeiroLanc?` (o primeiro lançamento foi feito em ${new Date(primeiroLanc).toLocaleDateString('pt-BR')})`:''}. Antes dessa data não existe nenhum registro de parada.`);
+    if(semMed.length)aviso.push(`Por isso, em ${rangeTxt(semMed)} não é possível saber quanto tempo foi perdido: o gráfico mostra só o lead time real, sem a barra "sem paradas". Isso NÃO significa que não houve paradas nesses meses; significa que elas não foram medidas.`);
+    aviso.push(`${parcial?parcial.label+' tem medição parcial (a partir de '+dataBR(inicioMed)+'). ':''}A comparação entre real e sem paradas só vale para os meses medidos: ${rangeTxt(medidos)}.`);
+  }else{
+    aviso.push('Sem nenhum problema lançado, não há como estimar o lead time sem paradas. Todos os meses abaixo mostram apenas o lead time real.');
+  }
+  doc.setFont('helvetica','normal');doc.setFontSize(7.5);
+  const linhasAviso=aviso.flatMap(t=>doc.splitTextToSize(t,180).concat(['']));linhasAviso.pop();
+  const hAviso=11+linhasAviso.length*3.7;
+  doc.setFillColor(255,247,222);doc.setDrawColor(230,190,80);doc.setLineWidth(0.4);doc.rect(M,y,190,hAviso,'FD');
+  txt(tituloAviso,M+4,y+6,{bold:true,size:8,cor:[133,106,0]});
+  doc.setFont('helvetica','normal');doc.setFontSize(7.5);doc.setTextColor(60,50,0);
+  linhasAviso.forEach((l,i)=>doc.text(l,M+4,y+11.5+i*3.7));
+  y+=hAviso+4;
+
+  // gráfico de barras agrupadas
+  titulo('LEAD TIME MÉDIO POR MÊS DE ENTREGA (DIAS)');
+  garante(80);
+  const topoG=y+4,altG=50,baseG=topoG+altG,x0=M+10,larG=190-10;
+  const maxV=Math.max(20,...comDados.map(m=>Math.max(m.lt.real||0,m.lt.sim||0)));
+  const topV=Math.ceil(maxV/20)*20;
+  const slot=larG/meses.length,bw=Math.min(slot*0.36,9);
+  // fundo cinza nos meses sem medição
+  meses.forEach((m,i)=>{if(m.lista.length&&statusMes(m)==='sem'){doc.setFillColor(242,242,242);doc.rect(x0+slot*i+0.5,topoG-2,slot-1,altG+2+14,'F');}});
+  doc.setDrawColor(225,225,225);doc.setLineWidth(0.2);
+  [0,0.25,0.5,0.75,1].forEach(p=>{
+    const yy=baseG-altG*p;doc.line(x0,yy,x0+larG,yy);
+    txt(Math.round(topV*p),x0-2,yy+1,{size:6.5,cor:[110,110,110],align:'right'});
+  });
+  doc.setFillColor(RG[0],RG[1],RG[2]);doc.rect(M+80,topoG-5,3,3,'F');txt('Real',M+84.5,topoG-2.5,{size:7});
+  doc.setFillColor(VM[0],VM[1],VM[2]);doc.rect(M+95,topoG-5,3,3,'F');txt('Sem paradas',M+99.5,topoG-2.5,{size:7});
+  doc.setFillColor(225,225,225);doc.rect(M+120,topoG-5,3,3,'F');txt('Fundo cinza = mês sem medição de paradas',M+124.5,topoG-2.5,{size:7});
+  meses.forEach((m,i)=>{
+    const cx=x0+slot*i+slot/2,st=statusMes(m);
+    txt(m.label,cx,baseG+4.5,{size:6.5,bold:true,align:'center'});
+    if(!m.lista.length){txt('sem dados',cx,baseG-2,{size:5.5,cor:[150,150,150],align:'center'});return;}
+    txt(m.lista.length+' OS',cx,baseG+8,{size:5.5,cor:[120,120,120],align:'center'});
+    if(st==='sem'){
+      const h=altG*((m.lt.real||0)/topV);
+      doc.setFillColor(RG[0],RG[1],RG[2]);doc.rect(cx-bw/2,baseG-h,bw,h,'F');
+      txt(Math.round(m.lt.real||0),cx,baseG-h-1,{size:6,bold:true,align:'center'});
+      txt('sem medição',cx,baseG+11.5,{size:5,cor:[130,130,130],align:'center'});
+      return;
+    }
+    if(st==='parcial')txt('medição parcial',cx,baseG+11.5,{size:5,cor:[133,106,0],align:'center'});
+    [[m.lt.real,RG,-bw-0.4],[m.lt.sim,VM,0.4]].forEach(([v,cor,dx])=>{
+      const h=altG*((v||0)/topV);
+      doc.setFillColor(cor[0],cor[1],cor[2]);doc.rect(cx+dx,baseG-h,bw,h,'F');
+      txt(Math.round(v||0),cx+dx+bw/2,baseG-h-1,{size:6,bold:true,align:'center'});
+    });
+  });
+  y=baseG+17;
+
+  // tabela genérica
+  const tabela=(cab,linhas,larg)=>{
+    const xs=[];let a=M;larg.forEach(w=>{xs.push(a);a+=w;});
+    const esqCol=(i)=>i===0||(cab[0]==='OS'&&i<=2);
+    const cabec=()=>{doc.setFillColor(13,13,13);doc.rect(M,y-4,190,6,'F');cab.forEach((h,i)=>txt(h,esqCol(i)?xs[i]+2:xs[i]+larg[i]/2,y,{bold:true,size:6.8,cor:[255,255,255],align:esqCol(i)?undefined:'center'}));y+=6;};
+    garante(18);cabec();
+    linhas.forEach((r,ri)=>{
+      if(garante(6))cabec();
+      if(ri%2===0){doc.setFillColor(248,246,244);doc.rect(M,y-3.8,190,5.4,'F');}
+      r.forEach((c,i)=>{
+        txt(c,esqCol(i)?xs[i]+2:xs[i]+larg[i]/2,y,{size:7.2,bold:(i===0&&cab[0]!=='OS')||/^TOTAL/.test(String(r[0])),align:esqCol(i)?undefined:'center',cor:c==='Sem medição'?[133,106,0]:[0,0,0]});
+      });
+      y+=5.4;
+    });
+    y+=3;
+  };
+
+  titulo('RESUMO POR MÊS (média de dias por OS)');
+  const linhasMes=comDados.map(m=>{
+    const st=statusMes(m);
+    if(st==='sem')return[m.label,m.lt.n,f1(m.lt.real),'—','—','—','—','Sem medição'];
+    const perd=(m.lt.real||0)-(m.lt.sim||0);
+    return[m.label,m.lt.n,f1(m.lt.real),f1(m.lt.sim),f1(perd),m.lt.real?Math.round(perd/m.lt.real*100)+'%':'—',m.lt.comParada+' de '+m.lt.n,st==='parcial'?'Parcial':'Completa'];
+  });
+  linhasMes.push(['TOTAL MEDIDO',nM,f1(realM),f1(simM),f1(perdM),pctM!==null?Math.round(pctM)+'%':'—',parM+' de '+nM,'—']);
+  tabela(['Mês',"OS's",'Real (d)','Sem paradas (d)','Perdido (d)','% perdido',"OS's c/ parada",'Medição'],linhasMes,[28,14,22,28,22,20,28,28]);
+
+  const emp=medidos.filter(m=>m.stacked&&m.seg&&m.segReal);
+  if(emp.length){
+    titulo('POR ETAPA - REAL / SEM PARADAS (dias; só meses medidos e OS com as 5 datas)');
+    tabela(['Mês','Chegada-AT','AT-Desmontagem','Desmontagem-QA','QA-Saída'],
+      emp.map(m=>[m.label,...[0,1,2,3].map(i=>f1(m.segReal[i])+' / '+f1(m.seg[i]))]),[30,40,40,40,40]);
+  }
+
+  const top=[...resumo.todos].filter(x=>x.pt>0).sort((a,b)=>b.pt-a.pt).slice(0,15);
+  if(top.length){
+    titulo('OS\'s QUE MAIS PERDERAM DIAS COM PARADAS');
+    tabela(['OS','Modelo','Mês','Real (d)','Parado (d)','Sem paradas (d)'],
+      top.map(x=>['#'+x.os,String(x.modelo||'—').slice(0,34),x.mes,f1(x.real),f1(x.pt),f1(x.sim)]),[22,60,22,28,28,30]);
+  }
+
+  // ── diagnóstico: paradas lançadas fora das datas da etapa ──
+  const nomesEtapa=['Chegada-AT','AT-Desmontagem','Desmontagem-QA','QA-Saída'];
+  const areaIdx={chegada_at:0,at_desmontagem:1,desmontagem_qa:2,qa_saida:3};
+  const diag=[];
+  meses.forEach(m=>m.lista.forEach(c=>{
+    (problemasPorOS[c.os]||[]).forEach(p=>{
+      const i=areaIdx[p.area];if(i===undefined)return;
+      const ps=isoParaMs(p.inicio);if(!ps)return;
+      const pe=p.fim?isoParaMs(p.fim):agora;
+      const[a,b]=janelaEtapa(c,i);
+      let sit=null;
+      if(!a||!b)sit='Etapa sem data';
+      else if(b<=a)sit='Datas fora de ordem';
+      else{
+        const ov=Math.max(0,Math.min(pe,b)-Math.max(ps,a));
+        if(ov<=0)sit='Fora da etapa';
+        else if(ov<(pe-ps)-DIA_MS*0.5)sit='Parcial';
+      }
+      if(sit)diag.push({os:c.os,etapa:nomesEtapa[i],motivo:p.motivo||'—',par:`${dataCurta(ps)} a ${p.fim?dataCurta(pe):'aberto'}`,dias:Math.round((pe-ps)/DIA_MS),jan:(a&&b)?`${dataCurta(a)} a ${dataCurta(b)}`:'—',sit});
+    });
+  }));
+  titulo('DIAGNÓSTICO - PARADAS FORA DAS DATAS DA ETAPA NO SEMÁFORO');
+  doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(90,90,90);
+  doc.splitTextToSize('Lista as paradas lançadas numa etapa cujas datas não coincidem com as datas da mesma etapa no Semáforo. Nesses casos o simulado desconta os dias da etapa em que a parada foi lançada (limitado à duração da etapa), mas vale conferir o lançamento ou a data no Semáforo.',190).forEach(l=>{garante(4);doc.text(l,M,y);y+=3.5;});
+  y+=2;
+  if(!diag.length){txt('Nenhuma divergência encontrada: todas as paradas lançadas coincidem com as datas da etapa.',M+2,y,{size:7.5,cor:[10,107,52]});y+=6;}
+  else{
+    const ordem={'Fora da etapa':0,'Datas fora de ordem':1,'Etapa sem data':2,'Parcial':3};
+    diag.sort((a,b)=>ordem[a.sit]-ordem[b.sit]||b.dias-a.dias);
+    tabela(['OS','Etapa lançada','Motivo','Parada (início a solução)','Etapa no Semáforo','Situação'],
+      diag.slice(0,40).map(d=>['#'+d.os,d.etapa,String(d.motivo).slice(0,24),`${d.par} (${d.dias} d)`,d.jan,d.sit]),[18,28,36,42,36,30]);
+    if(diag.length>40){txt(`... e mais ${diag.length-40} parada(s) com divergência.`,M+2,y,{size:7,cor:[110,110,110]});y+=5;}
+  }
+  y+=1;
+  doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(110,110,110);
+  doc.splitTextToSize('Método: de cada OS foram retirados os dias das paradas lançadas em Problemas de Produção, etapa por etapa, conforme a etapa em que cada parada foi lançada. Dias sobrepostos na mesma OS contam uma vez. Paradas não lançadas não entram na simulação.',190).forEach(l=>{garante(4);doc.text(l,M,y);y+=3.6;});
+  const total=doc.internal.getNumberOfPages();
+  for(let p=1;p<=total;p++){doc.setPage(p);doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(120,120,120);doc.text(`Página ${p} de ${total}`,200,291,{align:'right'});}
+  return doc;
+}
+
+function buildLeadTimeSimPDFAntigo(periodoTxt,resumo,meses){
   const{jsPDF}=window.jspdf;const doc=new jsPDF();
   const M=10,LIM=282;let y=15;
   const garante=(h)=>{if(y+h>LIM){doc.addPage();y=15;return true;}return false;};
@@ -10461,7 +10664,7 @@ function ProblemasProducaoView({vehicles,loggedInUser,isMaster}){
             </div>
             {modoLT==='sem'&&(
               <div style={{display:'flex',justifyContent:'flex-end',marginBottom:10}}>
-                <button type="button" onClick={()=>{try{buildLeadTimeSimPDF(ano+' - '+(periodoAno==='ano'?'ano todo':periodoAno==='s1'?'1º semestre':'2º semestre'),resumoSim,mesesSim).save('Lead_Time_Sem_Paradas_'+ano+'_'+periodoAno+'.pdf');}catch(e){alert('Erro ao gerar PDF: '+e.message);}}} style={{display:'inline-flex',alignItems:'center',gap:6,padding:'8px 16px',background:'#2563EB',color:'#fff',border:'none',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
+                <button type="button" onClick={()=>{try{buildLeadTimeSimPDF(ano+' - '+(periodoAno==='ano'?'ano todo':periodoAno==='s1'?'1º semestre':'2º semestre'),resumoSim,mesesSim,problemasPorOS,problemas).save('Lead_Time_Sem_Paradas_'+ano+'_'+periodoAno+'.pdf');}catch(e){alert('Erro ao gerar PDF: '+e.message);}}} style={{display:'inline-flex',alignItems:'center',gap:6,padding:'8px 16px',background:'#2563EB',color:'#fff',border:'none',borderRadius:9,fontSize:9,fontWeight:800,textTransform:'uppercase',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif'}}>
                   <Icon name="file-down" size={13}/> PDF comparativo
                 </button>
               </div>
