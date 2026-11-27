@@ -9473,11 +9473,12 @@ const COLS_SEMAFORO={
   dataEntrada:'DATA ENTRADA',dataDesmontagem:'DATA DESMONTAGEM',dataQA:'DATA QA',dataKitVidro:'DATA KIT VIDRO',dataOpaco:'DATA OPACO',dataAT:'DATA AT',
   db:'DB',etapa:'ETAPA',localizacao:'LOCALIZACAO',linhaProducao:'LINHA PRODUCAO',observacoes:'OBSERVACOES',dataEntrega:'DATA ENTREGA',
 };
-const CAMPOS_DATA_SEMAFORO=['dataEntrada','dataDesmontagem','dataQA','dataAT','dataEntrega'];
+const CAMPOS_DATA_SEMAFORO=['dataEntrada','dataDesmontagem','dataQA','dataAT','dataEntrega','dataKitVidro'];
 function ehEntregueRow(r){
   return normHeader(r?.etapa)==='ENTREGUE'||normHeader(r?.localizacao)==='ENTREGUE'||!!r?.dataEntrega;
 }
 // Registro compacto guardado no histórico de lead time (e=entrada, a=AT, d=desmontagem, q=QA, s=saída/entrega)
+function dataKitVidroMs(v){const x=v&&v.dataKitVidro;if(typeof x==='number')return x;return x?parseDataBR(x):null;}
 function registroLeadTimeDeVeiculo(v){
   if(!v||!v.dataEntrada||!v.dataEntrega)return null;
   const r={os:String(v.os).trim(),e:v.dataEntrada,s:v.dataEntrega};
@@ -9486,6 +9487,7 @@ function registroLeadTimeDeVeiculo(v){
   if(v.dataAT)r.a=v.dataAT;
   if(v.dataDesmontagem)r.d=v.dataDesmontagem;
   if(v.dataQA)r.q=v.dataQA;
+  const kv=dataKitVidroMs(v);if(kv)r.k=kv;
   return r;
 }
 // Junta os registros no histórico (coleção leadTimeBase, em blocos de 400 carros). Nunca apaga carros que já estavam lá.
@@ -9670,7 +9672,7 @@ function VeiculosTable({vehicles}){
                   <td>{fmtDataCurta(v.dataEntrada)}</td>
                   <td>{v.dataDesmontagem?new Date(v.dataDesmontagem).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—'}</td>
                   <td>{fmtDataCurta(v.dataQA)}</td>
-                  <td style={{fontSize:10}}>{v.dataKitVidro||'—'}</td>
+                  <td style={{fontSize:10}}>{dataKitVidroMs(v)?fmtDataCurta(dataKitVidroMs(v)):(typeof v.dataKitVidro==='string'&&v.dataKitVidro?v.dataKitVidro:'—')}</td>
                   <td style={{fontSize:10}}>{v.dataOpaco||'—'}</td>
                   <td>{fmtDataCurta(v.dataAT)}</td>
                   <td style={{fontSize:10}}>{v.db||'—'}</td>
@@ -9748,8 +9750,18 @@ const topV=Math.max(20,Math.ceil(Math.max(...totais,...meses.map(m=>m.ref||0),1)
                       const val=v||0;const h=hSeg[si];const y0=base-h;base=y0;
                       return(
                         <g key={si} onClick={()=>onSegmento(m,si)} style={{cursor:'pointer'}}>
-                          <rect x={x} y={y0} width={bw} height={Math.max(h,0)} fill={AREAS_PROD[si].cor} stroke="#fff" strokeWidth="1"/>
-                          {h>=14&&<text x={cx} y={y0+h/2+4} textAnchor="middle" fontSize="10" fontWeight="700" fill={AREAS_PROD[si].txt}>{fmt1(val)}</text>}
+                          {si===2&&m.vidro?(()=>{
+                            const hA=h*m.vidro.share,hB=h-hA,vA=val*m.vidro.share,vB=val-vA;
+                            return(
+                              <>
+                                <rect x={x} y={y0+hB} width={bw} height={Math.max(hA,0)} fill={AREAS_PROD[2].cor} stroke="#fff" strokeWidth="1"><title>{'Desmontagem até o vidro chegar: '+fmt1(vA)+' d (média de '+m.vidro.n+' de '+m.vidro.tot+' OS com data do vidro)'}</title></rect>
+                                <rect x={x} y={y0} width={bw} height={Math.max(hB,0)} fill="#0EA5E9" stroke="#fff" strokeWidth="1"><title>{'Do vidro até o QA: '+fmt1(vB)+' d (média de '+m.vidro.n+' de '+m.vidro.tot+' OS com data do vidro)'}</title></rect>
+                                {hA>=14&&<text x={cx} y={y0+hB+hA/2+4} textAnchor="middle" fontSize="10" fontWeight="700" fill="#fff">{fmt1(vA)}</text>}
+                                {hB>=14&&<text x={cx} y={y0+hB/2+4} textAnchor="middle" fontSize="10" fontWeight="700" fill="#fff">{fmt1(vB)}</text>}
+                              </>
+                            );
+                          })():<rect x={x} y={y0} width={bw} height={Math.max(h,0)} fill={AREAS_PROD[si].cor} stroke="#fff" strokeWidth="1"/>}
+                         {h>=14&&!(si===2&&m.vidro)&&<text x={cx} y={y0+h/2+4} textAnchor="middle" fontSize="10" fontWeight="700" fill={AREAS_PROD[si].txt}>{fmt1(val)}</text>}
                         </g>
                       );
                     })}
@@ -10160,8 +10172,12 @@ function buildLeadTimeSimPDF(periodoTxt,resumo,meses,problemasPorOS,problemas){
   const emp=medidos.filter(m=>m.stacked&&m.seg&&m.segReal);
   if(emp.length){
     titulo('POR ETAPA - REAL / SEM PARADAS (dias; só meses medidos e OS com as 5 datas)');
-    tabela(['Mês','Chegada-AT','AT-Desmontagem','Desmontagem-QA','QA-Saída'],
-      emp.map(m=>[m.label,...[0,1,2,3].map(i=>f1(m.segReal[i])+' / '+f1(m.seg[i]))]),[30,40,40,40,40]);
+    tabela(['Mês','Chegada-AT','AT-Desmontagem','Desmontagem-QA','Desm. até vidro','Vidro até QA','QA-Saída'],
+      emp.map(m=>{const v=m.vidro;const rA=v?m.segReal[2]*v.shareReal:null,sA=v?m.seg[2]*v.share:null;return[m.label,f1(m.segReal[0])+' / '+f1(m.seg[0]),f1(m.segReal[1])+' / '+f1(m.seg[1]),f1(m.segReal[2])+' / '+f1(m.seg[2]),v?f1(rA)+' / '+f1(sA):'—',v?f1(m.segReal[2]-rA)+' / '+f1(m.seg[2]-sA):'—',f1(m.segReal[3])+' / '+f1(m.seg[3])];}),[20,28,28,28,28,28,30]);
+    const mDiv=emp.filter(m=>m.vidro);
+    doc.setFont('helvetica','normal');doc.setFontSize(7);doc.setTextColor(90,90,90);
+    doc.splitTextToSize('Desm. até vidro e Vidro até QA dividem a etapa Desmontagem-QA pela Data Kit Vidro do Semáforo (dia em que o vidro chegou). Só entram OS com essa data preenchida e dentro da etapa; o mês só é dividido quando ao menos metade das OS tem a data. '+(mDiv.length?'Meses divididos: '+mDiv.map(m=>`${m.label} (${m.vidro.n} de ${m.vidro.tot} OS)`).join(', ')+'.':'Nenhum mês atingiu esse mínimo ainda.'),190).forEach(l=>{garante(4);doc.text(l,M,y);y+=3.5;});
+    y+=2;
   }
 
   const top=[...resumo.todos].filter(x=>x.pt>0).sort((a,b)=>b.pt-a.pt).slice(0,15);
@@ -10296,6 +10312,43 @@ function buildLeadTimeSimPDFAntigo(periodoTxt,resumo,meses){
     y+=3;
   };
 
+ // composição por etapa, com o trecho do vidro pintado
+  const compo=comDados.filter(m=>m.stacked&&m.seg&&m.segReal);
+  if(compo.length){
+    titulo('COMPOSIÇÃO POR ETAPA - REAL (esquerda) E SEM PARADAS (direita)');
+    garante(85);
+    const CORES=[[179,179,179],[127,127,127],[220,31,31],[14,165,233],[58,58,58]];
+    const NOMES=['Chegada-AT','AT-Desmontagem','Desmontagem até o vidro','Vidro até o QA','QA-Saída'];
+    let lx=M;
+    NOMES.forEach((n,i)=>{doc.setFillColor(CORES[i][0],CORES[i][1],CORES[i][2]);doc.rect(lx,y-2.5,3,3,'F');txt(n,lx+4.5,y,{size:6.5});lx+=n.length*1.45+13;});
+    y+=5;
+    const pilha=(seg,share)=>{
+      const s2=Math.max(0,seg[2]||0);
+      const a=share!==null&&share!==undefined?s2*share:s2,b=share!==null&&share!==undefined?s2-a:0;
+      return[Math.max(0,seg[0]||0),Math.max(0,seg[1]||0),a,b,Math.max(0,seg[3]||0)];
+    };
+    const pilhas=compo.map(m=>({m,real:pilha(m.segReal,m.vidro?m.vidro.shareReal:null),sim:statusMes(m)==='sem'?null:pilha(m.seg,m.vidro?m.vidro.share:null)}));
+    const somaP=(p)=>p.reduce((a,v)=>a+v,0);
+    const topoC=y+3,altC=50,baseC=topoC+altC;
+    const topC=Math.ceil(Math.max(20,...pilhas.map(o=>Math.max(somaP(o.real),o.sim?somaP(o.sim):0)))/20)*20;
+    doc.setDrawColor(225,225,225);doc.setLineWidth(0.2);
+    [0,0.25,0.5,0.75,1].forEach(p=>{const yy=baseC-altC*p;doc.line(x0,yy,x0+larG,yy);txt(Math.round(topC*p),x0-2,yy+1,{size:6.5,cor:[110,110,110],align:'right'});});
+    const slotC=larG/pilhas.length,bwC=Math.min(slotC*0.36,12);
+    const desenhaPilha=(p,bx)=>{
+      let base=baseC;
+      p.forEach((v,i)=>{const h=altC*v/topC;if(h<=0)return;doc.setFillColor(CORES[i][0],CORES[i][1],CORES[i][2]);doc.rect(bx,base-h,bwC,h,'F');base-=h;});
+      txt(Math.round(somaP(p)),bx+bwC/2,base-1,{size:6,bold:true,align:'center'});
+    };
+    pilhas.forEach((o,i)=>{
+      const cx=x0+slotC*i+slotC/2;
+      txt(o.m.label,cx,baseC+4.5,{size:6.5,bold:true,align:'center'});
+      if(o.sim){desenhaPilha(o.real,cx-bwC-0.4);desenhaPilha(o.sim,cx+0.4);}
+      else{desenhaPilha(o.real,cx-bwC/2);txt('sem medição',cx,baseC+8,{size:5,cor:[130,130,130],align:'center'});}
+      if(!o.m.vidro)txt('sem data vidro',cx,baseC+(o.sim?8:11.5),{size:5,cor:[130,130,130],align:'center'});
+    });
+    y=baseC+14;
+  }
+
   titulo('RESUMO POR MÊS (média de dias por OS)');
   const linhasMes=comDados.map(m=>{
     const perd=(m.lt.real||0)-(m.lt.sim||0);
@@ -10351,10 +10404,10 @@ function ProblemasProducaoView({vehicles,loggedInUser,isMaster}){
     base.forEach(d=>(d.carros||[]).forEach(c=>{mapa[String(c.os)]={...c,os:String(c.os)};}));
     vehicles.forEach(v=>{
       const os=String(v.os).trim();if(!os||!v.dataEntrada)return;
-      const novo={os,modelo:v.modelo,fab:v.fabricante,e:v.dataEntrada,a:v.dataAT||null,d:v.dataDesmontagem||null,q:v.dataQA||null,s:v.dataEntrega||null,etapa:v.etapa,loc:v.localizacao,linha:v.linhaProducao,veic:true};
+      const novo={os,modelo:v.modelo,fab:v.fabricante,e:v.dataEntrada,a:v.dataAT||null,d:v.dataDesmontagem||null,q:v.dataQA||null,s:v.dataEntrega||null,k:dataKitVidroMs(v),etapa:v.etapa,loc:v.localizacao,linha:v.linhaProducao,veic:true};
       const ant=mapa[os]||{};
       mapa[os]={...ant,...novo,
-        a:novo.a||ant.a||null,d:novo.d||ant.d||null,q:novo.q||ant.q||null,s:novo.s||ant.s||null};
+        a:novo.a||ant.a||null,d:novo.d||ant.d||null,q:novo.q||ant.q||null,s:novo.s||ant.s||null,k:novo.k||ant.k||null};
     });
     return{registros:Object.values(mapa),mapaReg:mapa};
   },[base,vehicles]);
@@ -10418,7 +10471,7 @@ function ProblemasProducaoView({vehicles,loggedInUser,isMaster}){
 
   // Simulação do lead time SEM paradas: de cada OS sai a união dos dias de problema lançados,
   // recortada na janela de cada etapa (assim a soma das etapas bate com o total da OS).
-  const{mesesSim,resumoSim}=useMemo(()=>{
+  const{mesesSim,mesesReal,resumoSim}=useMemo(()=>{
     const agora=Date.now();
     // Parada em dias (união) dos problemas informados; cada problema vale na ÁREA em que foi lançado
     const paradaDias=(probs)=>diasUniao(probs.map(p=>{const a=isoParaMs(p.inicio);if(!a)return[0,0];return[a,p.fim?isoParaMs(p.fim):agora];}));
@@ -10431,8 +10484,28 @@ function ProblemasProducaoView({vehicles,loggedInUser,isMaster}){
         return d===null?r:Math.min(r,Math.max(d,0));
       });
       const pt=Math.min(Math.max(real,0),reds.reduce((a,v)=>a+v,0));
-      return{real,reds,pt};
+      let sub=null;
+      if(c.k&&c.d&&c.q&&c.k>=c.d&&c.k<=c.q){
+        const dA=(c.k-c.d)/DIA_MS,dB=(c.q-c.k)/DIA_MS;
+        const p2=probs.filter(p=>p.area==='desmontagem_qa');
+        const jan=(ini,fim)=>diasUniao(p2.map(p=>{const a=isoParaMs(p.inicio);if(!a)return[0,0];const b=p.fim?isoParaMs(p.fim):agora;return[Math.max(a,ini),Math.min(b,fim)];}));
+        let rA=Math.min(jan(c.d,c.k),dA),rB=Math.min(jan(c.k,c.q),dB);
+        const resto=Math.max(0,reds[2]-rA-rB),capA=dA-rA,capB=dB-rB;
+        if(capA+capB>0){rA+=resto*capA/(capA+capB);rB+=resto*capB/(capA+capB);}
+        sub={a:dA-rA,b:dB-rB};
+      }
+      return{real,reds,pt,sub};
     };
+   const kOk=(c)=>!!(c.k&&c.d&&c.q&&c.k>=c.d&&c.k<=c.q);
+    const vidroCom=(m,valor)=>{
+      if(!m.stacked||!m.comp.length)return null;
+      const ks=m.comp.filter(kOk);
+      if(ks.length/m.comp.length<0.5)return null;
+      const[a,b]=valor(ks);const t=a+b;
+      return t>0?{n:ks.length,tot:m.comp.length,share:a/t}:null;
+    };
+    const vidroReal=(m)=>vidroCom(m,ks=>[mediaArr(ks.map(c=>(c.k-c.d)/DIA_MS)),mediaArr(ks.map(c=>(c.q-c.k)/DIA_MS))]);
+    const vidroSim=(m)=>{const s=vidroCom(m,ks=>[mediaArr(ks.map(c=>reducoes(c).sub.a)),mediaArr(ks.map(c=>reducoes(c).sub.b))]);const r=vidroReal(m);return s&&r?{...s,shareReal:r.share}:s;};
     const paradaNaJanela=(probs,ini,fim)=>{
       if(!ini||!fim||fim<=ini)return 0;
       return diasUniao(probs.map(p=>{const a=isoParaMs(p.inicio);if(!a)return[0,0];const b=p.fim?isoParaMs(p.fim):agora;return[Math.max(a,ini),Math.min(b,fim)];}));
@@ -10450,10 +10523,10 @@ function ProblemasProducaoView({vehicles,loggedInUser,isMaster}){
         return duracaoEtapa(c,i)-reducoes(c).reds[i];
       }))):null;
       const ref=m.stacked?m.seg.reduce((acc,v)=>acc+(v||0),0):m.tot;
-      return{...m,segReal:m.seg,tot:lista.length?mediaArr(lista.map(x=>x.sim)):null,seg,ref:lista.length?ref:null,lt:{n:lista.length,real:mediaArr(lista.map(x=>x.real)),sim:mediaArr(lista.map(x=>x.sim)),comParada:lista.filter(x=>x.pt>0).length}};
+      return{...m,vidro:vidroSim(m),segReal:m.seg,tot:lista.length?mediaArr(lista.map(x=>x.sim)):null,seg,ref:lista.length?ref:null,lt:{n:lista.length,real:mediaArr(lista.map(x=>x.real)),sim:mediaArr(lista.map(x=>x.sim)),comParada:lista.filter(x=>x.pt>0).length}};
     });
     const realMed=mediaArr(todos.map(x=>x.real)),simMed=mediaArr(todos.map(x=>x.sim));
-    return{mesesSim:out,resumoSim:{n:todos.length,realMed,simMed,perdidos:realMed!==null?realMed-simMed:null,pct:realMed?(realMed-simMed)/realMed*100:null,comParada:todos.filter(x=>x.pt>0).length,todos}};
+    return{mesesSim:out,mesesReal:meses.map(m=>({...m,vidro:vidroReal(m)})),resumoSim:{n:todos.length,realMed,simMed,perdidos:realMed!==null?realMed-simMed:null,pct:realMed?(realMed-simMed)/realMed*100:null,comParada:todos.filter(x=>x.pt>0).length,todos}};
   },[meses,problemasPorOS]);
 
   // Tabela de causas (últimos 6 meses pela data de início do problema)
@@ -10567,7 +10640,7 @@ function ProblemasProducaoView({vehicles,loggedInUser,isMaster}){
                         :<span style={{fontSize:9,fontWeight:800,padding:'3px 10px',borderRadius:999,background:'var(--smoke)',color:'var(--muted)',border:'1px solid var(--border)'}}>Sem problema lançado</span>}
                     </div>
                   </div>
-                  <p style={{fontSize:8,color:'var(--muted)',fontWeight:700,margin:'0 0 8px'}}>Chegada {fmtDataCurta(c.e)} · AT {fmtDataCurta(c.a)} · Desmontagem {fmtDataCurta(c.d)} · QA {fmtDataCurta(c.q)} · Entrega {fmtDataCurta(c.s)}</p>
+                  <p style={{fontSize:8,color:'var(--muted)',fontWeight:700,margin:'0 0 8px'}}>Chegada {fmtDataCurta(c.e)} · AT {fmtDataCurta(c.a)} · Desmontagem {fmtDataCurta(c.d)} · Vidro {fmtDataCurta(c.k)} · QA {fmtDataCurta(c.q)} · Entrega {fmtDataCurta(c.s)}</p>
                   {probs.length>0&&<div style={{display:'flex',flexDirection:'column',gap:6}}>{probs.map(p=><ProblemaCard key={p.id} p={p} onFoto={setFoto} compacto/>)}</div>}
                 </div>
               );
@@ -10657,7 +10730,8 @@ function ProblemasProducaoView({vehicles,loggedInUser,isMaster}){
             </div>
             <div style={{display:'flex',gap:14,flexWrap:'wrap',marginBottom:10}}>
               {AREAS_PROD.map(a=><span key={a.k} style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:9,fontWeight:700,color:'#374151'}}><span style={{width:11,height:11,background:a.cor,borderRadius:3,display:'inline-block'}}/>{a.curto}</span>)}
-              <span style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:9,fontWeight:700,color:'#374151'}}><span style={{width:11,height:11,background:'#1F1F1F',borderRadius:3,display:'inline-block'}}/>Total (sem datas das etapas)</span>
+              <span style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:9,fontWeight:700,color:'#374151'}}><span style={{width:11,height:11,background:'#0EA5E9',borderRadius:3,display:'inline-block'}}/>Vidro→QA (dentro de Desmontagem–QA: do dia que o vidro chegou até o QA)</span>
+<span style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:9,fontWeight:700,color:'#374151'}}><span style={{width:11,height:11,background:'#1F1F1F',borderRadius:3,display:'inline-block'}}/>Total (sem datas das etapas)</span>
             </div>
             <div style={{display:'flex',gap:3,background:'var(--smoke)',padding:3,borderRadius:10,border:'1px solid var(--border)',width:'fit-content',marginBottom:12,flexWrap:'wrap'}}>
               {[{k:'real',l:'Real'},{k:'sem',l:'Sem paradas (simulado)'}].map(t=><button key={t.k} onClick={()=>setModoLT(t.k)} style={{padding:'7px 14px',borderRadius:8,fontSize:9,fontWeight:800,textTransform:'uppercase',border:'none',cursor:'pointer',fontFamily:'Plus Jakarta Sans,sans-serif',background:modoLT===t.k?'#fff':'transparent',color:modoLT===t.k?'var(--red)':'var(--muted)',boxShadow:modoLT===t.k?'0 2px 6px rgba(0,0,0,.08)':'none'}}>{t.l}</button>)}
@@ -10688,7 +10762,7 @@ function ProblemasProducaoView({vehicles,loggedInUser,isMaster}){
                 <p style={{fontSize:9,color:'var(--muted)',fontWeight:600,margin:0}}>Simulação: de cada OS foram retirados os dias dos problemas lançados em Lançamentos (dias sobrepostos contam uma vez), etapa por etapa. A linha vermelha tracejada em cada mês marca o lead time real, para comparar com a barra simulada.</p>
               </div>
             )}
-            <LeadTimeChart meses={modoLT==='sem'?mesesSim:meses} onSegmento={(m,i)=>setDetalhe({tipo:'mes',m,etapa:i})} onMes={(m)=>setDetalhe({tipo:'mes',m,etapa:'total'})}/>
+            <LeadTimeChart meses={modoLT==='sem'?mesesSim:mesesReal} onSegmento={(m,i)=>setDetalhe({tipo:'mes',m,etapa:i})} onMes={(m)=>setDetalhe({tipo:'mes',m,etapa:'total'})}/>
             <p style={{fontSize:9,color:'var(--muted)',fontWeight:600,margin:'8px 0 0'}}>Clique em uma etapa da barra para ver as OS's, os problemas lançados e quanto tempo levou cada um. Clique no nome do mês para ver todas as OS's do mês. Barras empilhadas usam só os carros com as 5 datas preenchidas.</p>
           </div>
 
